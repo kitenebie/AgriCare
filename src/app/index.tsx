@@ -1,98 +1,184 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Button } from "@/components/ui";
+import { Colors, FontSize, Spacing } from "@/constants/theme";
+import { getRouteForRole, getSession } from "@/services/sessionService";
+import { Image } from "expo-image";
+import { router } from "expo-router";
+import { useEffect } from "react";
+import {
+  Dimensions,
+  StyleSheet,
+  Text,
+  View
+} from "react-native";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withTiming
+} from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
+export default function LoginScreen() {
+  const insets = useSafeAreaInsets();
+
+  // Image fade in
+  const imageOpacity = useSharedValue(0);
+  const imageScale = useSharedValue(1.05);
+
+  // Title fade in up
+  const titleOpacity = useSharedValue(0);
+  const titleTranslateY = useSharedValue(20);
+
+  // Buttons fade in up
+  const buttonsOpacity = useSharedValue(0);
+  const buttonsTranslateY = useSharedValue(30);
+
+  useEffect(() => {
+    // Check for existing session — auto-redirect if logged in
+    const checkSession = async () => {
+      const session = await getSession();
+      if (session) {
+        const route = getRouteForRole(session.role);
+        router.replace(route as any);
+        return;
+      }
+    };
+    checkSession();
+
+    // Image fades in first
+    imageOpacity.value = withTiming(1, {
+      duration: 800,
+      easing: Easing.out(Easing.cubic),
+    });
+    imageScale.value = withTiming(1, {
+      duration: 1000,
+      easing: Easing.out(Easing.cubic),
+    });
+
+    // Title fades in after image
+    titleOpacity.value = withDelay(400, withTiming(1, { duration: 600 }));
+    titleTranslateY.value = withDelay(
+      400,
+      withTiming(0, { duration: 600, easing: Easing.out(Easing.cubic) }),
     );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
+
+    // Buttons fade in last
+    buttonsOpacity.value = withDelay(700, withTiming(1, { duration: 600 }));
+    buttonsTranslateY.value = withDelay(
+      700,
+      withTiming(0, { duration: 600, easing: Easing.out(Easing.cubic) }),
+    );
+  }, []);
+
+  const imageAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: imageOpacity.value,
+    transform: [{ scale: imageScale.value }],
+  }));
+
+  const titleAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: titleOpacity.value,
+    transform: [{ translateY: titleTranslateY.value }],
+  }));
+
+  const buttonsAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: buttonsOpacity.value,
+    transform: [{ translateY: buttonsTranslateY.value }],
+  }));
+
   return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
+    <View style={styles.container}>
+      {/* Full-width background image with fade in */}
+      <Animated.View style={[styles.imageContainer, imageAnimatedStyle]}>
+        <Image
+          source={require("../../assets/app/login-background-image.png")}
+          style={styles.backgroundImage}
+          contentFit="cover"
+        />
+      </Animated.View>
 
-export default function HomeScreen() {
-  return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
+      {/* Title */}
+      <Animated.View style={[styles.titleContainer, titleAnimatedStyle]}>
+        <Text style={styles.title}>
+          Livestock Support{"\n"}& Service Management
+        </Text>
+        <Text style={styles.subtitle}>For Farmer – Technician</Text>
+      </Animated.View>
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
-
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+      {/* Buttons */}
+      <Animated.View
+        style={[
+          styles.bottomSection,
+          buttonsAnimatedStyle,
+          { paddingBottom: insets.bottom + 40 },
+        ]}
+      >
+        <Button
+          title="Log In"
+          onPress={() => router.push("/(auth)/login")}
+          variant="primary"
+          size="lg"
+          style={styles.loginButton}
+        />
+        <Button
+          title="Create Account"
+          onPress={() => router.push("/(auth)/register")}
+          variant="outline"
+          size="lg"
+          style={styles.createButton}
+        />
+      </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
+    backgroundColor: Colors.white,
+    width: "100%",
   },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
+  imageContainer: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT * 0.55,
+    alignSelf: "center",
+    overflow: "hidden",
   },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
+  backgroundImage: {
+    width: "100%",
+    height: "100%",
+  },
+  titleContainer: {
+    alignItems: "center",
+    paddingHorizontal: Spacing.xxl,
+    marginTop: Spacing.xl,
   },
   title: {
-    textAlign: 'center',
+    fontSize: FontSize.xxl,
+    fontWeight: "800",
+    color: Colors.primary,
+    textAlign: "center",
+    lineHeight: 30,
   },
-  code: {
-    textTransform: 'uppercase',
+  subtitle: {
+    fontSize: FontSize.lg,
+    color: Colors.textSecondary,
+    marginTop: Spacing.sm,
   },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+  bottomSection: {
+    paddingHorizontal: Spacing.xxxl,
+    paddingTop: Spacing.xxl,
+    marginTop: "auto",
+    paddingBottom: Spacing.xxxl,
+  },
+  loginButton: {
+    width: "100%",
+    marginBottom: Spacing.md,
+  },
+  createButton: {
+    width: "100%",
+    marginBottom: Spacing.lg,
   },
 });

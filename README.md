@@ -1,56 +1,66 @@
-# Welcome to your Expo app 👋
+# 🐄 AgriCare - Livestock Support & Service Management
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A React Native (Expo) mobile application for farmers and livestock technicians. Farmers can find nearby technicians, request veterinary services, manage appointments, and communicate with service providers.
 
-## Get started
+## 📱 Screens (6 Pages)
 
-1. Install dependencies
+1. **Login** - Welcome screen with login/register (full-width image, fade-in animation)
+2. **Home** - Farm overview dashboard with quick access menu
+3. **Map** - Find nearby technicians with MapLibre GL + OpenStreetMap tiles
+4. **Services** - Request service & view appointments
+5. **Messages** - Chat with technicians & notifications
+6. **Profile** - User profile, settings & dev tools
 
-   ```bash
-   npm install
-   ```
+## 🏗️ Architecture (Hierarchical)
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```
+src/
+├── app/                    # Expo Router - Screen definitions
+│   ├── _layout.tsx         # Root layout (Stack + SafeAreaProvider)
+│   ├── index.tsx           # Login/Welcome screen
+│   └── (tabs)/             # Tab-based navigation (5 tabs)
+├── components/             # Reusable UI components
+│   ├── ui/                 # Base components (Avatar, Badge, Button, Card, Icon)
+│   ├── cards/              # Domain cards (Technician, Appointment, Message)
+│   ├── map/                # MapLibre map wrapper
+│   └── layout/             # Layout components
+├── constants/              # Theme tokens
+├── hooks/                  # Custom hooks (animations)
+├── services/               # Firebase services layer
+├── types/                  # TypeScript interfaces
+├── data/                   # Mock data (local fallback)
+└── utils/                  # Helper functions
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## 🔥 Firebase Integration
 
-### Other setup steps
+- **Firestore** — Users, animals, technicians, appointments, reviews
+- **Realtime Database** — Real-time chat, typing indicators, online status
+- **Storage** — Profile images, animal photos, chat images
+- **FCM** — Push notifications
+- **Auth** — Email/password authentication
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+## 🗺️ MapLibre + OpenStreetMap
 
-## Learn more
+Free map tiles via `tile.openstreetmap.org` — no API key needed.
 
-To learn more about developing your project with Expo, look at the following resources:
+## 🎨 Icons
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Uses `lucide-react-native` with `react-native-svg`.
 
-## Join the community
+## 🚀 Getting Started
 
-Join our community of developers creating universal apps.
+```bash
+cd C:\Users\kenne\Desktop\em-res\AgriCare
+npm install
+npx expo run:android
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## 📦 Key Dependencies
+
+- `expo` ~57.0.9 / `expo-router` ~57.0.9
+- `@react-native-firebase/*` (app, auth, firestore, storage, database, messaging)
+- `@maplibre/maplibre-react-native` ^10.4.2
+- `lucide-react-native` ^0.460.0
+- `react-native-reanimated` 4.5.1
+- `react-native-svg` ^15.0.0

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "62681828521",
+    "project_id": "agecare-ca137",
+    "storage_bucket": "agecare-ca137.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:62681828521:android:e1b0b896b5b7866d572db8",
+        "android_client_info": {
+          "package_name": "com.kennethgimpao22.AgriCare"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD6Od4_Jj-EUt8kt4cZQGGNPZ9rQuRNry0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
