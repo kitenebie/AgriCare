@@ -14,9 +14,9 @@ import {
 } from "@/constants/theme";
 import { useFadeIn, useFadeInUp } from "@/hooks/useAnimatedEntry";
 import { getCurrentUser, getCurrentUserProfile } from "@/services/authService";
-import { Collections, db } from "@/services/firebase";
+import { Collections } from "@/services/firebase";
 import { getSession } from "@/services/sessionService";
-import { collection, onSnapshot } from "@react-native-firebase/firestore";
+import firestore from "@react-native-firebase/firestore";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -334,8 +334,7 @@ export default function AdminHome() {
 
     try {
       // 1. Subscribe to USERS
-      const unsubUsers = onSnapshot(
-        collection(db, Collections.USERS),
+      const unsubUsers = firestore().collection(Collections.USERS).onSnapshot(
         (snap) => {
           if (snap) {
             usersList = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
@@ -347,8 +346,7 @@ export default function AdminHome() {
       unsubs.push(unsubUsers);
 
       // 2. Subscribe to APPOINTMENTS
-      const unsubAppts = onSnapshot(
-        collection(db, Collections.APPOINTMENTS),
+      const unsubAppts = firestore().collection(Collections.APPOINTMENTS).onSnapshot(
         (snap) => {
           if (snap) {
             apptsList = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
@@ -360,8 +358,7 @@ export default function AdminHome() {
       unsubs.push(unsubAppts);
 
       // 3. Subscribe to REPORTS
-      const unsubReports = onSnapshot(
-        collection(db, Collections.REPORTS),
+      const unsubReports = firestore().collection(Collections.REPORTS).onSnapshot(
         (snap) => {
           if (snap) {
             reportsList = snap.docs.map((doc) => ({
@@ -376,8 +373,7 @@ export default function AdminHome() {
       unsubs.push(unsubReports);
 
       // 4. Subscribe to CONSULTATIONS
-      const unsubConsults = onSnapshot(
-        collection(db, Collections.CONSULTATIONS),
+      const unsubConsults = firestore().collection(Collections.CONSULTATIONS).onSnapshot(
         (snap) => {
           if (snap) {
             consultsList = snap.docs.map((doc) => ({

@@ -6,8 +6,10 @@ import {
   Shadow,
   Spacing,
 } from "@/constants/theme";
-import { db, storage, Collections } from "@/services/firebase";
-import firestore, { collection, onSnapshot } from "@react-native-firebase/firestore";
+import { Collections } from "@/services/firebase";
+import firestore from "@react-native-firebase/firestore";
+import { uploadImageToSupabase } from "@/services/storage";
+import { logCrud } from "@/services/logService";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
@@ -86,11 +88,9 @@ export default function LivestockCategoriesScreen() {
 
   // ─── Realtime Firestore Listener ───
   useEffect(() => {
-    let unsubscribe: () => void = () => {};
-
-    try {
-      unsubscribe = onSnapshot(
-        collection(db, Collections.LIVESTOCK_CATEGORIES),
+    const unsubscribe = firestore()
+      .collection(Collections.LIVESTOCK_CATEGORIES)
+      .onSnapshot(
         (snapshot) => {
           if (snapshot) {
             const data: LivestockCategory[] = snapshot.docs.map((doc) => {
@@ -114,11 +114,6 @@ export default function LivestockCategoriesScreen() {
           setLoading(false);
         }
       );
-    } catch (err: any) {
-      console.warn("onSnapshot setup error:", err.message);
-      setLoading(false);
-    }
-
     return () => unsubscribe();
   }, []);
 
@@ -167,13 +162,15 @@ export default function LivestockCategoriesScreen() {
         setUploadingImage(true);
 
         try {
-          const filename = `categories_${Date.now()}.jpg`;
-          const storageRef = storage.ref(`livestockCategories/${filename}`);
-          await storageRef.putFile(localUri);
-          const downloadUrl = await storageRef.getDownloadURL();
-          setFormImageUrl(downloadUrl);
+          const result = await uploadImageToSupabase(localUri, "animals");
+          if (result.success && result.publicUrl) {
+            setFormImageUrl(result.publicUrl);
+          } else {
+            console.warn("Supabase upload failed, fallback to local URI:", result.error);
+            setFormImageUrl(localUri);
+          }
         } catch (uploadError: any) {
-          console.warn("Firebase Storage upload error, fallback to local URI:", uploadError);
+          console.warn("Upload error, fallback to local URI:", uploadError);
           setFormImageUrl(localUri);
         } finally {
           setUploadingImage(false);
@@ -225,19 +222,34 @@ export default function LivestockCategoriesScreen() {
     try {
       if (editingId) {
         // Update existing
+        const oldCategory = categories.find(c => c.id === editingId);
         await firestore()
           .collection(Collections.LIVESTOCK_CATEGORIES)
           .doc(editingId)
           .update(payload);
+        await logCrud('Category Updated', `Updated: ${formName.trim()}`, 'livestockCategories', editingId, {
+          old: {
+            name: oldCategory?.name || '',
+            focusType: oldCategory?.focusType || '',
+            breeds: oldCategory?.breeds || [],
+            description: oldCategory?.description || '',
+            imageUrl: oldCategory?.imageUrl || '',
+          },
+          new: payload,
+        });
       } else {
         // Add new
-        await firestore()
+        const docRef = await firestore()
           .collection(Collections.LIVESTOCK_CATEGORIES)
           .add({
             ...payload,
             count: 0,
             createdAt: firestore.FieldValue.serverTimestamp(),
           });
+        await logCrud('Category Created', `Added: ${formName.trim()}`, 'livestockCategories', docRef.id, {
+          old: {},
+          new: { ...payload, count: 0 },
+        });
       }
 
       setModalVisible(false);
@@ -276,12 +288,24 @@ export default function LivestockCategoriesScreen() {
         text: "Delete",
         style: "destructive",
         onPress: async () => {
+          const deletedCategory = categories.find(c => c.id === id);
           setCategories((prev) => prev.filter((c) => c.id !== id));
           try {
             await firestore()
               .collection(Collections.LIVESTOCK_CATEGORIES)
               .doc(id)
               .delete();
+            await logCrud('Category Deleted', `Deleted: ${name}`, 'livestockCategories', id, {
+              old: {
+                name: deletedCategory?.name || name,
+                focusType: deletedCategory?.focusType || '',
+                breeds: deletedCategory?.breeds || [],
+                description: deletedCategory?.description || '',
+                imageUrl: deletedCategory?.imageUrl || '',
+                count: deletedCategory?.count || 0,
+              },
+              new: {},
+            });
           } catch (error: any) {
             console.warn("Delete error:", error.message);
           }
@@ -698,3 +722,275 @@ const styles = StyleSheet.create({
   },
   quickAddRow: {
     flexDirection: "row",
+    gap: 8,
+  },
+  quickAddCowBtn: {
+    flex: 1,
+    backgroundColor: "#1E40AF",
+    paddingVertical: 8,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  quickAddSwineBtn: {
+    flex: 1,
+    backgroundColor: "#DB2777",
+    paddingVertical: 8,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  quickAddBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Colors.white,
+  },
+  loadingBox: {
+    alignItems: "center",
+    paddingVertical: 60,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: "#64748B",
+    marginTop: 12,
+  },
+  empty: { alignItems: "center", paddingTop: 60 },
+  emptyText: {
+    fontSize: 15,
+    color: Colors.textLight,
+    marginTop: Spacing.lg,
+  },
+  card: {
+    flexDirection: "row",
+    backgroundColor: Colors.white,
+    borderRadius: 18,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+    ...Shadow.light,
+    borderWidth: 1,
+    borderColor: "#EDF2F7",
+  },
+  cardImageContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  cardImage: {
+    width: "100%",
+    height: "100%",
+  },
+  cardIconFallback: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  cardInfo: { flex: 1, marginLeft: 12 },
+  cardHeaderLine: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  cardName: { fontSize: 15, fontWeight: "800", color: "#0F172A", flex: 1 },
+  focusPill: {
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+  },
+  cowPill: { backgroundColor: "#DBEAFE" },
+  cowPillText: { color: "#1D4ED8" },
+  swinePill: { backgroundColor: "#FCE7F3" },
+  swinePillText: { color: "#DB2777" },
+  otherPill: { backgroundColor: "#F1F5F9" },
+  otherPillText: { color: "#475569" },
+  focusPillText: { fontSize: 11, fontWeight: "700" },
+  cardDescription: {
+    fontSize: 12,
+    color: "#64748B",
+    marginBottom: 6,
+    lineHeight: 16,
+  },
+  breedsTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#15803D",
+  },
+  breedsListText: {
+    fontSize: 12,
+    color: "#334155",
+    fontWeight: "600",
+  },
+  actionsColumn: {
+    justifyContent: "space-between",
+    marginLeft: 8,
+  },
+  editBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#DCFCE7",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  deleteBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#FEE2E2",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  // ─── Modal Sheet Styles ───
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.6)",
+    justifyContent: "flex-end",
+  },
+  modal: {
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: "88%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  formScroll: {
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.md,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#334155",
+    marginBottom: 6,
+    marginTop: 10,
+  },
+  input: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    color: "#0F172A",
+    marginBottom: 4,
+  },
+  typeRow: { flexDirection: "row", gap: 6, marginBottom: 8 },
+  typeBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+    alignItems: "center",
+    backgroundColor: Colors.white,
+  },
+  typeBtnActive: {
+    borderColor: "#1B5E20",
+    backgroundColor: "#DCFCE7",
+  },
+  typeBtnText: { fontSize: 12, color: "#64748B", fontWeight: "600" },
+  typeBtnTextActive: { color: "#1B5E20", fontWeight: "700" },
+
+  // Image Upload / URL Row
+  imageInputRow: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  uploadImageBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#DCFCE7",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#86EFAC",
+  },
+  uploadImageBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#15803D",
+  },
+  imagePreviewContainer: {
+    position: "relative",
+    width: "100%",
+    height: 140,
+    borderRadius: 14,
+    overflow: "hidden",
+    marginBottom: 8,
+  },
+  imagePreview: {
+    width: "100%",
+    height: "100%",
+  },
+  removeImageBtn: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  suggestionTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#475569",
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: 16,
+  },
+  chipBtn: {
+    backgroundColor: "#F1F5F9",
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  chipText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#334155",
+  },
+  saveBtn: {
+    backgroundColor: "#1B5E20",
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginHorizontal: Spacing.xl,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.xs,
+  },
+  saveBtnText: {
+    color: Colors.white,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+});
+

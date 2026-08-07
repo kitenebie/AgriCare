@@ -7,6 +7,9 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   TextInput,
+  Modal,
+  Dimensions,
+  Image,
 } from 'react-native';
 import firestore from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
@@ -22,6 +25,9 @@ interface LogEntry {
   details: string;
   timestamp: any;
   type: 'auth' | 'crud' | 'system' | 'error';
+  collection?: string;
+  documentId?: string;
+  changes?: { old: Record<string, any>; new: Record<string, any> } | null;
 }
 
 const typeConfig: Record<string, { color: string; icon: string; label: string }> = {
@@ -36,6 +42,7 @@ export default function LogsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
+  const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
 
   useEffect(() => {
     const unsubscribe = firestore()
@@ -154,7 +161,7 @@ export default function LogsPage() {
           filteredLogs.map((log) => {
             const config = typeConfig[log.type] || typeConfig.system;
             return (
-              <View key={log.id} style={styles.logCard}>
+              <TouchableOpacity key={log.id} style={styles.logCard} activeOpacity={0.7} onPress={() => setSelectedLog(log)}>
                 <View style={[styles.logIcon, { backgroundColor: config.color + '15' }]}>
                   <Icon name={config.icon as any} size={16} color={config.color} />
                 </View>
@@ -171,29 +178,106 @@ export default function LogsPage() {
                     <Text style={styles.logUser}>{log.userName} ({log.userRole})</Text>
                   </View>
                 </View>
-              </View>
+              </TouchableOpacity>
             );
           })
         )}
         <View style={{ height: 30 }} />
       </ScrollView>
+
+      {/* Detail Drawer */}
+      <Modal visible={!!selectedLog} transparent animationType="slide" onRequestClose={() => setSelectedLog(null)}>
+        <TouchableOpacity style={styles.drawerOverlay} activeOpacity={1} onPress={() => setSelectedLog(null)}>
+          <View style={styles.drawer} onStartShouldSetResponder={() => true}>
+            <View style={styles.drawerHandle} />
+            <View style={styles.drawerHead}>
+              <Text style={styles.drawerTitle}>Log Details</Text>
+              <TouchableOpacity onPress={() => setSelectedLog(null)}><Icon name="close" size={22} color={Colors.text} /></TouchableOpacity>
+            </View>
+            {selectedLog && (() => {
+              const config = typeConfig[selectedLog.type] || typeConfig.system;
+              const isUpdate = selectedLog.action.toLowerCase().includes('update');
+              const isCreate = selectedLog.action.toLowerCase().includes('create');
+              const isDelete = selectedLog.action.toLowerCase().includes('delete');
+              const HIDDEN_KEYS = ['updatedAt', 'createdAt'];
+              const filterKeys = (obj: Record<string, any>) => Object.entries(obj).filter(([k]) => !HIDDEN_KEYS.includes(k));
+              const IMAGE_KEYS = ['imageUrl', 'imageURL', 'image_url', 'proofImageUrl'];
+              const isImageKey = (key: string) => IMAGE_KEYS.includes(key);
+              const isValidUrl = (val: any) => typeof val === 'string' && (val.startsWith('http://') || val.startsWith('https://'));
+
+              return (
+                <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: Dimensions.get('window').height * 0.55 }}>
+                  {/* Basic Info */}
+                  <View style={styles.drawerRow}><Text style={styles.drawerLabel}>Action</Text><Text style={styles.drawerValue}>{selectedLog.action}</Text></View>
+                  <View style={styles.drawerRow}><Text style={styles.drawerLabel}>Details</Text><Text style={styles.drawerValue}>{selectedLog.details}</Text></View>
+                  <View style={styles.drawerRow}><Text style={styles.drawerLabel}>Type</Text><View style={[styles.typeBadge, { backgroundColor: config.color + '15' }]}><Text style={[styles.typeBadgeText, { color: config.color }]}>{config.label}</Text></View></View>
+                  <View style={styles.drawerRow}><Text style={styles.drawerLabel}>User</Text><Text style={styles.drawerValue}>{selectedLog.userName}</Text></View>
+                  <View style={styles.drawerRow}><Text style={styles.drawerLabel}>Role</Text><Text style={styles.drawerValue}>{selectedLog.userRole}</Text></View>
+                  <View style={styles.drawerRow}><Text style={styles.drawerLabel}>User ID</Text><Text style={[styles.drawerValue, { fontSize: 11 }]}>{selectedLog.userId}</Text></View>
+                  {selectedLog.collection ? <View style={styles.drawerRow}><Text style={styles.drawerLabel}>Collection</Text><Text style={styles.drawerValue}>{selectedLog.collection}</Text></View> : null}
+                  {selectedLog.documentId ? <View style={styles.drawerRow}><Text style={styles.drawerLabel}>Doc ID</Text><Text style={[styles.drawerValue, { fontSize: 11 }]}>{selectedLog.documentId}</Text></View> : null}
+                  <View style={styles.drawerRow}><Text style={styles.drawerLabel}>Time</Text><Text style={styles.drawerValue}>{formatTime(selectedLog.timestamp)}</Text></View>
+
+                  {/* Changes */}
+                  {selectedLog.changes && (
+                    <View style={styles.changesSection}>
+                      <Text style={styles.changesSectionTitle}>{isUpdate ? 'Changes (Old → New)' : isCreate ? 'Created Data' : 'Deleted Data'}</Text>
+                      {isUpdate ? (
+                        <View style={styles.changesTable}>
+                          <View style={styles.changesHeaderRow}>
+                            <Text style={[styles.changesColHeader, { flex: 1.2 }]}>Field</Text>
+                            <Text style={[styles.changesColHeader, { flex: 2 }]}>Old</Text>
+                            <Text style={[styles.changesColHeader, { flex: 2 }]}>New</Text>
+                          </View>
+                          {filterKeys(selectedLog.changes.old).map(([key, oldVal]) => (
+                            <View key={key} style={styles.changesDataRow}>
+                              <Text style={[styles.changesCell, { flex: 1.2, fontWeight: '600' }]}>{key}</Text>
+                              {isImageKey(key) && isValidUrl(oldVal) ? (
+                                <Image source={{ uri: oldVal }} style={[styles.changeImage, { flex: 2 }]} resizeMode="cover" />
+                              ) : (
+                                <Text style={[styles.changesCell, { flex: 2, color: '#EF4444' }]}>{Array.isArray(oldVal) ? oldVal.join(', ') : String(oldVal || '-')}</Text>
+                              )}
+                              {isImageKey(key) && isValidUrl(selectedLog.changes!.new[key]) ? (
+                                <Image source={{ uri: selectedLog.changes!.new[key] }} style={[styles.changeImage, { flex: 2 }]} resizeMode="cover" />
+                              ) : (
+                                <Text style={[styles.changesCell, { flex: 2, color: '#22C55E' }]}>{Array.isArray(selectedLog.changes!.new[key]) ? selectedLog.changes!.new[key].join(', ') : String(selectedLog.changes!.new[key] ?? '-')}</Text>
+                              )}
+                            </View>
+                          ))}
+                        </View>
+                      ) : (
+                        <View style={styles.changesTable}>
+                          <View style={styles.changesHeaderRow}>
+                            <Text style={[styles.changesColHeader, { flex: 1.2 }]}>Field</Text>
+                            <Text style={[styles.changesColHeader, { flex: 3 }]}>Value</Text>
+                          </View>
+                          {filterKeys(isCreate ? selectedLog.changes.new : selectedLog.changes.old).map(([key, val]) => (
+                            <View key={key} style={styles.changesDataRow}>
+                              <Text style={[styles.changesCell, { flex: 1.2, fontWeight: '600' }]}>{key}</Text>
+                              {isImageKey(key) && isValidUrl(val) ? (
+                                <Image source={{ uri: val }} style={[styles.changeImage, { flex: 3 }]} resizeMode="cover" />
+                              ) : (
+                                <Text style={[styles.changesCell, { flex: 3 }]}>{Array.isArray(val) ? val.join(', ') : String(val || '-')}</Text>
+                              )}
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </ScrollView>
+              );
+            })()}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
     </View>
   );
 }
 
 // Sample logs to show when Firestore 'logs' collection is empty
-const sampleLogs: LogEntry[] = [
-  { id: '1', action: 'User Login', userId: 'admin_001', userName: 'Admin AgriCare', userRole: 'admin', details: 'Admin logged in successfully', timestamp: new Date(Date.now() - 300000), type: 'auth' },
-  { id: '2', action: 'Category Created', userId: 'admin_001', userName: 'Admin AgriCare', userRole: 'admin', details: 'Added new livestock category: Duck', timestamp: new Date(Date.now() - 900000), type: 'crud' },
-  { id: '3', action: 'Technician Verified', userId: 'admin_001', userName: 'Admin AgriCare', userRole: 'admin', details: 'Verified technician account: Pedro Santos', timestamp: new Date(Date.now() - 3600000), type: 'crud' },
-  { id: '4', action: 'User Registration', userId: 'farmer_005', userName: 'Pedro Reyes', userRole: 'farmer', details: 'New farmer registered from Dona Remedios Trinidad', timestamp: new Date(Date.now() - 7200000), type: 'auth' },
-  { id: '5', action: 'Appointment Completed', userId: 'tech_001', userName: 'Pedro Santos', userRole: 'technician', details: 'Health Check completed for Manny (Cow) - Juan Dela Cruz', timestamp: new Date(Date.now() - 14400000), type: 'system' },
-  { id: '6', action: 'Forum Post Deleted', userId: 'admin_001', userName: 'Admin AgriCare', userRole: 'admin', details: 'Removed spam post from community forum', timestamp: new Date(Date.now() - 28800000), type: 'crud' },
-  { id: '7', action: 'FCM Token Error', userId: 'farmer_003', userName: 'Jose Rivera', userRole: 'farmer', details: 'Failed to register push notification token - device not supported', timestamp: new Date(Date.now() - 43200000), type: 'error' },
-  { id: '8', action: 'Database Seed', userId: 'admin_001', userName: 'Admin AgriCare', userRole: 'admin', details: 'Mock data seeded: 11 users, 5 technicians, 10 animals, 9 appointments', timestamp: new Date(Date.now() - 86400000), type: 'system' },
-  { id: '9', action: 'Report Filed', userId: 'farmer_001', userName: 'Juan Dela Cruz', userRole: 'farmer', details: 'Reported late arrival of technician Mark Dela Cruz', timestamp: new Date(Date.now() - 100800000), type: 'system' },
-  { id: '10', action: 'Password Reset', userId: 'farmer_002', userName: 'Maria Garcia', userRole: 'farmer', details: 'Password reset email sent', timestamp: new Date(Date.now() - 172800000), type: 'auth' },
-];
+const sampleLogs: LogEntry[] = [];
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.surface },
@@ -240,4 +324,22 @@ const styles = StyleSheet.create({
   typeBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
   typeBadgeText: { fontSize: 10, fontWeight: '700' },
   logUser: { fontSize: 11, color: Colors.textLight },
+  // Drawer
+  drawerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  drawer: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: Spacing.xl, paddingBottom: 40 },
+  drawerHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#E2E8F0', alignSelf: 'center', marginBottom: Spacing.md },
+  drawerHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg },
+  drawerTitle: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },
+  drawerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  drawerLabel: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.textSecondary, flex: 1 },
+  drawerValue: { fontSize: FontSize.sm, color: Colors.text, flex: 2, textAlign: 'right' },
+  // Changes Table
+  changesSection: { marginTop: Spacing.lg },
+  changesSectionTitle: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text, marginBottom: Spacing.sm },
+  changesTable: { backgroundColor: '#F8FAFC', borderRadius: BorderRadius.lg, padding: Spacing.sm, borderWidth: 1, borderColor: '#E2E8F0' },
+  changesHeaderRow: { flexDirection: 'row', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', marginBottom: 4 },
+  changesColHeader: { fontSize: 11, fontWeight: '700', color: Colors.textSecondary, textTransform: 'uppercase' },
+  changesDataRow: { flexDirection: 'row', paddingVertical: 5, borderBottomWidth: 0.5, borderBottomColor: '#F1F5F9' },
+  changesCell: { fontSize: 12, color: Colors.text },
+  changeImage: { height: 60, borderRadius: 8, backgroundColor: '#F1F5F9' },
 });

@@ -6,8 +6,8 @@ import {
   Shadow,
   Spacing,
 } from "@/constants/theme";
-import { db, Collections } from "@/services/firebase";
-import firestore, { collection, onSnapshot } from "@react-native-firebase/firestore";
+import { Collections } from "@/services/firebase";
+import firestore from "@react-native-firebase/firestore";
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -162,8 +162,7 @@ export default function AdminRatingsReviewsScreen() {
     let unsubscribe: () => void = () => {};
 
     try {
-      unsubscribe = onSnapshot(
-        collection(db, Collections.REVIEWS),
+      unsubscribe = firestore().collection(Collections.REVIEWS).onSnapshot(
         (snapshot) => {
           if (snapshot) {
             const data: ReviewRecord[] = snapshot.docs.map((doc) => {

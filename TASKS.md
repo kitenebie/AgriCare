@@ -1,4 +1,4 @@
-# ✅ TASKS.md — AgriCare
+# ✅ TASKS.md — AgriCare (Updated: 2026-08-07)
 
 ## Completed
 - [x] Reset Expo template, build hierarchical structure
@@ -39,16 +39,53 @@
 - [x] Livestock preview form page — modal screen with live preview card, form (name, type radio, breeds, description), saves to Firestore
 - [x] Livestock list items now navigate to preview page on tap — shows editable form with live preview, supports edit + delete from preview screen
 - [x] Activity Logs page (`(admin)/home/logs.tsx`) — view logs from Firestore `logs` collection, search, filter by type (Auth/CRUD/System/Error), relative timestamps
+- [x] Activity logging on ALL pages with save/update/delete: livestock (x2), announcements, knowledge-base, reports, users, forum, auth (24 total log calls across 9 files)
 - [x] Restructured DB: users/ + admin/ + farmer/ + technician/ with userId FK linking
 - [x] Admin restructured: 4 tabs (Home, Forum, Livestock, Profile) + 8 quick-access pages from Home
 - [x] .npmrc for legacy-peer-deps
+- [x] Login & Registration pages connected to Firebase Auth (email/password sign-in, role-based redirect)
+- [x] Auto-login via AsyncStorage session persistence
+- [x] Database restructured to role-based collections (users/ + admin/ + farmer/ + technician/ with userId FK)
 
 ## Pending
-- [ ] Wire auth flow to Firebase (Login/Register → signIn/signUp)
-- [ ] Screens read from Firestore (replace local mock imports)
+
+### Admin Module
+- [ ] Wire Dashboard stats to live Firestore data
+- [ ] User Management CRUD (list, edit status, delete users)
+- [ ] Technician Verification flow (approve/reject from admin panel)
+- [ ] Knowledge Base CRUD (admin)
+- [ ] Community Forum Moderation tools
+- [ ] Reports & Complaints handling
+- [ ] Ratings/Reviews Management
+- [ ] Announcements Management
+- [ ] Analytics Dashboard (SHOULD HAVE — post-MVP if no time)
+
+### Shared/Infrastructure
 - [ ] Real-time chat UI connected to chatService
 - [ ] Image picker + upload to Storage
 - [ ] FCM token registration on app start
-- [ ] "My Animals" detail screen
-- [ ] Technician profile detail screen
 - [ ] Pull-to-refresh, loading skeletons
+
+### Farmer Module
+- [ ] Livestock Profile Management (CRUD)
+- [ ] Technician Profile detail page
+- [ ] Appointment Booking (connected to Firestore)
+- [ ] Appointment History view
+- [ ] Emergency Assistance Request
+- [ ] Knowledge Base reader
+- [ ] Community Forum
+- [ ] Rate & Review Technician
+- [ ] Notification System (wired to UI)
+
+### Technician Module
+- [ ] Profile Management
+- [ ] Availability Toggle
+- [ ] Receive Appointment Requests
+- [ ] Accept/Reject Appointment
+- [ ] Consultation Chat
+- [ ] View Farmer Information
+- [ ] Appointment Schedule
+- [ ] Respond to Emergency Requests
+- [ ] Knowledge Sharing
+- [ ] Community Forum Participation
+- [ ] View Ratings & Reviews

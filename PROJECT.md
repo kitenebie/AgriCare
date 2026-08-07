@@ -24,6 +24,11 @@
 - ✅ lucide-react-native icons
 - ✅ Real-time chat service (RTDB)
 - ✅ Push notification service (FCM)
-- 🔲 Actual auth flow connected to UI
-- 🔲 Screens reading from Firebase instead of local mock
-- 🔲 Image upload from device
+- ✅ Auth flow connected to Firebase (login/register with role-based routing)
+- ✅ Auto-login via AsyncStorage session persistence
+- ✅ Admin module: Dashboard, Livestock CRUD, Forum, Appointments, Activity Logs
+- ✅ Role-based DB structure (users → admin/farmer/technician with FK)
+- 🔲 Farmer screens wired to live Firestore data
+- 🔲 Technician module (0% — placeholder screens only)
+- 🔲 Real-time chat UI + image upload
+- 🔲 FCM push notifications wired to UI

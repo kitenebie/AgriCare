@@ -1,23 +1,76 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
 import Animated from 'react-native-reanimated';
+import firestore from '@react-native-firebase/firestore';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
 import { Icon } from '@/components/ui';
 import { MapViewComponent } from '@/components/map/MapView';
 import { TechnicianCard } from '@/components/cards/TechnicianCard';
-import { technicians } from '@/data/mockData';
+import { Collections } from '@/services/firebase';
+import { Technician } from '@/types';
 import { useFadeInUp, useFadeIn } from '@/hooks/useAnimatedEntry';
 
 export default function MapScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilter, setShowFilter] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState('All');
+  const [distanceFilter, setDistanceFilter] = useState(5);
+  const [technicians, setTechnicians] = useState<Technician[]>([]);
+  const [loading, setLoading] = useState(true);
+
   const headerAnim = useFadeIn(100);
   const mapAnim = useFadeIn(200);
   const listAnim = useFadeInUp(400);
 
   const filters = ['All', 'Health Check', 'Vaccination', 'Treatment', 'De-worming', 'A.I.', 'Others'];
-  const [distanceFilter, setDistanceFilter] = useState(5);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        // Load active technicians from Firestore
+        const techSnap = await firestore()
+          .collection(Collections.USERS)
+          .where('role', '==', 'technician')
+          .where('status', '==', 'active')
+          .get();
+
+        const techData: Technician[] = techSnap.docs.map(doc => {
+          const d = doc.data();
+          return {
+            id: doc.id,
+            name: d.displayName || 'Technician',
+            avatar: d.displayName?.split(' ').map((n: string) => n[0]).join('') || 'T',
+            rating: d.rating || 0,
+            reviewCount: d.reviewCount || 0,
+            specializations: d.expertise || d.specialization?.split(',').map((s: string) => s.trim()) || [],
+            distance: '',
+            experience: d.experience || 0,
+            serviceArea: d.location || d.serviceArea || 'Bulacan',
+            latitude: d.latitude || 14.8527 + (Math.random() * 0.02 - 0.01),
+            longitude: d.longitude || 120.8120 + (Math.random() * 0.02 - 0.01),
+          };
+        });
+
+        setTechnicians(techData);
+      } catch (e: any) {
+        console.warn('Failed to load technicians:', e.message);
+      }
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  // Filter technicians by search and specialization
+  const filtered = technicians.filter(t => {
+    const matchesSearch = !searchQuery.trim() ||
+      t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.serviceArea.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesFilter = selectedFilter === 'All' ||
+      t.specializations.some(s => s.toLowerCase().includes(selectedFilter.toLowerCase()));
+    return matchesSearch && matchesFilter;
+  });
+
+  if (loading) return <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}><ActivityIndicator size="large" color={Colors.primary} /></View>;
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -32,18 +85,12 @@ export default function MapScreen() {
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <Icon name="search" size={18} color={Colors.textLight} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search location"
-          placeholderTextColor={Colors.textLight}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
+        <TextInput style={styles.searchInput} placeholder="Search technician or location" placeholderTextColor={Colors.textLight} value={searchQuery} onChangeText={setSearchQuery} />
       </View>
 
-      {/* Map Placeholder - MapLibre would render here */}
+      {/* Map */}
       <Animated.View style={[styles.mapContainer, mapAnim]}>
-        <MapViewComponent technicians={technicians} />
+        <MapViewComponent technicians={filtered} />
       </Animated.View>
 
       {/* Filter Panel */}
@@ -58,25 +105,10 @@ export default function MapScreen() {
           <Text style={styles.filterLabel}>Service Type</Text>
           <View style={styles.filterChips}>
             {filters.map((filter) => (
-              <TouchableOpacity
-                key={filter}
-                style={[styles.chip, selectedFilter === filter && styles.chipActive]}
-                onPress={() => setSelectedFilter(filter)}
-              >
-                <Text style={[styles.chipText, selectedFilter === filter && styles.chipTextActive]}>
-                  {filter}
-                </Text>
+              <TouchableOpacity key={filter} style={[styles.chip, selectedFilter === filter && styles.chipActive]} onPress={() => setSelectedFilter(filter)}>
+                <Text style={[styles.chipText, selectedFilter === filter && styles.chipTextActive]}>{filter}</Text>
               </TouchableOpacity>
             ))}
-          </View>
-          <Text style={styles.filterLabel}>Distance</Text>
-          <View style={styles.distanceRow}>
-            <Text style={styles.distanceValue}>1 km</Text>
-            <View style={styles.sliderTrack}>
-              <View style={[styles.sliderFill, { width: `${(distanceFilter / 10) * 100}%` }]} />
-              <View style={[styles.sliderThumb, { left: `${(distanceFilter / 10) * 100}%` }]} />
-            </View>
-            <Text style={styles.distanceValue}>10 km</Text>
           </View>
           <View style={styles.filterActions}>
             <TouchableOpacity style={styles.applyButton} onPress={() => setShowFilter(false)}>
@@ -91,8 +123,15 @@ export default function MapScreen() {
 
       {/* Technician List */}
       <Animated.View style={[styles.listContainer, listAnim]}>
+        <Text style={styles.listTitle}>{filtered.length} Technician{filtered.length !== 1 ? 's' : ''} Found</Text>
         <View style={styles.listContent}>
-          {technicians.map((item, index) => (
+          {filtered.length === 0 && (
+            <View style={styles.empty}>
+              <Icon name="profile" size={40} color={Colors.textLight} />
+              <Text style={styles.emptyText}>No technicians found</Text>
+            </View>
+          )}
+          {filtered.map((item, index) => (
             <TechnicianCard key={item.id} technician={item} index={index} />
           ))}
         </View>
@@ -102,160 +141,29 @@ export default function MapScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-  },
-  title: {
-    fontSize: FontSize.xl,
-    fontWeight: '700',
-    color: Colors.text,
-  },
-  filterButton: {
-    padding: Spacing.sm,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.full,
-    marginHorizontal: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    marginBottom: Spacing.md,
-    gap: Spacing.sm,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: FontSize.md,
-    color: Colors.text,
-  },
-  mapContainer: {
-    height: 220,
-    marginHorizontal: Spacing.lg,
-    borderRadius: BorderRadius.xl,
-    overflow: 'hidden',
-    marginBottom: Spacing.md,
-  },
-  filterPanel: {
-    position: 'absolute',
-    top: 120,
-    right: Spacing.lg,
-    left: Spacing.lg,
-    backgroundColor: Colors.white,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.xl,
-    zIndex: 10,
-    ...Shadow.heavy,
-  },
-  filterHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.lg,
-  },
-  filterTitle: {
-    fontSize: FontSize.xl,
-    fontWeight: '700',
-    color: Colors.text,
-  },
-  filterLabel: {
-    fontSize: FontSize.md,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: Spacing.sm,
-    marginTop: Spacing.md,
-  },
-  filterChips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-  },
-  chip: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.full,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
-  },
-  chipActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  chipText: {
-    fontSize: FontSize.sm,
-    color: Colors.textSecondary,
-  },
-  chipTextActive: {
-    color: Colors.white,
-    fontWeight: '600',
-  },
-  distanceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: Spacing.sm,
-    gap: Spacing.sm,
-  },
-  distanceValue: {
-    fontSize: FontSize.sm,
-    color: Colors.textSecondary,
-  },
-  sliderTrack: {
-    flex: 1,
-    height: 4,
-    backgroundColor: Colors.border,
-    borderRadius: 2,
-    position: 'relative',
-  },
-  sliderFill: {
-    height: 4,
-    backgroundColor: Colors.primary,
-    borderRadius: 2,
-  },
-  sliderThumb: {
-    position: 'absolute',
-    top: -6,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: Colors.primary,
-    marginLeft: -8,
-  },
-  filterActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: Spacing.xl,
-    gap: Spacing.xl,
-  },
-  applyButton: {
-    flex: 1,
-    backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.full,
-    paddingVertical: Spacing.md,
-    alignItems: 'center',
-  },
-  applyButtonText: {
-    color: Colors.white,
-    fontWeight: '700',
-    fontSize: FontSize.md,
-  },
-  resetText: {
-    color: Colors.textSecondary,
-    fontSize: FontSize.md,
-  },
-  listContainer: {
-    flex: 1,
-  },
-  listContent: {
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.xl,
-  },
+  container: { flex: 1, backgroundColor: Colors.surface },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md },
+  title: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },
+  filterButton: { padding: Spacing.sm },
+  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.white, borderRadius: BorderRadius.full, marginHorizontal: Spacing.lg, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, marginBottom: Spacing.md, gap: Spacing.sm, ...Shadow.light },
+  searchInput: { flex: 1, fontSize: FontSize.md, color: Colors.text },
+  mapContainer: { height: 220, marginHorizontal: Spacing.lg, borderRadius: BorderRadius.xl, overflow: 'hidden', marginBottom: Spacing.md },
+  filterPanel: { position: 'absolute', top: 120, right: Spacing.lg, left: Spacing.lg, backgroundColor: Colors.white, borderRadius: BorderRadius.xl, padding: Spacing.xl, zIndex: 10, ...Shadow.heavy },
+  filterHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg },
+  filterTitle: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },
+  filterLabel: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text, marginBottom: Spacing.sm, marginTop: Spacing.md },
+  filterChips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  chip: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: BorderRadius.full, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surface },
+  chipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  chipText: { fontSize: FontSize.sm, color: Colors.textSecondary },
+  chipTextActive: { color: Colors.white, fontWeight: '600' },
+  filterActions: { flexDirection: 'row', alignItems: 'center', marginTop: Spacing.xl, gap: Spacing.xl },
+  applyButton: { flex: 1, backgroundColor: Colors.primary, borderRadius: BorderRadius.full, paddingVertical: Spacing.md, alignItems: 'center' },
+  applyButtonText: { color: Colors.white, fontWeight: '700', fontSize: FontSize.md },
+  resetText: { color: Colors.textSecondary, fontSize: FontSize.md },
+  listContainer: { flex: 1 },
+  listTitle: { fontSize: FontSize.md, fontWeight: '600', color: Colors.textSecondary, paddingHorizontal: Spacing.lg, marginBottom: Spacing.sm },
+  listContent: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xl },
+  empty: { alignItems: 'center', paddingVertical: 40 },
+  emptyText: { fontSize: FontSize.md, color: Colors.textLight, marginTop: Spacing.sm },
 });

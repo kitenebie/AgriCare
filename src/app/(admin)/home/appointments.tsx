@@ -6,8 +6,8 @@ import {
   Shadow,
   Spacing,
 } from "@/constants/theme";
-import { db, Collections } from "@/services/firebase";
-import firestore, { collection, onSnapshot } from "@react-native-firebase/firestore";
+import { Collections } from "@/services/firebase";
+import firestore from "@react-native-firebase/firestore";
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -234,8 +234,7 @@ export default function AdminAppointmentsScreen() {
     let unsubscribe: () => void = () => {};
 
     try {
-      unsubscribe = onSnapshot(
-        collection(db, Collections.APPOINTMENTS),
+      unsubscribe = firestore().collection(Collections.APPOINTMENTS).onSnapshot(
         (snapshot) => {
           if (snapshot) {
             const data: AppointmentRecord[] = snapshot.docs.map((doc) => {

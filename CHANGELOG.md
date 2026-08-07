@@ -1,5 +1,17 @@
 # 📝 CHANGELOG.md — AgriCare
 
+## [3.1.0] - 2026-08-03
+### Added
+- **Livestock Categories page** (`(admin)/home/livestock-categories.tsx`) — recreated with real-time Firestore `onSnapshot` listener on `livestockCategories`, full CRUD (add/edit/delete), bottom-sheet Modal form, type badges (Large/Small/Poultry), breed count, animal count, empty state, ActivityIndicator loading
+- **Activity logging (logCrud)** integrated into:
+  - `livestock/preview.tsx` — logs Category Created, Updated, Deleted
+  - `forum/index.tsx` — logs Forum Post Created, Forum Post Deleted, Forum Reply Added, Forum Reply Deleted, Forum Reply Updated
+- `livestock-categories` registered in `(admin)/home/_layout.tsx` Stack
+- `services/index.ts` barrel now exports `logService`
+
+### Fixed
+- Missing `livestock-categories.tsx` file restored with proper project patterns (instance methods, theme constants, Icon component)
+
 ## [3.0.0] - 2026-08-02
 ### Changed (BREAKING)
 - **Database restructured** to role-based collections:
@@ -22,6 +34,7 @@
 - Forum page: removed mock data fallback (shows empty if no Firestore data), added Edit/Delete buttons for replies (own replies or admin), inline edit form with Save/Cancel, delete from `replies` subcollection with confirmation
 - Admin Appointments page: view-only monitoring with real-time Firestore, stats row, search, status filters, detail modal on tap. Removed mock fallback.
 - Activity Logs page: real-time Firestore `logs` collection listener, filter by type (Auth/CRUD/System/Error), search, color-coded icons, relative timestamps, sample logs shown when collection is empty
+- **Full activity logging**: All save/update/delete operations across 9 files now write to `logs` collection (livestock, forum, announcements, knowledge-base, reports, users, auth). 24 total log insertion points.
 
 ### Changed
 - Moved all `(tabs)` pages to `(farmer)` directory — `(tabs)` removed entirely

@@ -2,20 +2,19 @@
  * Firebase Configuration & Initialization (Modular API)
  */
 
-import { getApp } from '@react-native-firebase/app';
 import auth from '@react-native-firebase/auth';
-import { getFirestore } from '@react-native-firebase/firestore';
-import { getStorage } from '@react-native-firebase/storage';
-import { getDatabase } from '@react-native-firebase/database';
-import { getMessaging } from '@react-native-firebase/messaging';
+import firestore from '@react-native-firebase/firestore';
+import storageModule from '@react-native-firebase/storage';
+import database from '@react-native-firebase/database';
+import messagingModule from '@react-native-firebase/messaging';
 
-// Initialize instances
-export const app = getApp();
+// Initialize instances (v21 instance method pattern)
+export const app = null; // Not needed with instance methods
 export const authInstance = auth();
-export const db = getFirestore(app);
-export const storage = getStorage(app);
-export const rtdb = getDatabase(app);
-export const messaging = getMessaging(app);
+export const db = firestore(); // Instance method — safe on Android
+export const storage = storageModule(); // Instance method
+export const rtdb = database();
+export const messaging = messagingModule();
 
 /**
  * Database Structure:

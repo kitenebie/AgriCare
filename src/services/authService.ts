@@ -7,6 +7,7 @@ import firestore from '@react-native-firebase/firestore';
 import { authInstance, Collections } from './firebase';
 import { requestNotificationPermission, registerDeviceToken, unregisterDeviceToken } from './notificationService';
 import { saveSession, clearSession } from './sessionService';
+import { logAuth, logError } from './logService';
 
 export type AuthUser = any;
 
@@ -51,6 +52,7 @@ export const signUp = async (
   extraData?: {
     expertise?: string[];
     proofImageUrl?: string;
+    idImageUrl?: string;
     phoneNumber?: string;
     location?: string;
   }
@@ -73,14 +75,18 @@ export const signUp = async (
     location: extraData?.location || '',
     photoURL: '',
     proofImageUrl: extraData?.proofImageUrl || '',
+    idImageUrl: extraData?.idImageUrl || '',
     expertise: extraData?.expertise || [],
     specialization: specializationStr,
-    status: role === 'technician' ? 'pending' : 'active',
+    status: 'pending',
     createdAt: firestore.FieldValue.serverTimestamp(),
     updatedAt: firestore.FieldValue.serverTimestamp(),
   });
 
   await registerFCM(user.uid);
+
+  // Log activity
+  await logAuth('User Registration', `New ${role} registered: ${displayName} (${email})`, user.uid, displayName);
 
   // Save session for auto-login
   await saveSession({
@@ -135,6 +141,9 @@ export const signIn = async (email: string, pass: string) => {
 
   await registerFCM(user.uid);
 
+  // Log activity
+  await logAuth('User Login', `${user.email} logged in`, user.uid, user.displayName || '');
+
   // Save session for auto-login on next app open
   const sessDoc = await firestore().collection(Collections.USERS).doc(user.uid).get();
   const userData = sessDoc.exists ? sessDoc.data() : null;
@@ -156,6 +165,7 @@ export const signOut = async () => {
   if (user) {
     try { await unregisterDeviceToken(user.uid); } catch (e) {}
   }
+  await logAuth('User Logout', `${user?.email || 'User'} logged out`, user?.uid, user?.displayName || '');
   await authInstance.signOut();
   await clearSession();
 };

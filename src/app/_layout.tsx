@@ -28,6 +28,7 @@ export default function RootLayout() {
           <Stack.Screen name="(admin)" />
           <Stack.Screen name="(farmer)" />
           <Stack.Screen name="(technician)" />
+          <Stack.Screen name="application-review" options={{ headerShown: false, gestureEnabled: false, animation: 'fade' }} />
         </Stack>
       </GestureHandlerRootView>
       </SafeAreaView>

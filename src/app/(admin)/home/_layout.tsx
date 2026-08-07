@@ -11,6 +11,8 @@ export default function AdminHomeLayout() {
       <Stack.Screen name="reports" />
       <Stack.Screen name="reviews" />
       <Stack.Screen name="logs" />
+      <Stack.Screen name="announcements" />
+      <Stack.Screen name="livestock-categories" />
     </Stack>
   );
 }

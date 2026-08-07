@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, FontSize, BorderRadius } from '@/constants/theme';
 import { Icon } from '@/components/ui';
 import { signUp } from '@/services/authService';
-import { storage } from '@/services/firebase';
+import { uploadImageToSupabase } from '@/services/storage';
 import * as ImagePicker from 'expo-image-picker';
 
 type Role = 'farmer' | 'technician';
@@ -47,6 +47,7 @@ export default function RegisterScreen() {
   ]);
   const [proofImageUrl, setProofImageUrl] = useState('');
   const [uploadingProof, setUploadingProof] = useState(false);
+  const [idImageUrl, setIdImageUrl] = useState('');
 
   // Toggle Multiple Expertise Selection
   const toggleExpertise = (label: string) => {
@@ -75,13 +76,15 @@ export default function RegisterScreen() {
         setUploadingProof(true);
 
         try {
-          const filename = `proof_${Date.now()}.jpg`;
-          const storageRef = storage.ref(`technicianProof/${filename}`);
-          await storageRef.putFile(localUri);
-          const downloadUrl = await storageRef.getDownloadURL();
-          setProofImageUrl(downloadUrl);
+          const result = await uploadImageToSupabase(localUri, "animals");
+          if (result.success && result.publicUrl) {
+            setProofImageUrl(result.publicUrl);
+          } else {
+            console.warn('Supabase upload failed, using local URI:', result.error);
+            setProofImageUrl(localUri);
+          }
         } catch (uploadErr) {
-          console.warn('Proof upload error, using local URI:', uploadErr);
+          console.warn('Upload error, using local URI:', uploadErr);
           setProofImageUrl(localUri);
         } finally {
           setUploadingProof(false);
@@ -125,6 +128,15 @@ export default function RegisterScreen() {
 
     setLoading(true);
     try {
+      // Upload farmer ID if provided
+      let uploadedIdUrl = '';
+      if (role === 'farmer' && idImageUrl) {
+        const idResult = await uploadImageToSupabase(idImageUrl, 'animals');
+        if (idResult.success && idResult.publicUrl) {
+          uploadedIdUrl = idResult.publicUrl;
+        }
+      }
+
       await signUp(
         email.trim(),
         password,
@@ -140,6 +152,7 @@ export default function RegisterScreen() {
           : {
               phoneNumber: phoneNumber.trim(),
               location: location.trim(),
+              idImageUrl: uploadedIdUrl,
             }
       );
 
@@ -308,6 +321,48 @@ export default function RegisterScreen() {
               secureTextEntry={!showPassword}
             />
           </View>
+
+          {/* ─── FARMER ID CAPTURE ─── */}
+          {role === 'farmer' && (
+            <View style={styles.technicianSection}>
+              <View style={styles.techSectionHeader}>
+                <Icon name="profile" size={20} color="#15803D" />
+                <Text style={styles.techSectionTitle}>Valid ID Verification</Text>
+              </View>
+              <Text style={{ fontSize: 13, color: Colors.textSecondary, marginBottom: 12, lineHeight: 18 }}>
+                Please capture or upload a valid government-issued ID for verification.
+              </Text>
+              {idImageUrl ? (
+                <View style={{ alignItems: 'center', marginBottom: 12 }}>
+                  <Image source={{ uri: idImageUrl }} style={{ width: '100%', height: 160, borderRadius: 12 }} resizeMode="cover" />
+                  <TouchableOpacity style={{ marginTop: 8 }} onPress={() => setIdImageUrl('')}>
+                    <Text style={{ color: Colors.error, fontWeight: '600', fontSize: 13 }}>Remove</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+              <TouchableOpacity
+                style={[styles.uploadProofBtn, { marginBottom: 8 }]}
+                onPress={() => {
+                  Alert.alert('Capture ID', 'Choose an option', [
+                    { text: 'Camera', onPress: async () => {
+                      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+                      if (status !== 'granted') { Alert.alert('Permission Denied', 'Camera permission is required.'); return; }
+                      const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.8 });
+                      if (!result.canceled && result.assets?.[0]?.uri) setIdImageUrl(result.assets[0].uri);
+                    }},
+                    { text: 'Upload from Gallery', onPress: async () => {
+                      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.8 });
+                      if (!result.canceled && result.assets?.[0]?.uri) setIdImageUrl(result.assets[0].uri);
+                    }},
+                    { text: 'Cancel', style: 'cancel' },
+                  ]);
+                }}
+              >
+                <Icon name="camera" size={18} color="#15803D" />
+                <Text style={styles.uploadProofBtnText}>{idImageUrl ? 'Change ID Photo' : 'Capture ID'}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* ─── TECHNICIAN SPECIFIC FIELDS ─── */}
           {role === 'technician' && (

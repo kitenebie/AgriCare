@@ -47,7 +47,7 @@ export default function FarmerLayout() {
     >
       <Tabs.Screen name="home" options={{ tabBarIcon: ({ focused }) => <TabIcon iconName="home" label="Home" focused={focused} /> }} />
       <Tabs.Screen name="map" options={{ tabBarIcon: ({ focused }) => <TabIcon iconName="map" label="Map" focused={focused} /> }} />
-      <Tabs.Screen name="services" options={{ tabBarIcon: ({ focused }) => <TabIcon iconName="services" label="Services" focused={focused} /> }} />
+      <Tabs.Screen name="services" options={{ tabBarIcon: ({ focused }) => <TabIcon iconName="pencil" label="Services" focused={focused} /> }} />
       <Tabs.Screen name="messages" options={{ tabBarIcon: ({ focused }) => <TabIcon iconName="messages" label="Messages" focused={focused} /> }} />
       <Tabs.Screen name="profile" options={{ tabBarIcon: ({ focused }) => <TabIcon iconName="profile" label="Profile" focused={focused} /> }} />
     </Tabs>

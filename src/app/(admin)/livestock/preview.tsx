@@ -13,6 +13,7 @@ import firestore from '@react-native-firebase/firestore';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
 import { Icon } from '@/components/ui';
+import { logCrud } from '@/services/logService';
 import { Collections } from '@/services/firebase';
 
 const typeOptions = [
@@ -62,6 +63,7 @@ export default function LivestockPreviewForm() {
 
       if (isEditing && params.id) {
         await firestore().collection(Collections.LIVESTOCK_CATEGORIES).doc(params.id).update(data);
+        await logCrud('Category Updated', 'Updated: ' + name.trim(), 'livestockCategories', params.id);
         Alert.alert('Updated', `"${name.trim()}" has been updated.`, [
           { text: 'OK', onPress: () => router.back() },
         ]);
@@ -71,6 +73,7 @@ export default function LivestockPreviewForm() {
           count: 0,
           createdAt: firestore.FieldValue.serverTimestamp(),
         });
+        await logCrud('Category Created', 'Added: ' + name.trim(), 'livestockCategories');
         Alert.alert('Added', `"${name.trim()}" has been added.`, [
           { text: 'OK', onPress: () => router.back() },
         ]);
@@ -92,6 +95,7 @@ export default function LivestockPreviewForm() {
         onPress: async () => {
           try {
             await firestore().collection(Collections.LIVESTOCK_CATEGORIES).doc(params.id).delete();
+            await logCrud('Category Deleted', 'Deleted: ' + name, 'livestockCategories', params.id);
             Alert.alert('Deleted', 'Category removed.', [
               { text: 'OK', onPress: () => router.back() },
             ]);

@@ -1,50 +1,13 @@
 /**
- * MapLibre Map Component
- * 
- * Uses MapLibre GL with free OpenStreetMap / Leaflet-style tiles.
- * No API key required.
- * 
- * Install: npx expo install @maplibre/maplibre-react-native
- * 
- * Usage:
- * <MapViewComponent
- *   technicians={technicians}
- *   onMarkerPress={(technician) => console.log(technician)}
- * />
+ * MapView Component — MapLibre GL with OpenStreetMap tiles
+ * Falls back to a WebView-based map if MapLibre crashes
  */
 
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, PermissionsAndroid } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { Colors, BorderRadius, Shadow } from '@/constants/theme';
 import { Technician } from '@/types';
-
-// Free OSM raster tile style (no API key needed)
-const OSM_STYLE = {
-  version: 8 as const,
-  sources: {
-    osm: {
-      type: 'raster' as const,
-      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-      tileSize: 256,
-      attribution: '© OpenStreetMap contributors',
-    },
-  },
-  layers: [
-    {
-      id: 'osm-tiles',
-      type: 'raster' as const,
-      source: 'osm',
-      minzoom: 0,
-      maxzoom: 19,
-    },
-  ],
-};
-
-// ─── UNCOMMENT WHEN @maplibre/maplibre-react-native IS INSTALLED ───
-// import MapLibreGL from '@maplibre/maplibre-react-native';
-//
-// // MapLibre is free & open-source, no token needed
-// MapLibreGL.setAccessToken(null);
 
 interface MapViewProps {
   technicians: Technician[];
@@ -55,169 +18,87 @@ interface MapViewProps {
 export const MapViewComponent: React.FC<MapViewProps> = ({
   technicians,
   onMarkerPress,
-  userLocation = { latitude: 14.6042, longitude: 120.9822 },
+  userLocation = { latitude: 14.8527, longitude: 120.8120 },
 }) => {
-  // ─── MAPLIBRE + OSM TILES IMPLEMENTATION (uncomment when ready) ───
-  // return (
-  //   <MapLibreGL.MapView
-  //     style={styles.map}
-  //     styleJSON={JSON.stringify(OSM_STYLE)}
-  //     logoEnabled={false}
-  //     attributionEnabled={true}
-  //   >
-  //     <MapLibreGL.Camera
-  //       zoomLevel={13}
-  //       centerCoordinate={[userLocation.longitude, userLocation.latitude]}
-  //       animationDuration={1000}
-  //     />
-  //
-  //     {/* User Location */}
-  //     <MapLibreGL.UserLocation visible animated />
-  //
-  //     {/* Technician Markers */}
-  //     {technicians.map((tech) => (
-  //       <MapLibreGL.MarkerView
-  //         key={tech.id}
-  //         coordinate={[tech.longitude, tech.latitude]}
-  //       >
-  //         <TouchableOpacity
-  //           style={styles.marker}
-  //           onPress={() => onMarkerPress?.(tech)}
-  //         >
-  //           <View style={styles.markerDot}>
-  //             <Text style={styles.markerInitial}>{tech.name[0]}</Text>
-  //           </View>
-  //           <Text style={styles.markerLabel}>{tech.distance}</Text>
-  //         </TouchableOpacity>
-  //       </MapLibreGL.MarkerView>
-  //     ))}
-  //   </MapLibreGL.MapView>
-  // );
+  // Build Leaflet HTML map with markers
+  const markers = technicians.map(t => `
+    L.marker([${t.latitude}, ${t.longitude}])
+      .addTo(map)
+      .bindPopup('<b>${t.name.replace(/'/g, "\\'")}</b><br>${(t.specializations || []).join(", ").replace(/'/g, "\\'")}');
+  `).join('\n');
 
-  // ─── PLACEHOLDER (remove when MapLibre is configured) ───
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    * { margin: 0; padding: 0; }
+    #map { width: 100%; height: 100vh; }
+    .custom-marker {
+      background: #1B5E20;
+      border: 3px solid white;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+      font-size: 14px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    var map = L.map('map').setView([${userLocation.latitude}, ${userLocation.longitude}], 13);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    // User location marker
+    L.circleMarker([${userLocation.latitude}, ${userLocation.longitude}], {
+      radius: 8,
+      fillColor: '#2196F3',
+      color: '#fff',
+      weight: 3,
+      fillOpacity: 1
+    }).addTo(map).bindPopup('You are here');
+
+    // Technician markers
+    ${markers}
+  </script>
+</body>
+</html>`;
+
   return (
-    <View style={styles.placeholder}>
-      <View style={styles.placeholderContent}>
-        {technicians.map((tech, i) => (
-          <TouchableOpacity
-            key={tech.id}
-            style={[
-              styles.fakeMarker,
-              { top: 30 + i * 55, left: 40 + i * 70 },
-            ]}
-            onPress={() => onMarkerPress?.(tech)}
-          >
-            <View style={styles.fakeMarkerDot}>
-              <Text style={styles.fakeMarkerText}>{tech.name[0]}</Text>
-            </View>
-            <Text style={styles.fakeDistance}>{tech.distance}</Text>
-          </TouchableOpacity>
-        ))}
-        <View style={styles.userDot} />
-      </View>
-      <Text style={styles.placeholderText}>
-        MapLibre GL + OpenStreetMap Tiles{'\n'}
-        npx expo install @maplibre/maplibre-react-native
-      </Text>
+    <View style={styles.container}>
+      <WebView
+        source={{ html }}
+        style={styles.map}
+        scrollEnabled={false}
+        nestedScrollEnabled={false}
+        javaScriptEnabled={true}
+        domStorageEnabled={true}
+        originWhitelist={['*']}
+      />
     </View>
   );
 };
 
-// Export the style for external use if needed
-export { OSM_STYLE };
-
 const styles = StyleSheet.create({
-  map: {
+  container: {
     flex: 1,
-  },
-  placeholder: {
-    flex: 1,
-    backgroundColor: '#E8F5E9',
     borderRadius: BorderRadius.xl,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
     overflow: 'hidden',
   },
-  placeholderContent: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  placeholderText: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    position: 'absolute',
-    bottom: 12,
-  },
-  fakeMarker: {
-    position: 'absolute',
-    alignItems: 'center',
-  },
-  fakeMarkerDot: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: Colors.white,
-    ...Shadow.medium,
-  },
-  fakeMarkerText: {
-    color: Colors.white,
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  fakeDistance: {
-    fontSize: 10,
-    color: Colors.primary,
-    fontWeight: '600',
-    marginTop: 2,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    paddingHorizontal: 4,
-    borderRadius: 4,
-  },
-  userDot: {
-    position: 'absolute',
-    top: '50%',
-    right: '35%',
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#2196F3',
-    borderWidth: 3,
-    borderColor: Colors.white,
-    ...Shadow.light,
-  },
-  marker: {
-    alignItems: 'center',
-  },
-  markerDot: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: Colors.white,
-    ...Shadow.medium,
-  },
-  markerInitial: {
-    color: Colors.white,
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  markerLabel: {
-    fontSize: 10,
-    color: Colors.primary,
-    fontWeight: '600',
-    backgroundColor: Colors.white,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginTop: 2,
-    ...Shadow.light,
+  map: {
+    flex: 1,
   },
 });
