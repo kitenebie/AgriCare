@@ -29,10 +29,13 @@ export const requestNotificationPermission = async (): Promise<boolean> => {
  */
 export const registerDeviceToken = async (userId: string): Promise<string | null> => {
   try {
+    // Delete old token and get fresh one
+    await messaging().deleteToken();
     const token = await messaging().getToken();
     if (token) {
+      // Single token per user — overwrite every login
       await firestore().collection(Collections.USERS).doc(userId).update({
-        fcmTokens: firestore.FieldValue.arrayUnion(token),
+        fcmToken: token,
         lastTokenUpdate: firestore.FieldValue.serverTimestamp(),
         platform: Platform.OS,
       });
@@ -49,9 +52,8 @@ export const registerDeviceToken = async (userId: string): Promise<string | null
  */
 export const unregisterDeviceToken = async (userId: string): Promise<void> => {
   try {
-    const token = await messaging().getToken();
     await firestore().collection(Collections.USERS).doc(userId).update({
-      fcmTokens: firestore.FieldValue.arrayRemove(token),
+      fcmToken: '',
     });
     await messaging().deleteToken();
   } catch (error: any) {
@@ -66,7 +68,7 @@ export const onTokenRefresh = (userId: string) => {
   return messaging().onTokenRefresh(async (newToken) => {
     try {
       await firestore().collection(Collections.USERS).doc(userId).update({
-        fcmTokens: firestore.FieldValue.arrayUnion(newToken),
+        fcmToken: newToken,
       });
     } catch (e) {}
   });

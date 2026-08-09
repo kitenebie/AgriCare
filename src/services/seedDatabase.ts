@@ -59,17 +59,17 @@ const getUserPin = (userId: string): string => USER_PINS[userId] || 'default123'
 // ═══════════════════════════════════════════════
 
 const mockUsers = [
-  { id: 'admin_001', email: 'admin@agricare.ph', password: 'admin123', displayName: 'Admin AgriCare', role: 'admin', phoneNumber: '+63 900 000 0001', status: 'active', photoURL: '' },
-  { id: 'farmer_001', email: 'juan@agricare.ph', password: 'farmer123', displayName: 'Juan Dela Cruz', role: 'farmer', phoneNumber: '+63 912 345 6789', status: 'active', photoURL: '' },
-  { id: 'farmer_002', email: 'maria@agricare.ph', password: 'farmer123', displayName: 'Maria Garcia', role: 'farmer', phoneNumber: '+63 913 456 7890', status: 'active', photoURL: '' },
-  { id: 'farmer_003', email: 'jose@agricare.ph', password: 'farmer123', displayName: 'Jose Rivera', role: 'farmer', phoneNumber: '+63 914 567 8901', status: 'active', photoURL: '' },
-  { id: 'farmer_004', email: 'lorna@agricare.ph', password: 'farmer123', displayName: 'Lorna Santos', role: 'farmer', phoneNumber: '+63 915 678 9012', status: 'active', photoURL: '' },
-  { id: 'farmer_005', email: 'pedro.farmer@agricare.ph', password: 'farmer123', displayName: 'Pedro Reyes', role: 'farmer', phoneNumber: '+63 916 789 0123', status: 'inactive', photoURL: '' },
-  { id: 'tech_001', email: 'pedro.santos@agricare.ph', password: 'technician123', displayName: 'Pedro Santos', role: 'technician', phoneNumber: '+63 917 111 2222', status: 'active', photoURL: '' },
-  { id: 'tech_002', email: 'ana.reyes@agricare.ph', password: 'technician123', displayName: 'Ana Reyes', role: 'technician', phoneNumber: '+63 918 222 3333', status: 'active', photoURL: '' },
-  { id: 'tech_003', email: 'mark.delacruz@agricare.ph', password: 'technician123', displayName: 'Mark Dela Cruz', role: 'technician', phoneNumber: '+63 919 333 4444', status: 'active', photoURL: '' },
-  { id: 'tech_004', email: 'rosa.mendoza@agricare.ph', password: 'technician123', displayName: 'Rosa Mendoza', role: 'technician', phoneNumber: '+63 920 444 5555', status: 'pending', photoURL: '' },
-  { id: 'tech_005', email: 'carlos.villanueva@agricare.ph', password: 'technician123', displayName: 'Carlos Villanueva', role: 'technician', phoneNumber: '+63 921 555 6666', status: 'pending', photoURL: '' },
+  { id: 'admin_001', email: 'admin@agricare.ph', password: 'admin123', displayName: 'Admin AgriCare', role: 'admin', phoneNumber: '+63 900 000 0001', status: 'active', photoURL: 'https://i.pravatar.cc/150?img=68' },
+  { id: 'farmer_001', email: 'juan@agricare.ph', password: 'farmer123', displayName: 'Juan Dela Cruz', role: 'farmer', phoneNumber: '+63 912 345 6789', status: 'active', photoURL: 'https://i.pravatar.cc/150?img=12' },
+  { id: 'farmer_002', email: 'maria@agricare.ph', password: 'farmer123', displayName: 'Maria Garcia', role: 'farmer', phoneNumber: '+63 913 456 7890', status: 'active', photoURL: 'https://i.pravatar.cc/150?img=25' },
+  { id: 'farmer_003', email: 'jose@agricare.ph', password: 'farmer123', displayName: 'Jose Rivera', role: 'farmer', phoneNumber: '+63 914 567 8901', status: 'active', photoURL: 'https://i.pravatar.cc/150?img=33' },
+  { id: 'farmer_004', email: 'lorna@agricare.ph', password: 'farmer123', displayName: 'Lorna Santos', role: 'farmer', phoneNumber: '+63 915 678 9012', status: 'active', photoURL: 'https://i.pravatar.cc/150?img=44' },
+  { id: 'farmer_005', email: 'pedro.farmer@agricare.ph', password: 'farmer123', displayName: 'Pedro Reyes', role: 'farmer', phoneNumber: '+63 916 789 0123', status: 'inactive', photoURL: 'https://i.pravatar.cc/150?img=51' },
+  { id: 'tech_001', email: 'pedro.santos@agricare.ph', password: 'technician123', displayName: 'Pedro Santos', role: 'technician', phoneNumber: '+63 917 111 2222', status: 'active', photoURL: 'https://i.pravatar.cc/150?img=59' },
+  { id: 'tech_002', email: 'ana.reyes@agricare.ph', password: 'technician123', displayName: 'Ana Reyes', role: 'technician', phoneNumber: '+63 918 222 3333', status: 'active', photoURL: 'https://i.pravatar.cc/150?img=23' },
+  { id: 'tech_003', email: 'mark.delacruz@agricare.ph', password: 'technician123', displayName: 'Mark Dela Cruz', role: 'technician', phoneNumber: '+63 919 333 4444', status: 'active', photoURL: 'https://i.pravatar.cc/150?img=53' },
+  { id: 'tech_004', email: 'rosa.mendoza@agricare.ph', password: 'technician123', displayName: 'Rosa Mendoza', role: 'technician', phoneNumber: '+63 920 444 5555', status: 'pending', photoURL: 'https://i.pravatar.cc/150?img=38' },
+  { id: 'tech_005', email: 'carlos.villanueva@agricare.ph', password: 'technician123', displayName: 'Carlos Villanueva', role: 'technician', phoneNumber: '+63 921 555 6666', status: 'pending', photoURL: 'https://i.pravatar.cc/150?img=60' },
 ];
 
 // ═══════════════════════════════════════════════
@@ -291,6 +291,11 @@ const mockAppointments = [
   { id: 'appt_007', serviceType: 'Artificial Insemination', animalId: 'animal_001', animalName: 'Manny (Cow)', farmerId: 'farmer_001', farmerName: 'Juan Dela Cruz', technicianId: 'tech_002', technicianName: 'Ana Reyes', date: '2026-07-20', time: '08:00 AM', status: 'completed', description: 'AI procedure for breeding', location: 'San Miguel, Bulacan' },
   { id: 'appt_008', serviceType: 'Health Check', animalId: 'animal_010', animalName: 'Kabayo (Horse)', farmerId: 'farmer_004', farmerName: 'Lorna Santos', technicianId: 'tech_001', technicianName: 'Pedro Santos', date: '2026-07-15', time: '03:00 PM', status: 'completed', description: 'Annual health assessment', location: 'San Ildefonso, Bulacan' },
   { id: 'appt_009', serviceType: 'De-worming', animalId: 'animal_004', animalName: 'Babe (Pig)', farmerId: 'farmer_001', farmerName: 'Juan Dela Cruz', technicianId: 'tech_003', technicianName: 'Mark Dela Cruz', date: '2026-07-10', time: '10:00 AM', status: 'cancelled', description: 'Cancelled - animal recovered', location: 'San Miguel, Bulacan' },
+  { id: 'appt_010', serviceType: 'Health Check', animalId: 'animal_002', animalName: 'Brownie (Chicken)', farmerId: 'farmer_001', farmerName: 'Juan Dela Cruz', technicianId: '', technicianName: 'Unassigned', date: '2026-08-08', time: '09:00 AM', status: 'pending', description: 'Annual health check needed', location: 'San Miguel, Bulacan' },
+  { id: 'appt_011', serviceType: 'Vaccination', animalId: 'animal_006', animalName: 'Daisy (Cow)', farmerId: 'farmer_002', farmerName: 'Maria Garcia', technicianId: '', technicianName: 'Unassigned', date: '2026-08-09', time: '10:00 AM', status: 'pending', description: 'FMD vaccination due', location: 'Angat, Bulacan' },
+  { id: 'appt_012', serviceType: 'Treatment', animalId: 'animal_008', animalName: 'Blackie (Pig)', farmerId: 'farmer_003', farmerName: 'Jose Rivera', technicianId: '', technicianName: 'Unassigned', date: '2026-08-06', time: '02:00 PM', status: 'pending', description: 'Skin rashes observed, needs treatment', location: 'Norzagaray, Bulacan' },
+  { id: 'appt_013', serviceType: 'De-worming', animalId: 'animal_003', animalName: 'Kiko (Goat)', farmerId: 'farmer_001', farmerName: 'Juan Dela Cruz', technicianId: '', technicianName: 'Unassigned', date: '2026-07-28', time: '08:00 AM', status: 'pending', description: 'Routine deworming - matagal na pending', location: 'San Miguel, Bulacan' },
+  { id: 'appt_014', serviceType: 'Health Check', animalId: 'animal_010', animalName: 'Kabayo (Horse)', farmerId: 'farmer_004', farmerName: 'Lorna Santos', technicianId: '', technicianName: 'Unassigned', date: '2026-07-20', time: '03:00 PM', status: 'pending', description: 'Horse limping, needs checkup - unattended request', location: 'San Ildefonso, Bulacan' },
 ];
 
 // ═══════════════════════════════════════════════

@@ -17,7 +17,7 @@ import { Image } from 'expo-image';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
 import { Icon } from '@/components/ui';
 import { signIn, getUser } from '@/services/authService';
-import { saveSession, getRouteForRole } from '@/services/sessionService';
+import { saveSession, getRouteForRole, hasBiometricsBeenAsked } from '@/services/sessionService';
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
@@ -44,19 +44,58 @@ export default function LoginScreen() {
       // Get user role from Firestore to route to correct module
       const profile = await getUser(user.uid);
       console.log('🔐 User profile:', JSON.stringify(profile));
+
+      // ─── Check if user account is pending verification ───
+      if (profile?.status === 'pending') {
+        router.replace('/(auth)/pending-verification');
+        setLoading(false);
+        return;
+      }
+
+      // ─── Check if user account was rejected ───
+      if (profile?.status === 'rejected') {
+        const reason = profile?.rejectionReason || 'Your documents did not meet our verification requirements.';
+        router.replace({ pathname: '/(auth)/rejected', params: { reason } });
+        setLoading(false);
+        return;
+      }
+
+      // ─── Check if user is banned or deactivated ───
+      if (profile?.status === 'deactivated') {
+        Alert.alert(
+          '🚫 Account Deactivated',
+          'Your account has been permanently deactivated due to violation of community guidelines. Contact support for appeal.',
+        );
+        setLoading(false);
+        return;
+      }
+
+      if (profile?.status === 'banned' && profile?.banUntil) {
+        const banUntilDate = profile.banUntil.toDate ? profile.banUntil.toDate() : new Date(profile.banUntil);
+        if (banUntilDate > new Date()) {
+          const formattedDate = banUntilDate.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+          Alert.alert(
+            '⛔ Account Suspended',
+            `Your account is suspended until ${formattedDate} due to violation of community guidelines.`,
+          );
+          setLoading(false);
+          return;
+        }
+        // Ban expired — allow login (optionally reset status)
+      }
+
       const role = profile?.role || 'farmer';
       console.log('🔐 Role detected:', role);
 
-      switch (role) {
-        case 'admin':
-          router.replace('/(admin)/home');
-          break;
-        case 'technician':
-          router.replace('/(technician)/dashboard');
-          break;
-        default:
-          router.replace('/(farmer)/home');
-          break;
+      // Check if biometrics setup has been shown
+      const biometricsAsked = await hasBiometricsBeenAsked();
+      if (!biometricsAsked) {
+        // First time — redirect to biometric setup page
+        router.replace('/(auth)/biometric-setup' as any);
+      } else {
+        // Already asked — go directly to home
+        const route = getRouteForRole(role);
+        router.replace(route as any);
       }
     } catch (error: any) {
       console.error('🔐 Login error:', error.code, error.message);

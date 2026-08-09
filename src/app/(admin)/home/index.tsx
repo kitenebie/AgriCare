@@ -99,6 +99,13 @@ const quickAccess: QuickAccessItem[] = [
     bgColor: "#FFEBEE",
   },
   {
+    icon: "alert",
+    label: "Message\nReports",
+    route: "/(admin)/home/message-reports",
+    color: "#D84315",
+    bgColor: "#FBE9E7",
+  },
+  {
     icon: "star",
     label: "Ratings &\nReviews",
     route: "/(admin)/home/reviews",

@@ -8,7 +8,7 @@
 ├─────────────────────────────────────────────────────┤
 │  Presentation Layer (app/) — Role-Based Routing     │
 │  (auth)  → Role Selection                           │
-│  (admin) → Dashboard|Users|Technicians|Appts|Content│
+│  (admin) → Dashboard|Users|Livestock|Forum|Profile   │
 │  (farmer)→ Home|Map|Services|Messages|Profile       │
 │  (technician)→ Dashboard|Requests|Schedule|Msgs|Prof│
 ├─────────────────────────────────────────────────────┤
@@ -24,6 +24,8 @@
 ├─────────────────────────────────────────────────────┤
 │  Firebase Backend                                    │
 │  Auth | Firestore | RTDB | Storage | FCM            │
+├─────────────────────────────────────────────────────┤
+│  Supabase Storage (profile photos, IDs, proofs)     │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -31,9 +33,16 @@
 ```
 src/
 ├── app/
-│   ├── _layout.tsx        # Root (SafeAreaProvider + Stack)
+│   ├── _layout.tsx        # Root (SafeAreaProvider + Stack + FCM listeners)
+│   ├── firebase.json      # Android notification channel config
 │   ├── index.tsx          # Login/Welcome
-│   ├── (auth)/            # Role selection (dev: manual, prod: auto)
+│   ├── (auth)/            # Auth screens
+│   │   ├── login.tsx
+│   │   ├── register.tsx
+│   │   ├── pending-verification.tsx
+│   │   ├── rejected.tsx
+│   │   ├── biometric-setup.tsx
+│   │   └── capture-id.tsx
 │   ├── (admin)/           # Admin tab navigator (6 tabs)
 │   │   ├── dashboard/
 │   │   ├── users/

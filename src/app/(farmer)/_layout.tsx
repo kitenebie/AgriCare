@@ -1,9 +1,11 @@
 import React from 'react';
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, FontSize } from '@/constants/theme';
 import { Icon, IconName } from '@/components/ui';
+import { LocationTracker } from '@/components/LocationTracker';
+import { BanGuard } from '@/components/BanGuard';
 
 interface TabIconProps {
   iconName: IconName;
@@ -27,10 +29,14 @@ const TabIcon: React.FC<TabIconProps> = ({ iconName, label, focused }) => (
 
 export default function FarmerLayout() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const bottomPadding = Math.max(insets.bottom, Platform.OS === 'ios' ? 20 : 8);
   const tabBarHeight = 56 + bottomPadding;
 
   return (
+    <>
+    <LocationTracker />
+    <BanGuard />
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -45,12 +51,57 @@ export default function FarmerLayout() {
         tabBarShowLabel: false,
       }}
     >
-      <Tabs.Screen name="home" options={{ tabBarIcon: ({ focused }) => <TabIcon iconName="home" label="Home" focused={focused} /> }} />
-      <Tabs.Screen name="map" options={{ tabBarIcon: ({ focused }) => <TabIcon iconName="map" label="Map" focused={focused} /> }} />
-      <Tabs.Screen name="services" options={{ tabBarIcon: ({ focused }) => <TabIcon iconName="pencil" label="Services" focused={focused} /> }} />
-      <Tabs.Screen name="messages" options={{ tabBarIcon: ({ focused }) => <TabIcon iconName="messages" label="Messages" focused={focused} /> }} />
-      <Tabs.Screen name="profile" options={{ tabBarIcon: ({ focused }) => <TabIcon iconName="profile" label="Profile" focused={focused} /> }} />
+      <Tabs.Screen
+        name="home"
+        options={{
+          tabBarIcon: ({ focused }) => <TabIcon iconName="home" label="Home" focused={focused} />,
+        }}
+        listeners={{
+          tabPress: (e) => {
+            // Always navigate to the home index (reset stack)
+            e.preventDefault();
+            router.replace('/(farmer)/home');
+          },
+        }}
+      />
+      <Tabs.Screen
+        name="map"
+        options={{
+          tabBarIcon: ({ focused }) => <TabIcon iconName="map" label="Map" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="services"
+        options={{
+          tabBarIcon: ({ focused }) => <TabIcon iconName="pencil" label="Services" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="messages"
+        options={{
+          tabBarIcon: ({ focused }) => <TabIcon iconName="messages" label="Messages" focused={focused} />,
+        }}
+        listeners={{
+          tabPress: (e) => {
+            e.preventDefault();
+            router.replace('/(farmer)/messages');
+          },
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          tabBarIcon: ({ focused }) => <TabIcon iconName="profile" label="Profile" focused={focused} />,
+        }}
+        listeners={{
+          tabPress: (e) => {
+            e.preventDefault();
+            router.replace('/(farmer)/profile');
+          },
+        }}
+      />
     </Tabs>
+    </>
   );
 }
 

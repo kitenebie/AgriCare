@@ -1,4 +1,4 @@
-# ✅ TASKS.md — AgriCare (Updated: 2026-08-07)
+# ✅ TASKS.md — AgriCare (Updated: 2026-08-09 Eve)
 
 ## Completed
 - [x] Reset Expo template, build hierarchical structure
@@ -14,78 +14,82 @@
 - [x] Firebase integration (Auth, Firestore, RTDB, Storage, FCM)
 - [x] Firebase service layer (6 service files)
 - [x] Mock data seeder with dev button in Profile
-- [x] Services page redesigned to match prototype (green header, icon grid, minimal selects)
+- [x] Services page redesigned to match prototype
 - [x] Replaced old asset images with agri-care-logo.png
-- [x] Created REQUIREMENTS.md — MoSCoW prioritization baseline (Admin/Farmer/Technician modules)
+- [x] Created REQUIREMENTS.md — MoSCoW prioritization baseline
 - [x] Role-based app architecture: (admin), (farmer), (technician) route groups
 - [x] Auth flow with role selection screen
-- [x] Admin module: 6 tabs (Dashboard, Users, Technicians, Appointments, Content, Settings)
-- [x] Farmer module: 5 tabs (placeholder screens, layout ready)
-- [x] Technician module: 5 tabs (placeholder screens, layout ready)
-- [x] Comprehensive seedDatabase.ts — 14 collections covering all REQUIREMENTS.md features
-- [x] Floating seed button (FAB) on Login screen — orange circle, bottom-right
-- [x] seedAll() now: deletes all existing data → creates Firebase Auth accounts → seeds Firestore/RTDB
-- [x] Migrated all Firebase services from deprecated namespaced API to modular API (v22-ready)
-- [x] Login & Registration pages connected to Firebase Auth (role-based routing after login)
-- [x] Moved all (tabs) pages to (farmer) directory, removed (tabs) entirely
-- [x] Admin Home redesigned to GCash-style layout (green header with stats, 4-col icon grid, activity feed, banner)
-- [x] Auto-login via AsyncStorage — saves session after login/register, auto-redirects on app open
-- [x] Created GANTT.md + interactive Highcharts Gantt chart for all 42 tasks across 3 modules
-- [x] Admin Home v2 — matched prototype: green header with leaf decor, individual stat cards (colored bg), circular colored icons on green card, activity feed, system status bar
-- [x] Admin Livestock Categories — full CRUD UI: list with type badges/breed counts, add/edit modal form (name, type selector, breeds), delete with confirmation
-- [x] Livestock Categories now reads/writes from Firebase Firestore (real-time listener, add, edit, delete — no mock data)
-- [x] Forum page: real-time Firestore data (no mock fallback), edit/delete for own replies (or admin), inline edit UI with save/cancel
-- [x] Admin Appointments page: view-only with Firestore real-time data, search, status filters, stats summary, detail modal (no mock fallback)
-- [x] Livestock preview form page — modal screen with live preview card, form (name, type radio, breeds, description), saves to Firestore
-- [x] Livestock list items now navigate to preview page on tap — shows editable form with live preview, supports edit + delete from preview screen
-- [x] Activity Logs page (`(admin)/home/logs.tsx`) — view logs from Firestore `logs` collection, search, filter by type (Auth/CRUD/System/Error), relative timestamps
-- [x] Activity logging on ALL pages with save/update/delete: livestock (x2), announcements, knowledge-base, reports, users, forum, auth (24 total log calls across 9 files)
-- [x] Restructured DB: users/ + admin/ + farmer/ + technician/ with userId FK linking
-- [x] Admin restructured: 4 tabs (Home, Forum, Livestock, Profile) + 8 quick-access pages from Home
-- [x] .npmrc for legacy-peer-deps
-- [x] Login & Registration pages connected to Firebase Auth (email/password sign-in, role-based redirect)
+- [x] Admin module: Dashboard, Users, Forum, Livestock, Appointments, Logs
+- [x] Farmer module: 5 tabs (Home, Map, Services, Messages, Profile)
+- [x] Technician module: 4 tabs (Home, Map, Chats, Profile) + hidden tabs
+- [x] Comprehensive seedDatabase.ts — 14 collections
+- [x] Floating seed button (FAB) on Login screen
+- [x] Migrated all Firebase to modular API (v22-ready)
+- [x] Login & Registration pages connected to Firebase Auth
 - [x] Auto-login via AsyncStorage session persistence
-- [x] Database restructured to role-based collections (users/ + admin/ + farmer/ + technician/ with userId FK)
+- [x] Database restructured: users/ + admin/ + farmer/ + technician/ with userId FK
+- [x] Admin Home redesigned (GCash-style, stats, icon grid, activity feed)
+- [x] Livestock Categories — full CRUD + Firestore
+- [x] Forum — real-time Firestore, edit/delete replies
+- [x] Activity Logs page with 24 log calls across 9 files
+- [x] Technician Dashboard — real-time stats, availability toggle, Quick Access
+- [x] Technician Appointments (Available Requests) — accept/decline with auto-chat + notification
+- [x] Technician Schedule — calendar design with colored dots, grouped list
+- [x] Technician Map — farmer client locations, OpenRouteService routing
+- [x] Technician Messages — chat list + notifications tab
+- [x] Technician Profile — rating, reviews, verification badge
+- [x] Chat System (1-on-1 Messenger-style) — shared ChatScreen component
+- [x] Appointment Service — auto chat room + message + notification on accept
+- [x] Real-Time Location Tracking — expo-location + Firebase RTDB
+- [x] Avatar component — person/animal type support, pravatar.cc fallback
+- [x] Farmer Messages page — RTDB chats + Firestore notifications
+- [x] Farmer Health Records page — view records from technician visits
+- [x] Health Records Form (technician) — full rewrite, clean file
+- [x] **Health Records → Chat Summary + FCM notifications** (both farmer & technician notified)
+- [x] **Rating System** — technician sends rate request, farmer rates with 5 clickable stars
+- [x] **Rating includes animal info** — animal image + name shown in rating card
+- [x] **Rate request requires appointment** — technician can only rate farmers they have appointments with
+- [x] **Calendar Integration** — device calendar event created on appointment accept (1hr + 1day reminders)
+- [x] **Calendar event auto-deleted** on appointment decline/cancel
+- [x] **Report System** — report icon on each received chat message
+- [x] **Admin Message Reports page** — resolve, dismiss, or ban user
+- [x] **Ban System** — 1 day to permanent deactivation, real-time BanGuard component
+- [x] **BanGuard** — kicks banned users mid-session (real-time Firestore listener)
+- [x] **Login blocks** banned, deactivated, pending, and rejected accounts
+- [x] **Registration → Admin Approval flow** — profile photo (camera only) + ID required
+- [x] **Pending Verification screen** — step progress UI after registration
+- [x] **Admin User Management** — approve/reject pending accounts with FCM notifications
+- [x] **Tab Navigation Fix** — tapping tab icon always resets to main page
+- [x] **Specialization Filtering** — Available Requests filtered by technician expertise
+- [x] **FCM Push Service** — pushService.ts queues notifications for Cloud Function
+- [x] **Padded files cleanup** — removed blank-line padding crashing Hermes/Android
+- [x] **Face Detection WebView** — Profile photo capture via `earms.online/face-detection` WebView (replaces native camera)
+- [x] **Supabase Storage Buckets** — Correct bucket routing: `farmer_profile_photo`, `technician_profile_photo`, `farmers_proof`, `technician_proof`
+- [x] **Immediate Upload on Capture** — Photos upload to Supabase as soon as captured, not on form submit
+- [x] **Base64 Data URI Support** — `uploadImageToSupabase` handles `data:image/...;base64,...` from WebView
+- [x] **Rejected Account Page** — Dedicated page with reasons, steps, re-register button
+- [x] **Re-Registration Flow** — Pre-fills user data, locks role toggle, back → rejected page
+- [x] **Biometric Setup Page** — First-login prompt to enable fingerprint/face unlock
+- [x] **Biometric Auto-Login Gate** — Welcome page requires biometric before redirecting to home
+- [x] **Admin User Detail Drawer** — Bottom sheet showing full user info + documents on card tap
+- [x] **Admin Reject Reason Modal** — 20 checkbox reasons + textarea, formatted notification to user
 
 ## Pending
+- [ ] **Farmer Knowledge Base reader page** — Admin has knowledge-base.tsx with CRUD, farmer has NO reader/viewer UI (need new file: farmer/home/knowledge-base.tsx)
+- [ ] **Farmer Community Forum page** — Admin has forum management, farmer has NO participation page (need new file: farmer/home/forum.tsx with read + post permissions)
+- [ ] **Technician Knowledge Sharing page** — No technician-facing knowledge publishing/reading UI (need new file: technician/home/knowledge-base.tsx)
+- [ ] **Technician Community Forum page** — No technician forum participation UI (need new file: technician/home/forum.tsx)
+- [ ] **OpenRouteService API key setup** — Code exists in (technician)/map/index.tsx line 45, user needs free account at openrouteservice.org + add key to env
+- [ ] **Final testing & polish** — Full integration testing, bug fixes, performance optimization before Aug 23 MVP deadline
 
-### Admin Module
-- [ ] Wire Dashboard stats to live Firestore data
-- [ ] User Management CRUD (list, edit status, delete users)
-- [ ] Technician Verification flow (approve/reject from admin panel)
-- [ ] Knowledge Base CRUD (admin)
-- [ ] Community Forum Moderation tools
-- [ ] Reports & Complaints handling
-- [ ] Ratings/Reviews Management
-- [ ] Announcements Management
-- [ ] Analytics Dashboard (SHOULD HAVE — post-MVP if no time)
-
-### Shared/Infrastructure
-- [ ] Real-time chat UI connected to chatService
-- [ ] Image picker + upload to Storage
-- [ ] FCM token registration on app start
-- [ ] Pull-to-refresh, loading skeletons
-
-### Farmer Module
-- [ ] Livestock Profile Management (CRUD)
-- [ ] Technician Profile detail page
-- [ ] Appointment Booking (connected to Firestore)
-- [ ] Appointment History view
-- [ ] Emergency Assistance Request
-- [ ] Knowledge Base reader
-- [ ] Community Forum
-- [ ] Rate & Review Technician
-- [ ] Notification System (wired to UI)
-
-### Technician Module
-- [ ] Profile Management
-- [ ] Availability Toggle
-- [ ] Receive Appointment Requests
-- [ ] Accept/Reject Appointment
-- [ ] Consultation Chat
-- [ ] View Farmer Information
-- [ ] Appointment Schedule
-- [ ] Respond to Emergency Requests
-- [ ] Knowledge Sharing
-- [ ] Community Forum Participation
-- [ ] View Ratings & Reviews
+## Completed (Post-Audit Aug 9 Eve)
+- [x] **Supabase Edge Function for FCM Push** — supabase/functions/send-push/index.ts deployed with Firebase JWT + FCM v1 API
+- [x] **Single FCM Token per User** — Changed fcmTokens[] → fcmToken string, every login deletes old + generates fresh
+- [x] **FCM Background & Foreground Handlers** — _layout.tsx has messaging().setBackgroundMessageHandler() + onMessage(), notifications appear in notification bar ✅
+- [x] **firebase.json Android Channel Config** — Proper notification setup
+- [x] **pushService.ts → Supabase Edge Function** — Direct supabase.functions.invoke('send-push') instead of Firestore pushQueue
+- [x] **Cloud Function Replaced** — Now done via Supabase Edge Function (NOT Firebase Cloud Function)
+- [x] **Farmer Livestock CRUD verified** — my-animals.tsx has 9 Firestore calls + Modal (was pending, now verified ✅)
+- [x] **Farmer Appointment Booking verified** — services/index.tsx full flow to Firestore APPOINTMENTS (was pending, verified ✅)
+- [x] **Farmer Emergency Request verified** — custom-service.tsx saves to customServices (was pending, verified ✅)
+- [x] **Admin Dashboard Live Stats verified** — home/index.tsx has 4 onSnapshot listeners (was pending, verified ✅)

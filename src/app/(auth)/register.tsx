@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,8 +12,9 @@ import {
   Platform,
   Image,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import WebView from 'react-native-webview';
 import { Colors, Spacing, FontSize, BorderRadius } from '@/constants/theme';
 import { Icon } from '@/components/ui';
 import { signUp } from '@/services/authService';
@@ -21,6 +22,9 @@ import { uploadImageToSupabase } from '@/services/storage';
 import * as ImagePicker from 'expo-image-picker';
 
 type Role = 'farmer' | 'technician';
+
+// Generate a random session ID for face detection
+const generateSessionId = () => `agricare_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
 
 const EXPERTISE_OPTIONS = [
   { id: 'cow_treatment', label: 'Cow Healthcare & Treatment 🐄', category: 'cow' },
@@ -31,15 +35,28 @@ const EXPERTISE_OPTIONS = [
 
 export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
-  const [displayName, setDisplayName] = useState('');
-  const [email, setEmail] = useState('');
+  const params = useLocalSearchParams<{
+    displayName?: string;
+    email?: string;
+    phoneNumber?: string;
+    location?: string;
+    role?: string;
+    fromRejected?: string;
+  }>();
+  const isFromRejected = params.fromRejected === 'true';
+
+  const [displayName, setDisplayName] = useState(params.displayName || '');
+  const [email, setEmail] = useState(params.email || '');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [location, setLocation] = useState('');
-  const [role, setRole] = useState<Role>('farmer');
+  const [phoneNumber, setPhoneNumber] = useState(params.phoneNumber || '');
+  const [location, setLocation] = useState(params.location || '');
+  const [role, setRole] = useState<Role>((params.role as Role) || 'farmer');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Profile Photo (required for both farmer and technician)
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState('');
 
   // Technician Specific States
   const [selectedExpertise, setSelectedExpertise] = useState<string[]>([
@@ -48,6 +65,163 @@ export default function RegisterScreen() {
   const [proofImageUrl, setProofImageUrl] = useState('');
   const [uploadingProof, setUploadingProof] = useState(false);
   const [idImageUrl, setIdImageUrl] = useState('');
+
+  // Face Detection WebView state
+  const [cameraVisible, setCameraVisible] = useState(false);
+  const [sessionId] = useState(generateSessionId);
+  const webviewRef = useRef<WebView>(null);
+
+  const faceDetectionUrl = `https://earms.online/face-detection/${sessionId}`;
+
+  const openFaceDetection = useCallback(() => {
+    setCameraVisible(true);
+  }, []);
+
+  // Injected JS to intercept captured face image from the web page
+  const injectedJavaScript = `
+    (function() {
+      if (window.__rnFaceCaptureInjected) return true;
+      window.__rnFaceCaptureInjected = true;
+
+      const RN = window.ReactNativeWebView;
+      let sent = false;
+
+      function postMessage(payload) {
+        if (!RN) return;
+        RN.postMessage(JSON.stringify(payload));
+      }
+
+      function normalizeImageString(value) {
+        if (!value || typeof value !== 'string') return null;
+        const trimmed = value.trim();
+        if (!trimmed) return null;
+        if (trimmed.startsWith('data:image')) return trimmed;
+        if (trimmed.startsWith('http') || trimmed.startsWith('file:')) return trimmed;
+        const looksBase64 = /^[A-Za-z0-9+\\/]+={0,2}$/.test(trimmed);
+        if (looksBase64 && trimmed.length > 200) {
+          return 'data:image/jpeg;base64,' + trimmed;
+        }
+        return null;
+      }
+
+      function extractImage(value) {
+        if (!value) return null;
+        if (typeof value === 'string') return normalizeImageString(value);
+        if (typeof value === 'object') {
+          return (
+            normalizeImageString(value.img) ||
+            normalizeImageString(value.image) ||
+            normalizeImageString(value.previewImage) ||
+            normalizeImageString(value.base64PreviewImage) ||
+            normalizeImageString(value.base64) ||
+            normalizeImageString(value.data) ||
+            null
+          );
+        }
+        return null;
+      }
+
+      function closeCamera() {
+        postMessage({ type: 'close-camera' });
+      }
+
+      function sendPhotoOnce(raw) {
+        if (sent) return;
+        const imageData = extractImage(raw);
+        if (!imageData) return;
+        sent = true;
+        postMessage({ type: 'photo-captured', photoUri: imageData });
+        setTimeout(closeCamera, 150);
+      }
+
+      window.__faceCaptureSuccess = function(payload, base64PreviewImage) {
+        sendPhotoOnce(base64PreviewImage || payload);
+      };
+
+      const originalLog = console.log;
+      console.log = function() {
+        try {
+          const args = Array.prototype.slice.call(arguments);
+          for (let i = 0; i < args.length; i += 1) {
+            const imageData = extractImage(args[i]);
+            if (imageData) {
+              const firstArg = args[0];
+              const captureLog = typeof firstArg === 'string' && firstArg.toLowerCase().indexOf('capture') !== -1;
+              if (captureLog || (args[i] && args[i].img)) {
+                sendPhotoOnce(imageData);
+                break;
+              }
+            }
+          }
+        } catch (err) {}
+        return originalLog.apply(console, arguments);
+      };
+
+      function scanForImage() {
+        if (sent || !document) return;
+        var images = document.querySelectorAll('img');
+        for (var i = 0; i < images.length; i++) {
+          var src = images[i].src || '';
+          if (src.indexOf('data:image') === 0) { sendPhotoOnce(src); return; }
+        }
+        var canvas = document.querySelector('canvas');
+        if (canvas && canvas.toDataURL) {
+          try {
+            var dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+            if (dataUrl && dataUrl.indexOf('data:image') === 0) sendPhotoOnce(dataUrl);
+          } catch (err) {}
+        }
+      }
+
+      function startObservers() {
+        scanForImage();
+        if (typeof MutationObserver === 'function') {
+          var observer = new MutationObserver(function() { scanForImage(); });
+          var target = document.documentElement || document.body;
+          if (target) observer.observe(target, { childList: true, subtree: true, attributes: true });
+        }
+        var intervalId = setInterval(function() {
+          if (sent) { clearInterval(intervalId); return; }
+          scanForImage();
+        }, 500);
+        setTimeout(function() { clearInterval(intervalId); }, 30000);
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startObservers);
+      } else {
+        startObservers();
+      }
+      return true;
+    })();
+  `;
+
+  const handleWebViewMessage = useCallback((event: any) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === 'photo-captured' && data.photoUri) {
+        // Immediately upload to Supabase
+        const bucket = role === 'technician' ? 'technician_profile_photo' : 'farmer_profile_photo';
+        setProfilePhotoUrl(data.photoUri); // Show preview right away
+        setCameraVisible(false);
+
+        uploadImageToSupabase(data.photoUri, bucket)
+          .then((result) => {
+            if (result.success && result.publicUrl) {
+              setProfilePhotoUrl(result.publicUrl); // Replace with public URL
+              console.log('[Register] Profile photo uploaded:', result.publicUrl);
+            } else {
+              console.warn('[Register] Upload failed, keeping local URI:', result.error);
+            }
+          })
+          .catch((err) => console.warn('[Register] Upload error:', err));
+      } else if (data.type === 'close-camera') {
+        setCameraVisible(false);
+      }
+    } catch (error) {
+      console.warn('[Register] Error parsing webview message:', error);
+    }
+  }, [role]);
 
   // Toggle Multiple Expertise Selection
   const toggleExpertise = (label: string) => {
@@ -76,7 +250,8 @@ export default function RegisterScreen() {
         setUploadingProof(true);
 
         try {
-          const result = await uploadImageToSupabase(localUri, "animals");
+          const bucket = role === 'technician' ? 'technician_proof' : 'farmers_proof';
+          const result = await uploadImageToSupabase(localUri, bucket);
           if (result.success && result.publicUrl) {
             setProofImageUrl(result.publicUrl);
           } else {
@@ -110,6 +285,10 @@ export default function RegisterScreen() {
       Alert.alert('Error', 'Password must be at least 6 characters.');
       return;
     }
+    if (!profilePhotoUrl) {
+      Alert.alert('Error', 'Please take or upload a profile photo.');
+      return;
+    }
 
     // Technician Specific Validation
     if (role === 'technician') {
@@ -126,15 +305,28 @@ export default function RegisterScreen() {
       }
     }
 
+    // Farmer requires ID photo
+    if (role === 'farmer' && !idImageUrl) {
+      Alert.alert('Error', 'Please capture or upload your valid ID for verification.');
+      return;
+    }
+
     setLoading(true);
     try {
       // Upload farmer ID if provided
       let uploadedIdUrl = '';
       if (role === 'farmer' && idImageUrl) {
-        const idResult = await uploadImageToSupabase(idImageUrl, 'animals');
+        const idResult = await uploadImageToSupabase(idImageUrl, 'farmers_proof');
         if (idResult.success && idResult.publicUrl) {
           uploadedIdUrl = idResult.publicUrl;
         }
+      }
+
+      // Upload profile photo
+      let uploadedProfileUrl = '';
+      if (profilePhotoUrl) {
+        // Already uploaded immediately on capture — profilePhotoUrl is the public URL
+        uploadedProfileUrl = profilePhotoUrl;
       }
 
       await signUp(
@@ -148,28 +340,24 @@ export default function RegisterScreen() {
               proofImageUrl: proofImageUrl.trim(),
               phoneNumber: phoneNumber.trim(),
               location: location.trim(),
+              photoURL: uploadedProfileUrl,
             }
           : {
               phoneNumber: phoneNumber.trim(),
               location: location.trim(),
               idImageUrl: uploadedIdUrl,
+              photoURL: uploadedProfileUrl,
             }
       );
 
       Alert.alert(
-        'Account Created!',
-        role === 'technician'
-          ? 'Your technician registration and proof documents have been submitted. An admin will verify your account shortly.'
-          : 'Your farmer account has been created. Welcome to AgriCare!',
+        '✅ Registration Submitted!',
+        'Your account is pending verification by an admin. You will be notified once your account is approved.',
         [
           {
             text: 'Continue',
             onPress: () => {
-              if (role === 'farmer') {
-                router.replace('/(farmer)/home');
-              } else {
-                router.replace('/(technician)/dashboard');
-              }
+              router.replace('/(auth)/pending-verification');
             },
           },
         ]
@@ -189,6 +377,33 @@ export default function RegisterScreen() {
     }
   };
 
+  // ─── Full-screen Face Detection WebView ───
+  if (cameraVisible) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
+        <WebView
+          ref={webviewRef}
+          style={StyleSheet.absoluteFillObject}
+          source={{ uri: faceDetectionUrl }}
+          onMessage={handleWebViewMessage}
+          javaScriptEnabled={true}
+          injectedJavaScriptBeforeContentLoaded={injectedJavaScript}
+          injectedJavaScript={injectedJavaScript}
+          startInLoadingState={true}
+          originWhitelist={['*']}
+          allowsInlineMediaPlayback={true}
+          mediaPlaybackRequiresUserAction={false}
+        />
+        <TouchableOpacity
+          style={{ position: 'absolute', top: insets.top + 12, left: 16, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}
+          onPress={() => setCameraVisible(false)}
+        >
+          <Icon name="close" size={22} color={Colors.white} />
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -204,10 +419,16 @@ export default function RegisterScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => {
+            if (isFromRejected) {
+              router.replace('/(auth)/rejected' as any);
+            } else {
+              router.back();
+            }
+          }} style={styles.backButton}>
             <Icon name="chevron-right" size={22} color={Colors.text} strokeWidth={2.5} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Create Account</Text>
+          <Text style={styles.headerTitle}>{isFromRejected ? 'Re-Register' : 'Create Account'}</Text>
           <View style={{ width: 36 }} />
         </View>
 
@@ -215,17 +436,19 @@ export default function RegisterScreen() {
         <Text style={styles.sectionLabel}>I am registering as a:</Text>
         <View style={styles.roleSelector}>
           <TouchableOpacity
-            style={[styles.roleOption, role === 'farmer' && styles.roleOptionActive]}
-            onPress={() => setRole('farmer')}
-            activeOpacity={0.8}
+            style={[styles.roleOption, role === 'farmer' && styles.roleOptionActive, isFromRejected && role !== 'farmer' && { opacity: 0.4 }]}
+            onPress={() => { if (!isFromRejected) setRole('farmer'); }}
+            activeOpacity={isFromRejected ? 1 : 0.8}
+            disabled={isFromRejected}
           >
             <Icon name="paw" size={24} color={role === 'farmer' ? Colors.white : Colors.primary} />
             <Text style={[styles.roleText, role === 'farmer' && styles.roleTextActive]}>Farmer</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.roleOption, role === 'technician' && styles.roleOptionActive]}
-            onPress={() => setRole('technician')}
-            activeOpacity={0.8}
+            style={[styles.roleOption, role === 'technician' && styles.roleOptionActive, isFromRejected && role !== 'technician' && { opacity: 0.4 }]}
+            onPress={() => { if (!isFromRejected) setRole('technician'); }}
+            activeOpacity={isFromRejected ? 1 : 0.8}
+            disabled={isFromRejected}
           >
             <Icon name="health-check" size={24} color={role === 'technician' ? Colors.white : Colors.primary} />
             <Text style={[styles.roleText, role === 'technician' && styles.roleTextActive]}>Technician</Text>
@@ -320,6 +543,32 @@ export default function RegisterScreen() {
               onChangeText={setConfirmPassword}
               secureTextEntry={!showPassword}
             />
+          </View>
+
+          {/* ─── PROFILE PHOTO (Required for both roles) ─── */}
+          <View style={styles.technicianSection}>
+            <View style={styles.techSectionHeader}>
+              <Icon name="camera" size={20} color="#15803D" />
+              <Text style={styles.techSectionTitle}>Profile Photo *</Text>
+            </View>
+            <Text style={{ fontSize: 13, color: Colors.textSecondary, marginBottom: 12, lineHeight: 18 }}>
+              Take a clear selfie of yourself. This will be your profile picture.
+            </Text>
+            {profilePhotoUrl ? (
+              <View style={{ alignItems: 'center', marginBottom: 12 }}>
+                <Image source={{ uri: profilePhotoUrl }} style={{ width: 120, height: 120, borderRadius: 60, borderWidth: 3, borderColor: Colors.primary }} resizeMode="cover" />
+                <TouchableOpacity style={{ marginTop: 8 }} onPress={() => setProfilePhotoUrl('')}>
+                  <Text style={{ color: Colors.error, fontWeight: '600', fontSize: 13 }}>Retake Photo</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+            <TouchableOpacity
+              style={[styles.uploadProofBtn, { marginBottom: 8 }]}
+              onPress={openFaceDetection}
+            >
+              <Icon name="camera" size={18} color="#15803D" />
+              <Text style={styles.uploadProofBtnText}>{profilePhotoUrl ? 'Retake Photo' : 'Take Photo'}</Text>
+            </TouchableOpacity>
           </View>
 
           {/* ─── FARMER ID CAPTURE ─── */}

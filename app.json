@@ -18,7 +18,12 @@
       "package": "com.kennethgimpao22.AgriCare",
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "ACCESS_COARSE_LOCATION",
+        "READ_CALENDAR",
+        "WRITE_CALENDAR",
+        "CAMERA",
+        "android.permission.READ_CALENDAR",
+        "android.permission.WRITE_CALENDAR"
       ],
       "googleServicesFile": "./google-services.json"
     },
@@ -27,6 +32,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-calendar",
       "@react-native-firebase/app",
       "@react-native-firebase/auth",
       "@react-native-firebase/messaging",
@@ -42,6 +48,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "7204ce71-156b-429a-939e-e605fed76690"
+      }
     }
   }
 }

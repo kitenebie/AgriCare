@@ -1,57 +1,90 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import Animated from 'react-native-reanimated';
 import firestore from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
-import { Image } from 'expo-image';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
-import { Icon } from '@/components/ui';
-import { Collections } from '@/services/firebase';
+import { Icon, Avatar } from '@/components/ui';
+import { useFadeInUp, useFadeIn } from '@/hooks/useAnimatedEntry';
 import { getSession } from '@/services/sessionService';
 
-interface Animal { id: string; name: string; breed: string; type: string; imageUrl?: string; healthStatus: string; lastCheckup?: string; vaccinationUpToDate?: boolean; }
-interface Appointment { id: string; serviceType: string; animalName: string; animalId: string; date: string; status: string; technicianName: string; description?: string; }
+interface HealthRecord {
+  id: string;
+  animalId: string;
+  animalName: string;
+  recordType: string;
+  diagnosis: string;
+  symptoms: string[];
+  treatment: string;
+  medication: string;
+  dosage: string;
+  weight: number | null;
+  temperature: number | null;
+  technicianName: string;
+  status: string;
+  notes: string;
+  date: any;
+  nextFollowUp: any;
+  requiresFollowUp: boolean;
+  vaccineType?: string;
+  createdAt: any;
+}
 
-export default function HealthRecordsPage() {
-  const [animals, setAnimals] = useState<Animal[]>([]);
-  const [records, setRecords] = useState<Appointment[]>([]);
+const TYPE_CONFIG: Record<string, { color: string; bg: string; icon: string }> = {
+  checkup: { color: '#2196F3', bg: '#E3F2FD', icon: 'health-check' },
+  vaccination: { color: '#4CAF50', bg: '#E8F5E9', icon: 'vaccination' },
+  treatment: { color: '#FF9800', bg: '#FFF3E0', icon: 'treatment' },
+  surgery: { color: '#9C27B0', bg: '#F3E5F5', icon: 'treatment' },
+  deworming: { color: '#795548', bg: '#EFEBE9', icon: 'bug' },
+  lab_test: { color: '#607D8B', bg: '#ECEFF1', icon: 'clipboard' },
+  emergency: { color: '#F44336', bg: '#FFEBEE', icon: 'alert' },
+  follow_up: { color: '#009688', bg: '#E0F2F1', icon: 'calendar' },
+};
+
+const STATUS_COLORS: Record<string, { color: string; bg: string }> = {
+  resolved: { color: '#4CAF50', bg: '#E8F5E9' },
+  ongoing: { color: '#FF9800', bg: '#FFF3E0' },
+  monitoring: { color: '#2196F3', bg: '#E3F2FD' },
+};
+
+export default function FarmerHealthRecordsPage() {
+  const [records, setRecords] = useState<HealthRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedAnimal, setSelectedAnimal] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const headerAnim = useFadeIn(100);
+  const contentAnim = useFadeInUp(200);
 
   useEffect(() => {
+    let unsub: () => void = () => {};
     const load = async () => {
       const session = await getSession();
       if (!session) { setLoading(false); return; }
 
-      // Load animals
-      const animalSnap = await firestore().collection('animals').where('ownerId', '==', session.uid).get();
-      const animalData = animalSnap.docs.map(d => ({ id: d.id, ...d.data() } as Animal));
-      setAnimals(animalData);
-
-      // Load completed appointments as health records
-      const recSnap = await firestore().collection(Collections.APPOINTMENTS)
+      // Listen to health records for this farmer's animals
+      unsub = firestore()
+        .collection('healthRecords')
         .where('farmerId', '==', session.uid)
-        .where('status', '==', 'completed')
-        .get();
-      const recData = recSnap.docs.map(d => ({ id: d.id, ...d.data() } as Appointment));
-      recData.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-      setRecords(recData);
-
-      setLoading(false);
+        .orderBy('createdAt', 'desc')
+        .onSnapshot(
+          (snap) => {
+            setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() } as HealthRecord)));
+            setLoading(false);
+          },
+          (err) => {
+            console.warn('Health records error:', err);
+            setLoading(false);
+          }
+        );
     };
     load();
+    return () => unsub();
   }, []);
 
-  const filteredRecords = selectedAnimal
-    ? records.filter(r => r.animalId === selectedAnimal)
-    : records;
-
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return '';
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+  const formatDate = (ts: any) => {
+    if (!ts) return '';
+    const date = ts.toDate ? ts.toDate() : new Date(ts);
+    return date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
   };
-
-  const getHealthColor = (status: string) => status === 'healthy' ? '#10B981' : status === 'sick' ? '#EF4444' : '#F59E0B';
 
   if (loading) return <View style={s.center}><ActivityIndicator size="large" color={Colors.primary} /></View>;
 
@@ -66,69 +99,141 @@ export default function HealthRecordsPage() {
         <View style={{ width: 36 }} />
       </View>
 
-      {/* Animal Filter */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterScroll} contentContainerStyle={s.filterContent}>
-        <TouchableOpacity style={[s.filterChip, !selectedAnimal && s.filterChipActive]} onPress={() => setSelectedAnimal(null)}>
-          <Text style={[s.filterText, !selectedAnimal && s.filterTextActive]}>All</Text>
-        </TouchableOpacity>
-        {animals.map(a => (
-          <TouchableOpacity key={a.id} style={[s.filterChip, selectedAnimal === a.id && s.filterChipActive]} onPress={() => setSelectedAnimal(a.id)}>
-            <Text style={[s.filterText, selectedAnimal === a.id && s.filterTextActive]}>{a.name}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      <ScrollView style={s.list} showsVerticalScrollIndicator={false}>
-        {/* Animal Health Summary */}
-        <Text style={s.sectionTitle}>Animal Health Status</Text>
-        {animals.length === 0 && <Text style={s.emptyText}>No animals registered</Text>}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingBottom: 8 }}>
-          {animals.map(a => (
-            <View key={a.id} style={s.animalCard}>
-              {a.imageUrl ? (
-                <Image source={{ uri: a.imageUrl }} style={s.animalImg} contentFit="cover" />
-              ) : (
-                <View style={[s.animalImg, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#F1F5F9' }]}><Icon name="paw" size={20} color={Colors.textLight} /></View>
-              )}
-              <Text style={s.animalName} numberOfLines={1}>{a.name}</Text>
-              <View style={[s.healthDot, { backgroundColor: getHealthColor(a.healthStatus) }]} />
-              <Text style={[s.healthLabel, { color: getHealthColor(a.healthStatus) }]}>{a.healthStatus}</Text>
-              <View style={s.animalMeta}>
-                {a.vaccinationUpToDate ? (
-                  <View style={s.vaccBadge}><Icon name="check" size={10} color="#10B981" /><Text style={s.vaccText}>Vaccinated</Text></View>
-                ) : (
-                  <View style={[s.vaccBadge, { backgroundColor: '#FEF3C7' }]}><Icon name="alert" size={10} color="#F59E0B" /><Text style={[s.vaccText, { color: '#D97706' }]}>Due</Text></View>
-                )}
-              </View>
-              {a.lastCheckup ? <Text style={s.lastCheckup}>Last: {formatDate(a.lastCheckup)}</Text> : null}
-            </View>
-          ))}
-        </ScrollView>
-
-        {/* Service History */}
-        <Text style={[s.sectionTitle, { marginTop: Spacing.xl }]}>Service History</Text>
-        {filteredRecords.length === 0 && (
+      {/* Content */}
+      <ScrollView showsVerticalScrollIndicator={false} style={s.content}>
+        {records.length === 0 ? (
           <View style={s.empty}>
-            <Icon name="clipboard" size={40} color={Colors.textLight} />
-            <Text style={s.emptyText}>No completed services yet</Text>
-            <Text style={s.emptySubtext}>Completed appointments will show here as health records</Text>
+            <Icon name="clipboard" size={56} color={Colors.textLight} />
+            <Text style={s.emptyText}>No health records yet</Text>
+            <Text style={s.emptySubtext}>Health records from technician visits{'\n'}will appear here</Text>
           </View>
+        ) : (
+          <>
+            <Text style={s.count}>{records.length} record{records.length !== 1 ? 's' : ''}</Text>
+            {records.map((record) => {
+              const typeConfig = TYPE_CONFIG[record.recordType] || TYPE_CONFIG.checkup;
+              const statusConfig = STATUS_COLORS[record.status] || STATUS_COLORS.monitoring;
+              const isExpanded = expandedId === record.id;
+
+              return (
+                <TouchableOpacity
+                  key={record.id}
+                  style={s.card}
+                  activeOpacity={0.8}
+                  onPress={() => setExpandedId(isExpanded ? null : record.id)}
+                >
+                  {/* Card Header */}
+                  <View style={s.cardHeader}>
+                    <View style={[s.typeIcon, { backgroundColor: typeConfig.bg }]}>
+                      <Icon name={typeConfig.icon as any} size={20} color={typeConfig.color} />
+                    </View>
+                    <View style={s.cardHeaderInfo}>
+                      <Text style={s.cardAnimal}>{record.animalName}</Text>
+                      <Text style={s.cardType}>{record.recordType.replace('_', ' ')}</Text>
+                    </View>
+                    <View style={[s.statusBadge, { backgroundColor: statusConfig.bg }]}>
+                      <Text style={[s.statusText, { color: statusConfig.color }]}>{record.status}</Text>
+                    </View>
+                  </View>
+
+                  {/* Diagnosis */}
+                  {record.diagnosis ? <Text style={s.diagnosis}>{record.diagnosis}</Text> : null}
+
+                  {/* Date & Technician */}
+                  <View style={s.metaRow}>
+                    <View style={s.metaItem}>
+                      <Icon name="calendar" size={12} color={Colors.textSecondary} />
+                      <Text style={s.metaText}>{formatDate(record.date)}</Text>
+                    </View>
+                    <View style={s.metaItem}>
+                      <Icon name="profile" size={12} color={Colors.textSecondary} />
+                      <Text style={s.metaText}>{record.technicianName}</Text>
+                    </View>
+                  </View>
+
+                  {/* Expanded Details */}
+                  {isExpanded && (
+                    <View style={s.details}>
+                      {/* Symptoms */}
+                      {record.symptoms && record.symptoms.length > 0 && (
+                        <View style={s.detailSection}>
+                          <Text style={s.detailLabel}>Symptoms</Text>
+                          <View style={s.chipRow}>
+                            {record.symptoms.map((sym, i) => (
+                              <View key={i} style={s.chip}><Text style={s.chipText}>{sym}</Text></View>
+                            ))}
+                          </View>
+                        </View>
+                      )}
+
+                      {/* Treatment */}
+                      {record.treatment ? (
+                        <View style={s.detailSection}>
+                          <Text style={s.detailLabel}>Treatment</Text>
+                          <Text style={s.detailValue}>{record.treatment}</Text>
+                        </View>
+                      ) : null}
+
+                      {/* Medication & Dosage */}
+                      {record.medication ? (
+                        <View style={s.detailSection}>
+                          <Text style={s.detailLabel}>Medication</Text>
+                          <Text style={s.detailValue}>{record.medication}{record.dosage ? ` — ${record.dosage}` : ''}</Text>
+                        </View>
+                      ) : null}
+
+                      {/* Vaccine Type */}
+                      {record.vaccineType ? (
+                        <View style={s.detailSection}>
+                          <Text style={s.detailLabel}>Vaccine</Text>
+                          <Text style={s.detailValue}>{record.vaccineType}</Text>
+                        </View>
+                      ) : null}
+
+                      {/* Weight & Temperature */}
+                      <View style={s.vitalRow}>
+                        {record.weight ? (
+                          <View style={s.vitalItem}>
+                            <Text style={s.vitalLabel}>Weight</Text>
+                            <Text style={s.vitalValue}>{record.weight} kg</Text>
+                          </View>
+                        ) : null}
+                        {record.temperature ? (
+                          <View style={s.vitalItem}>
+                            <Text style={s.vitalLabel}>Temperature</Text>
+                            <Text style={s.vitalValue}>{record.temperature}°C</Text>
+                          </View>
+                        ) : null}
+                      </View>
+
+                      {/* Notes */}
+                      {record.notes ? (
+                        <View style={s.detailSection}>
+                          <Text style={s.detailLabel}>Notes</Text>
+                          <Text style={s.detailValue}>{record.notes}</Text>
+                        </View>
+                      ) : null}
+
+                      {/* Follow-up */}
+                      {record.requiresFollowUp && record.nextFollowUp && (
+                        <View style={s.followUpBanner}>
+                          <Icon name="calendar" size={14} color="#F59E0B" />
+                          <Text style={s.followUpText}>Follow-up scheduled: {formatDate(record.nextFollowUp)}</Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Expand hint */}
+                  <View style={s.expandHint}>
+                    <Icon name={isExpanded ? 'chevron-down' : 'chevron-right'} size={16} color={Colors.textLight} />
+                    <Text style={s.expandText}>{isExpanded ? 'Tap to collapse' : 'Tap for details'}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </>
         )}
-        {filteredRecords.map(r => (
-          <View key={r.id} style={s.recordCard}>
-            <View style={s.recordLeft}>
-              <View style={s.recordIcon}><Icon name="check-circle" size={16} color="#10B981" /></View>
-              <View style={s.recordLine} />
-            </View>
-            <View style={s.recordContent}>
-              <Text style={s.recordDate}>{formatDate(r.date)}</Text>
-              <Text style={s.recordService}>{r.serviceType}</Text>
-              <Text style={s.recordAnimal}>{r.animalName}</Text>
-              <Text style={s.recordTech}>By: {r.technicianName}</Text>
-              {r.description ? <Text style={s.recordDesc}>{r.description}</Text> : null}
-            </View>
-          </View>
-        ))}
         <View style={{ height: 80 }} />
       </ScrollView>
     </View>
@@ -138,42 +243,49 @@ export default function HealthRecordsPage() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.surface },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  // Header
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: Colors.primary, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.lg, paddingBottom: Spacing.xl },
   backBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', transform: [{ rotate: '180deg' }] },
   headerTitle: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.white },
-  // Filters
-  filterScroll: { maxHeight: 48, marginTop: Spacing.md },
-  filterContent: { paddingHorizontal: Spacing.lg, gap: Spacing.sm },
-  filterChip: { paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, borderRadius: BorderRadius.full, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.border },
-  filterChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  filterText: { fontSize: FontSize.sm, color: Colors.textSecondary, fontWeight: '500' },
-  filterTextActive: { color: Colors.white, fontWeight: '700' },
-  // List
-  list: { flex: 1, paddingHorizontal: Spacing.lg, paddingTop: Spacing.md },
-  sectionTitle: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text, marginBottom: Spacing.md },
-  // Animal cards
-  animalCard: { width: 120, backgroundColor: Colors.white, borderRadius: BorderRadius.lg, padding: Spacing.sm, alignItems: 'center', ...Shadow.light },
-  animalImg: { width: 60, height: 60, borderRadius: 30 },
-  animalName: { fontSize: 12, fontWeight: '700', color: Colors.text, marginTop: 6, textAlign: 'center' },
-  healthDot: { width: 8, height: 8, borderRadius: 4, marginTop: 4 },
-  healthLabel: { fontSize: 10, fontWeight: '600', marginTop: 2 },
-  animalMeta: { marginTop: 4 },
-  vaccBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#D1FAE5', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
-  vaccText: { fontSize: 9, fontWeight: '600', color: '#059669' },
-  lastCheckup: { fontSize: 9, color: Colors.textLight, marginTop: 3 },
+  // Content
+  content: { flex: 1, paddingHorizontal: Spacing.lg, paddingTop: Spacing.md },
+  count: { fontSize: FontSize.sm, color: Colors.textSecondary, marginBottom: Spacing.md },
   // Empty
-  empty: { alignItems: 'center', paddingVertical: 40 },
-  emptyText: { fontSize: FontSize.md, color: Colors.textLight, marginTop: Spacing.sm },
-  emptySubtext: { fontSize: FontSize.sm, color: Colors.textLight, marginTop: 4, textAlign: 'center' },
-  // Record timeline
-  recordCard: { flexDirection: 'row', marginBottom: 4 },
-  recordLeft: { alignItems: 'center', width: 30, marginRight: 12 },
-  recordIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#D1FAE5', justifyContent: 'center', alignItems: 'center' },
-  recordLine: { width: 2, flex: 1, backgroundColor: '#E2E8F0', marginTop: 4 },
-  recordContent: { flex: 1, backgroundColor: Colors.white, borderRadius: BorderRadius.lg, padding: Spacing.md, marginBottom: Spacing.sm, ...Shadow.light },
-  recordDate: { fontSize: 11, color: Colors.textSecondary },
-  recordService: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text, marginTop: 2 },
-  recordAnimal: { fontSize: FontSize.sm, color: Colors.primary, marginTop: 1 },
-  recordTech: { fontSize: 12, color: Colors.textSecondary, marginTop: 4 },
-  recordDesc: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 4, fontStyle: 'italic', lineHeight: 18 },
+  empty: { alignItems: 'center', paddingTop: 100 },
+  emptyText: { fontSize: FontSize.lg, fontWeight: '600', color: Colors.textSecondary, marginTop: Spacing.lg },
+  emptySubtext: { fontSize: FontSize.sm, color: Colors.textLight, marginTop: 4, textAlign: 'center', lineHeight: 20 },
+  // Card
+  card: { backgroundColor: Colors.white, borderRadius: BorderRadius.xl, padding: Spacing.lg, marginBottom: Spacing.md, ...Shadow.light },
+  cardHeader: { flexDirection: 'row', alignItems: 'center' },
+  typeIcon: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  cardHeaderInfo: { flex: 1, marginLeft: Spacing.md },
+  cardAnimal: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
+  cardType: { fontSize: FontSize.xs, color: Colors.textSecondary, textTransform: 'capitalize', marginTop: 2 },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: BorderRadius.full },
+  statusText: { fontSize: 11, fontWeight: '700', textTransform: 'capitalize' },
+  // Diagnosis
+  diagnosis: { fontSize: FontSize.sm, color: Colors.text, marginTop: Spacing.sm, fontStyle: 'italic' },
+  // Meta
+  metaRow: { flexDirection: 'row', gap: Spacing.lg, marginTop: Spacing.sm },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  metaText: { fontSize: FontSize.xs, color: Colors.textSecondary },
+  // Expanded details
+  details: { marginTop: Spacing.md, paddingTop: Spacing.md, borderTopWidth: 1, borderTopColor: Colors.border },
+  detailSection: { marginBottom: Spacing.md },
+  detailLabel: { fontSize: FontSize.xs, fontWeight: '700', color: Colors.textSecondary, textTransform: 'uppercase', marginBottom: 4 },
+  detailValue: { fontSize: FontSize.sm, color: Colors.text, lineHeight: 20 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  chip: { backgroundColor: '#FFF3E0', paddingHorizontal: 10, paddingVertical: 4, borderRadius: BorderRadius.full },
+  chipText: { fontSize: FontSize.xs, color: '#E65100', fontWeight: '500' },
+  // Vitals
+  vitalRow: { flexDirection: 'row', gap: Spacing.md, marginBottom: Spacing.md },
+  vitalItem: { flex: 1, backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, alignItems: 'center' },
+  vitalLabel: { fontSize: FontSize.xs, color: Colors.textSecondary },
+  vitalValue: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.primary, marginTop: 2 },
+  // Follow-up
+  followUpBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FEF3C7', borderRadius: BorderRadius.md, padding: Spacing.md },
+  followUpText: { fontSize: FontSize.sm, color: '#D97706', fontWeight: '600' },
+  // Expand hint
+  expandHint: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: Spacing.sm, paddingTop: Spacing.sm },
+  expandText: { fontSize: FontSize.xs, color: Colors.textLight },
 });

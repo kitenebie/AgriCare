@@ -4,3 +4,8 @@ export * from './chatService';
 export * from './notificationService';
 export * from './sessionService';
 export * from './logService';
+export * from './appointmentService';
+export * from './locationService';
+export * from './pushService';
+export * from './ratingService';
+export * from './calendarService';

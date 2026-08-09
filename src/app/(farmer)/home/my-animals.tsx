@@ -58,6 +58,9 @@ export default function MyAnimalsPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState("");
+  
+  // Edit mode
+  const [editingAnimal, setEditingAnimal] = useState<Animal | null>(null);
 
   // Registration steps
   const [modal, setModal] = useState(false);
@@ -241,6 +244,81 @@ export default function MyAnimalsPage() {
     }
   };
 
+  // ─── EDIT ANIMAL ───
+  const handleEdit = (animal: Animal) => {
+    setEditingAnimal(animal);
+    // Pre-fill form with existing data
+    setFormName(animal.name);
+    setFormAge(String(animal.age || ''));
+    setFormGender(animal.gender || 'male');
+    setFormWeight(animal.weight || '');
+    setFormImage(animal.imageUrl || null);
+    setFormCount(String(animal.count || 1));
+    setSelectedBreed(animal.breed || '');
+    // Find matching category
+    const matchedCat = categories.find(c => c.focusType === animal.type || c.name === animal.type);
+    setSelectedCat(matchedCat || null);
+    setStep(3); // Go directly to details form
+    setModal(true);
+  };
+
+  const handleUpdate = async () => {
+    if (!editingAnimal || !formName.trim()) {
+      Alert.alert('Error', 'Animal name is required.');
+      return;
+    }
+    setSaving(true);
+
+    let imageUrl = editingAnimal.imageUrl || '';
+    if (formImage && formImage !== editingAnimal.imageUrl) {
+      setUploading(true);
+      const result = await uploadImageToSupabase(formImage, 'animals');
+      setUploading(false);
+      if (result.success && result.publicUrl) imageUrl = result.publicUrl;
+    }
+
+    try {
+      await firestore().collection('animals').doc(editingAnimal.id).update({
+        name: formName.trim(),
+        breed: selectedBreed || editingAnimal.breed,
+        count: parseInt(formCount) || 1,
+        age: parseInt(formAge) || 0,
+        gender: formGender,
+        weight: formWeight.trim(),
+        imageUrl,
+        updatedAt: firestore.FieldValue.serverTimestamp(),
+      });
+      await logCrud('Animal Updated', `Updated: ${formName.trim()}`, 'animals', editingAnimal.id, {
+        old: { name: editingAnimal.name, breed: editingAnimal.breed },
+        new: { name: formName.trim(), breed: selectedBreed },
+      });
+      setModal(false);
+      setEditingAnimal(null);
+      resetForm();
+      Alert.alert('Success', 'Animal updated!');
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ─── DELETE ANIMAL ───
+  const handleDelete = (animal: Animal) => {
+    Alert.alert('Delete Animal', `Are you sure you want to remove "${animal.name}" from your list?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        try {
+          await firestore().collection('animals').doc(animal.id).delete();
+          await logCrud('Animal Deleted', `Removed: ${animal.name} (${animal.breed})`, 'animals', animal.id);
+          Alert.alert('Deleted', `${animal.name} has been removed.`);
+        } catch (e: any) {
+          Alert.alert('Error', e.message);
+        }
+      }},
+    ]);
+  };
+
   if (loading)
     return (
       <View style={s.center}>
@@ -264,6 +342,7 @@ export default function MyAnimalsPage() {
           style={s.dotsBtn}
           onPress={() => {
             resetForm();
+            setEditingAnimal(null);
             setModal(true);
           }}
         >
@@ -327,6 +406,17 @@ export default function MyAnimalsPage() {
                   {a.healthStatus}
                 </Text>
               </View>
+              {/* Edit & Delete buttons */}
+              <View style={s.cardActions}>
+                <TouchableOpacity style={s.editBtn} onPress={() => handleEdit(a)}>
+                  <Icon name="pencil" size={13} color="#1565C0" />
+                  <Text style={s.editBtnText}>Edit</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.deleteBtn} onPress={() => handleDelete(a)}>
+                  <Icon name="trash" size={13} color={Colors.error} />
+                  <Text style={s.deleteBtnText}>Delete</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         ))}
@@ -364,7 +454,7 @@ export default function MyAnimalsPage() {
                   ? "Select Category"
                   : step === 2
                     ? "Select Breed"
-                    : "Animal Details"}
+                    : editingAnimal ? "Edit Animal" : "Animal Details"}
               </Text>
               <Text style={s.stepIndicator}>Step {step}/3</Text>
             </View>
@@ -646,14 +736,14 @@ export default function MyAnimalsPage() {
                   {/* Save */}
                   <TouchableOpacity
                     style={[s.saveBtn, saving && { opacity: 0.6 }]}
-                    onPress={handleSave}
+                    onPress={editingAnimal ? handleUpdate : handleSave}
                     disabled={saving}
                   >
                     {saving ? (
                       <ActivityIndicator color={Colors.white} />
                     ) : (
                       <Text style={s.saveBtnText}>
-                        {uploading ? "Uploading..." : "Register Animal"}
+                        {uploading ? "Uploading..." : editingAnimal ? "Update Animal" : "Register Animal"}
                       </Text>
                     )}
                   </TouchableOpacity>
@@ -749,6 +839,11 @@ const s = StyleSheet.create({
     marginTop: 4,
   },
   healthText: { fontSize: 10, fontWeight: "700", color: "#4CAF50" },
+  cardActions: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  editBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: '#E3F2FD' },
+  editBtnText: { fontSize: 11, fontWeight: '600', color: '#1565C0' },
+  deleteBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: '#FFEBEE' },
+  deleteBtnText: { fontSize: 11, fontWeight: '600', color: '#EF4444' },
   // Modal
   overlay: {
     flex: 1,

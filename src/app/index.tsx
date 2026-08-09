@@ -1,10 +1,13 @@
 import { Button } from "@/components/ui";
 import { Colors, FontSize, Spacing } from "@/constants/theme";
-import { getRouteForRole, getSession } from "@/services/sessionService";
+import { getRouteForRole, getSession, isBiometricsEnabled, authenticateWithBiometrics } from "@/services/sessionService";
+import firestore from '@react-native-firebase/firestore';
+import { Collections } from '@/services/firebase';
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Dimensions,
   StyleSheet,
   Text,
@@ -23,6 +26,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
+  const [checkingSession, setCheckingSession] = useState(true);
 
   // Image fade in
   const imageOpacity = useSharedValue(0);
@@ -41,10 +45,43 @@ export default function LoginScreen() {
     const checkSession = async () => {
       const session = await getSession();
       if (session) {
+        // Check account status from Firestore
+        try {
+          const userDoc = await firestore().collection(Collections.USERS).doc(session.uid).get();
+          const status = userDoc.data()?.status;
+          if (status === 'pending') {
+            router.replace('/(auth)/pending-verification' as any);
+            return;
+          }
+          if (status === 'rejected') {
+            const reason = userDoc.data()?.rejectionReason || 'Your documents did not meet our verification requirements.';
+            router.replace({ pathname: '/(auth)/rejected', params: { reason } } as any);
+            return;
+          }
+          if (status === 'banned' || status === 'deactivated') {
+            router.replace('/(auth)/login' as any);
+            return;
+          }
+        } catch (e) {
+          // If Firestore check fails, fall through to show buttons
+        }
+
+        // If biometrics is enabled, require authentication before auto-login
+        const bioEnabled = await isBiometricsEnabled();
+        if (bioEnabled) {
+          const authenticated = await authenticateWithBiometrics('Verify to access AgriCare');
+          if (!authenticated) {
+            // Biometric failed — show login/register buttons instead
+            setCheckingSession(false);
+            return;
+          }
+        }
+
         const route = getRouteForRole(session.role);
         router.replace(route as any);
         return;
       }
+      setCheckingSession(false);
     };
     checkSession();
 
@@ -115,20 +152,26 @@ export default function LoginScreen() {
           { paddingBottom: insets.bottom + 40 },
         ]}
       >
-        <Button
-          title="Log In"
-          onPress={() => router.push("/(auth)/login")}
-          variant="primary"
-          size="lg"
-          style={styles.loginButton}
-        />
-        <Button
-          title="Create Account"
-          onPress={() => router.push("/(auth)/register")}
-          variant="outline"
-          size="lg"
-          style={styles.createButton}
-        />
+        {checkingSession ? (
+          <ActivityIndicator size="large" color={Colors.primary} style={{ marginVertical: 24 }} />
+        ) : (
+          <>
+            <Button
+              title="Log In"
+              onPress={() => router.push("/(auth)/login")}
+              variant="primary"
+              size="lg"
+              style={styles.loginButton}
+            />
+            <Button
+              title="Create Account"
+              onPress={() => router.push("/(auth)/register")}
+              variant="outline"
+              size="lg"
+              style={styles.createButton}
+            />
+          </>
+        )}
       </Animated.View>
     </View>
   );

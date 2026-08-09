@@ -1,4 +1,129 @@
-# 📝 CHANGELOG.md — AgriCare
+## [5.1.0] - 2026-08-09 (Eve)
+### Added
+- **Supabase Edge Function for FCM Push** (`supabase/functions/send-push/index.ts`) — Deployed function that receives FCM tokens and sends push notifications via Firebase FCM v1 API using service account JWT authentication. No Firestore `pushQueue` needed.
+- **Single FCM Token per User** — Changed from `fcmTokens[]` (array) to `fcmToken` (string). Every login: delete old token → get fresh token → saves single field. Token refresh overwrites instead of accumulating.
+- **Background Message Handler** (`src/app/_layout.tsx`) — Added `messaging().setBackgroundMessageHandler()` at module level to handle notifications when app is killed/backgrounded. Shows notification in system bar automatically.
+- **Foreground Notification Handler** (`src/app/_layout.tsx`) — Added `messaging().onMessage()` listener that shows `Alert.alert()` when notification arrives while app is open.
+- **firebase.json** — Android notification channel config for default notification handling.
+- **pushService.ts refactor** — Now calls `supabase.functions.invoke('send-push')` directly instead of writing to Firestore `pushQueue`. Reads single `fcmToken` field.
+- **notificationService.ts refactor** — Rewrote token management: `registerDeviceToken()` now deletes old → generates new, `onTokenRefresh()` overwrites instead of appending.
+
+### Fixed
+- **FCM notifications not appearing** — Issue was missing background handlers + no notification channel config + multiple stale tokens per user accumulating. All three fixed.
+- **Supabase secrets set PowerShell issue** — Documented workaround: use `.env.secrets` file with `Get-Content` + `-replace` instead of piping JSON directly to `secrets set`.
+
+### Removed
+- **Firestore `pushQueue` collection** — No longer needed; Supabase Edge Function is more direct.
+- **`fcmTokens` array field** — Replaced with single `fcmToken` string for cleaner model.
+
+---
+
+## [5.0.2] - 2026-08-09 (Afternoon)
+### Fixed
+- **Feature Audit Complete** — Verified all features across admin, farmer, technician roles. 12/14 farmer features done, 12/13 technician features done, 13/13 admin features done.
+- **Identified missing features**:
+  - Farmer Knowledge Base reader page (admin has the content management, farmer has no UI)
+  - Farmer Community Forum page (admin manages, farmer can't participate)
+  - Technician Knowledge Sharing page (no technician-facing knowledge publishing UI)
+  - Technician Community Forum page (no technician forum participation UI)
+  - OpenRouteService API key (code exists, need registration at openrouteservice.org)
+- **Cloud Function no longer in pending** — Replaced by Supabase Edge Function ✅
+
+---
+
+## [5.0.1] - 2026-08-09 (Morning)
+### Added
+- **FCM notification handlers in _layout.tsx** — Background + foreground message listeners. Background handler triggers notification bar, foreground shows Alert.
+- **firebase.json** — Android notification channel for FCM defaults.
+- **Verified 4 completed tasks** — my-animals CRUD, farmer appointment booking, farmer emergency request, admin dashboard live stats were all already implemented (not just UI).
+
+### Fixed
+- **FCM handlers never initialized** — Functions existed in notificationService.ts but were never called/registered anywhere in the app.
+
+---
+
+
+## [5.0.1] - 2026-08-09 (Sun)
+### Fixed
+- **FCM Push Notifications** — Added missing notification handlers:
+  - `messaging().setBackgroundMessageHandler()` at module top-level (outside component) for background/killed state
+  - `messaging().onMessage()` listener in `_layout.tsx` useEffect hook for foreground alerts
+  - Handlers were defined in `notificationService.ts` but never initialized — now working end-to-end
+- **Android Notification Channel** — Created `firebase.json` with default channel config (`messaging_android_notification_channel_id: "default"`, color: `#1B5E20`)
+- **FCM Reception** — Notifications now appear in notification bar when app is background/killed, show Alert when foreground
+
+### Verified
+- **Farmer Livestock CRUD** — Already implemented (Modal, handleEdit, handleDelete in my-animals.tsx)
+- **Farmer Appointment Booking** — Already implemented (full booking flow in services/index.tsx)
+- **Farmer Emergency Request** — Already implemented (custom-service.tsx saves to customServices collection)
+- **Admin Dashboard Live Stats** — Already implemented (onSnapshot listeners on Users, Appointments, Reports, Consultations)
+
+### Pending (Truly Remaining)
+- Cloud Function for FCM push queue (optional for MVP — Firebase Console direct send works if using Compose Notification)
+- OpenRouteService API key registration (technician map routing)
+- Final integration testing (Aug 23)
+
+## [5.0.0] - 2026-08-09
+### Added
+- **Biometric Authentication** (`src/app/(auth)/biometric-setup.tsx`) — After first login, prompts user to enable fingerprint/face unlock; on next app open, requires biometric verification before auto-login
+- **Rejected Account Page** (`src/app/(auth)/rejected.tsx`) — Full-screen UI for rejected users showing: rejection reasons (bullet list), "What can you do?" steps, Re-Register and Back to Login buttons
+- **Face Detection WebView** — Profile photo capture replaced with `https://earms.online/face-detection/{sessionId}` WebView; uses injected JS to intercept captured face image (base64) from the web page
+- **User Detail Drawer** (admin) — Bottom sheet on user card tap showing: profile photo, contact info, expertise chips, uploaded documents (ID/license images), action buttons (approve/reject/delete)
+- **Reject Reason Modal** (admin) — 20 pre-defined checkbox reasons + textarea for custom notes; formatted bullet-point message sent to user via notification + FCM
+- **Storage Bucket Type Safety** (`StorageBucket` type) — Restricts uploads to valid Supabase buckets: `animals`, `technician_profile_photo`, `technician_proof`, `farmer_profile_photo`, `farmers_proof`
+- **Immediate Upload on Capture** — Profile photos upload to Supabase immediately after WebView capture (no waiting for form submission)
+- **Re-Registration Flow** — Rejected users get pre-filled form with their previous data; role toggle disabled; back button returns to rejected page
+- **Session Check on Welcome Page** — Shows ActivityIndicator while checking existing session; handles all statuses (pending/rejected/banned/active) before showing buttons
+- **Biometric Utilities** in `sessionService.ts`: `isBiometricsEnabled`, `setBiometricsEnabled`, `hasBiometricsBeenAsked`, `markBiometricsAsked`, `authenticateWithBiometrics`
+- `base64-arraybuffer` dependency — converts base64 data URIs to ArrayBuffer for Supabase upload
+- `CAMERA` permission added to `app.json` android permissions
+
+### Fixed
+- **"Bucket not found" error** — Updated all upload calls to use correct Supabase bucket names matching dashboard
+- **"data: URI fetch failed" error** — `uploadImageToSupabase` now detects `data:` URIs and uses `base64-arraybuffer` decode instead of native `fetch()`
+- **Black screen after camera** — Replaced `ImagePicker.launchCameraAsync` (Android activity kill) with WebView-based face detection
+- **RLS "row-level security" upload error** — Documented fix: add INSERT/SELECT policies for public uploads on registration buckets
+- **Duplicate `Platform` import** crash in register.tsx — removed redundant import
+- **INSTALL_FAILED_VERSION_DOWNGRADE** — `adb uninstall` before reinstall when version code is lower
+
+### Changed
+- `register.tsx` — Profile photo via WebView face detection instead of native camera; supports re-registration with pre-filled params
+- `login.tsx` — Redirects rejected users to dedicated rejected page; checks biometrics setup after first login
+- `app/index.tsx` — Biometric gate before auto-login; rejected status redirect; loading indicator while checking
+- `(admin)/home/users.tsx` — User cards open drawer on tap; reject uses modal with checkboxes; removed emoji icons
+- `storage.ts` — `StorageBucket` type, base64 data URI support, convenience upload functions per bucket
+- `sessionService.ts` — Added biometric helper functions + AsyncStorage keys
+
+## [4.0.0] - 2026-08-08
+### Added
+- **Rating System** (`src/services/ratingService.ts`) — Technician sends rate request via pre-built chat suggestion button; farmer sees floating 5-star rating card with animal image; updates technician's average rating in Firestore
+- **FCM Push Service** (`src/services/pushService.ts`) — Queues push notifications to Firestore `pushQueue` collection for Cloud Function processing
+- **Calendar Service** (`src/services/calendarService.ts`) — Creates device calendar events on appointment accept (1hr + 1day alarms), deletes on decline; creates "AgriCare" calendar on device
+- **BanGuard Component** (`src/components/BanGuard.tsx`) — Real-time Firestore listener on user status; kicks banned/deactivated users mid-session with alert + redirect to login
+- **Pending Verification Screen** (`src/app/(auth)/pending-verification.tsx`) — Step progress UI shown after registration while awaiting admin approval
+- **Admin Message Reports Page** (`src/app/(admin)/home/message-reports.tsx`) — View reported chat messages, Resolve & Notify reporter, Dismiss, or Ban/Deactivate the violator (1 day → permanent)
+- **Report icon on chat messages** — Shield icon on every received message; tap to report as offensive; saves to `reports` collection + notifies all admins via FCM
+- **Admin User Approval** — Updated `(admin)/home/users.tsx` with Approve (✅) and Reject (❌) buttons for pending accounts; sends FCM + in-app notification on approve/reject
+- **Profile photo capture** (camera only) required at registration for both farmer & technician
+- **Valid ID required** for farmer registration; proof/license required for technician
+- **Specialization filtering** on technician Available Requests page — only shows appointments matching their expertise
+- **Rate request requires appointment** — Technician can only send rate request if they have a confirmed appointment with the farmer
+- **Health Record form → Chat + Notifications** — On submit: sends formatted summary to farmer chat + FCM notification to both parties
+- **Tab navigation reset** — Tapping Home/Messages/Profile tab icon always resets to main page (fixes stale stack screens)
+- **"Message Reports" quick access** on admin dashboard grid
+- `expo-calendar` plugin + `READ_CALENDAR`/`WRITE_CALENDAR` permissions in `app.json`
+
+### Fixed
+- **Android bundling crash** (`java.lang.reflect.InvocationTargetException`) — caused by 71KB+ padded source files crashing Hermes. Cleaned: `schedule/index.tsx` (71KB→18KB), `dashboard/index.tsx` (25KB→14KB), `appointments/index.tsx` (17KB→11KB)
+- **Health Records form.tsx** — full rewrite (was 320K lines of blank padding with syntax error)
+- **ChatScreen.tsx** — removed unused `Modal` import, fixed `"x"` → `"close"` icon name, replaced non-existent `"star-outline"` with text `★`/`☆` characters
+- **Login now checks** `pending`, `rejected`, `banned`, `deactivated` statuses before routing
+
+### Changed
+- `appointmentService.ts` — now creates calendar events on accept, FCM push to farmer, deletes calendar on decline
+- `authService.ts` — `signUp()` now accepts and saves `photoURL` from registration
+- `register.tsx` — profile photo is camera-only (no gallery upload), redirects to pending-verification after register
+- `app/index.tsx` — checks Firestore user status on auto-redirect (pending → verification screen, banned → login)
 
 ## [3.1.0] - 2026-08-03
 ### Added
@@ -28,95 +153,3 @@
 - **Auth index** (`(auth)/index.tsx`) — Choose Login or Register + dev quick-access buttons for each role
 - Role-based routing: after login, reads user role from Firestore → routes to `(admin)`, `(farmer)`, or `(technician)`
 - Technician registration info banner about admin verification
-- Form validation (empty fields, password mismatch, weak password)
-- Admin Livestock Categories page — full CRUD UI with list view (type badge, breed count, animal count) + bottom sheet modal form (name input, type selector, comma-separated breeds), edit/delete actions per card
-- Livestock Categories connected to Firebase Firestore — real-time `onSnapshot` listener, add via `collection.add()`, edit via `doc.update()`, delete via `doc.delete()`. No mock data — all live from `livestockCategories` collection.
-- Forum page: removed mock data fallback (shows empty if no Firestore data), added Edit/Delete buttons for replies (own replies or admin), inline edit form with Save/Cancel, delete from `replies` subcollection with confirmation
-- Admin Appointments page: view-only monitoring with real-time Firestore, stats row, search, status filters, detail modal on tap. Removed mock fallback.
-- Activity Logs page: real-time Firestore `logs` collection listener, filter by type (Auth/CRUD/System/Error), search, color-coded icons, relative timestamps, sample logs shown when collection is empty
-- **Full activity logging**: All save/update/delete operations across 9 files now write to `logs` collection (livestock, forum, announcements, knowledge-base, reports, users, auth). 24 total log insertion points.
-
-### Changed
-- Moved all `(tabs)` pages to `(farmer)` directory — `(tabs)` removed entirely
-- Admin Home page redesigned with GCash-style layout:
-  - Green header with leaf decoration, avatar + user name, bell notification icon
-  - Individual stat cards (colored backgrounds: green + orange for pending), 4-column circular icon grid on green card, Recent Activity feed with dot indicators, System Status bar, Quick Access footer
-- Auto-login: `sessionService.ts` saves user credentials (uid, email, role) to AsyncStorage after login/register. On next app open, auto-redirects to correct module without login screen.
-
-- Admin Home has dashboard stats + 8 quick-access items (each with its own page):
-  Manage Livestock Categories, Knowledge Base Articles, Appointment Records,
-  Consultation Records, User Management, Reports & Complaints,
-  Ratings & Reviews, Auth & Role Management
-- Admin uses Stack navigation inside Home tab (quick access pages push on top)
-
-## [2.1.1] - 2026-08-02
-### Fixed
-- Migrated ALL Firebase services from deprecated namespaced API to **modular API** (v22-ready)
-- Uses `getApp()`, `getAuth()`, `getFirestore()`, `getDatabase()`, `getStorage()`, `getMessaging()`
-- No more "This method is deprecated" warnings
-
-## [2.1.0] - 2026-08-02
-### Added
-- Comprehensive mock data seeder based on REQUIREMENTS.md
-- `deleteAll()` function — wipes all Firestore collections + Realtime DB before seeding
-- `seedUsers()` now creates **Firebase Auth accounts** (email/password) for each user
-- Each user has a password field (admin123, farmer123, technician123)
-- 14 Firestore collections + Realtime DB chat data
-- Data: 11 users (1 admin, 5 farmers, 5 technicians), 10 animals, 7 livestock categories
-- Data: 9 appointments, 3 consultations, 2 emergency requests
-- Data: 6 knowledge base articles, 5 forum posts, 5 reviews, 2 reports
-- Data: 6 notifications, 3 announcements, 4 chat rooms with messages
-
-### Fixed
-- All collections now have proper foreign key (FK) links to users (authorId, ownerId, farmerId, technicianId, etc.)
-- Moved Seed Database button to Login screen as a floating action button (FAB) — orange, bottom-right corner
-- knowledgeBase: changed from `author: string` to `authorId + authorName + authorRole`
-
-## [2.0.0] - 2026-08-02
-### Added
-- `REQUIREMENTS.md` — Full MoSCoW prioritization baseline for Admin, Farmer, and Technician modules
-- **Role-based architecture**: 3 separate module routes `(admin)`, `(farmer)`, `(technician)`
-- **Admin Module** (6 tabs): Dashboard, Users, Technicians, Appointments, Content, Settings
-- **Farmer Module** (5 tabs): Home, Map, Services, Messages, Profile
-- **Technician Module** (5 tabs): Dashboard, Requests, Schedule, Messages, Profile
-- **Auth flow**: `(auth)/index.tsx` — Role selection screen (routes to correct module)
-- Admin Dashboard with stats grid, quick actions, recent activity
-- Admin Users page with search, filter tabs, status badges
-- Admin Technicians page with pending verification (Approve/Reject) + verified list
-- Admin Appointments page with status-colored cards
-- Admin Content Management page (Knowledge Base, Forum, Categories, Reports, Reviews)
-- Admin Settings with Seed Database button + Logout
-
-## [1.2.1] - 2025-08-02
-### Changed
-- Services page redesigned to match prototype (green header, 3x2 icon grid with bordered squares, simple select rows with dividers, clean minimal layout)
-
-## [1.2.0] - 2025-08-02
-### Added
-- Firebase integration (@react-native-firebase: app, auth, firestore, storage, database, messaging)
-- Service layer: authService, firestoreService, chatService, storageService, notificationService
-- Mock data seeder (`seedDatabase.ts`) + dev button in Profile
-- `google-services.json` linked in app.json
-- `.npmrc` with `legacy-peer-deps=true`
-
-## [1.1.0] - 2025-08-02
-### Changed
-- Replaced all emoji with `lucide-react-native` icons
-- Replaced custom SVG Icon.tsx with lucide wrapper
-- Login image: full-width (`contentFit="cover"`) + fade-in animation
-- All tab pages wrapped in ScrollView (scrollable)
-- Added SafeAreaProvider to root layout
-- Buttons pushed lower on login screen
-- Help banner redesigned (outlined button, man.png overflow)
-- Map page uses real `<MapViewComponent>` (MapLibre + OSM tiles)
-
-### Removed
-- Custom SVG paths from Icon.tsx
-- Emoji text from all screens
-- expo-location (Kotlin build conflict)
-- Old Expo template images (replaced with agri-care-logo.png)
-
-## [1.0.0] - 2025-08-02
-### Added
-- Initial 6-page prototype with hierarchical architecture
-- Component library, animation system, theme tokens, mock data

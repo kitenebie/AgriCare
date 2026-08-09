@@ -55,6 +55,7 @@ export const signUp = async (
     idImageUrl?: string;
     phoneNumber?: string;
     location?: string;
+    photoURL?: string;
   }
 ) => {
   console.log('signUp called:', email);
@@ -73,7 +74,7 @@ export const signUp = async (
     role,
     phoneNumber: extraData?.phoneNumber || '',
     location: extraData?.location || '',
-    photoURL: '',
+    photoURL: extraData?.photoURL || '',
     proofImageUrl: extraData?.proofImageUrl || '',
     idImageUrl: extraData?.idImageUrl || '',
     expertise: extraData?.expertise || [],

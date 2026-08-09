@@ -20,8 +20,8 @@
 | Day | Tasks | Module |
 | --- | --- | --- |
 | **Aug 7 (Fri)** | Fix docs, sprint plan, wire remaining Admin dashboard stats to Firestore | Admin |
-| **Aug 8 (Sat)** | User Management CRUD (list, edit status, delete) | Admin |
-| **Aug 9 (Sun)** | Technician Verification flow (approve/reject), Knowledge Base CRUD | Admin |
+| **Aug 8 (Sat)** ✅ | User Management CRUD (list, edit status, delete), Rating System, FCM Push, Calendar Service, BanGuard | Admin |
+| **Aug 9 (Sun)** ✅ | Approve/Reject with reason modal, User Detail Drawer, Face Detection WebView, Biometric Auth, Rejected Page, Storage Buckets fix, FCM Handlers + firebase.json | Admin + Auth |
 
 **Goal**: Admin module 80% complete
 

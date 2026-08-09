@@ -4,6 +4,7 @@
  * Flow: Image Picker → Supabase Storage → Public URL → Firestore
  */
 
+import { decode as base64Decode } from "base64-arraybuffer";
 import * as ImagePicker from "expo-image-picker";
 import firestore from "@react-native-firebase/firestore";
 import { supabase } from "../../utils/supabase";
@@ -11,6 +12,15 @@ import { Collections } from "./firebase";
 import { logCrud } from "./logService";
 
 // ─── Interfaces ───
+
+export type StorageBucket =
+  | "animals"
+  | "technician_profile_photo"
+  | "technician_proof"
+  | "farmer_profile_photo"
+  | "farmers_proof";
+
+// ─── Data Interfaces ───
 
 export interface AnimalData {
   animalName: string;
@@ -63,23 +73,32 @@ export const pickImage = async (): Promise<string | null> => {
 
 export const uploadImageToSupabase = async (
   localUri: string,
-  bucket: string = "animals"
+  bucket: StorageBucket = "animals"
 ): Promise<UploadResult> => {
   try {
     const filename = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}.jpg`;
     const filePath = `uploads/${filename}`;
 
-    // Convert local URI to blob for upload
-    const response = await fetch(localUri);
-    const blob = await response.blob();
+    let arrayBuffer: ArrayBuffer;
+    let contentType = "image/jpeg";
 
-    // Read as ArrayBuffer for Supabase
-    const arrayBuffer = await new Response(blob).arrayBuffer();
+    if (localUri.startsWith("data:")) {
+      // Handle base64 data URI (from WebView face detection)
+      const matches = localUri.match(/^data:(.+?);base64,(.+)$/);
+      if (!matches) throw new Error("Invalid data URI format");
+      contentType = matches[1];
+      arrayBuffer = base64Decode(matches[2]);
+    } else {
+      // Handle file:// or content:// URIs (from ImagePicker)
+      const response = await fetch(localUri);
+      const blob = await response.blob();
+      arrayBuffer = await new Response(blob).arrayBuffer();
+    }
 
     const { data, error } = await supabase.storage
       .from(bucket)
       .upload(filePath, arrayBuffer, {
-        contentType: "image/jpeg",
+        contentType,
         upsert: false,
       });
 
@@ -98,6 +117,32 @@ export const uploadImageToSupabase = async (
     console.error("[Storage] uploadImageToSupabase error:", error.message);
     return { success: false, error: error.message };
   }
+};
+
+// ─── Convenience Upload Functions ───
+
+export const uploadTechnicianProfilePhoto = async (
+  localUri: string
+): Promise<UploadResult> => {
+  return uploadImageToSupabase(localUri, "technician_profile_photo");
+};
+
+export const uploadTechnicianProof = async (
+  localUri: string
+): Promise<UploadResult> => {
+  return uploadImageToSupabase(localUri, "technician_proof");
+};
+
+export const uploadFarmerProfilePhoto = async (
+  localUri: string
+): Promise<UploadResult> => {
+  return uploadImageToSupabase(localUri, "farmer_profile_photo");
+};
+
+export const uploadFarmerProof = async (
+  localUri: string
+): Promise<UploadResult> => {
+  return uploadImageToSupabase(localUri, "farmers_proof");
 };
 
 // ─── Save Animal to Firestore ───

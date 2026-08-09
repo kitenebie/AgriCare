@@ -36,9 +36,13 @@ src/
 
 - **Firestore** — Users, animals, technicians, appointments, reviews
 - **Realtime Database** — Real-time chat, typing indicators, online status
-- **Storage** — Profile images, animal photos, chat images
+- **Storage** — Chat images (Firebase) + Profile photos & documents (Supabase)
 - **FCM** — Push notifications
 - **Auth** — Email/password authentication
+
+## 🗄️ Supabase Storage
+
+Image uploads for registration: `farmer_profile_photo`, `technician_profile_photo`, `farmers_proof`, `technician_proof`, `animals`
 
 ## 🗺️ MapLibre + OpenStreetMap
 
@@ -64,3 +68,7 @@ npx expo run:android
 - `lucide-react-native` ^0.460.0
 - `react-native-reanimated` 4.5.1
 - `react-native-svg` ^15.0.0
+- `react-native-webview` 13.16.1
+- `expo-local-authentication` ~57.0.2
+- `base64-arraybuffer` (base64 → ArrayBuffer for Supabase uploads)
+- `@supabase/supabase-js` (Supabase client)
