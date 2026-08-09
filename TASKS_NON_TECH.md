@@ -74,14 +74,22 @@
 
 ---
 
-## 🔴 HINDI PA TAPOS (4 Remaining Features)
+## 🟢 BAGONG TAPOS (Aug 9)
 
-| # | Feature | Para saan ito? | Bakit kailangan? |
-| --- | --- | --- | --- |
-| 1 | **Farmer: Knowledge Base Reader** | Para makabasa ang farmer ng mga educational articles — tulad ng "Mga Karaniwang Sakit ng Baboy" o "Tamang Pag-aalaga ng Baka." Ngayon kasi ang admin lang ang nakakapag-post, pero walang page para mabasa ng farmer. | Halimbawa: Si Mang Juan ay may bagong baboy. Gusto niyang malaman kung ano ang tamang pagkain at vaccination schedule. Sa Knowledge Base, makikita niya ang mga articles na ni-post ng admin. |
-| 2 | **Farmer: Community Forum** | Para makapag-tanong at makapag-share ang farmer ng experiences — halimbawa "Paano ko gagamutin ang sugat ng baka ko?" at makakapag-reply ang ibang farmers o technicians. | Halimbawa: Si Aling Maria ay may tanong tungkol sa abnormal na behavior ng kambing niya. Mag-popost siya sa forum, at may mag-rereply na technician o kapwa farmer na may same experience. |
-| 3 | **Technician: Knowledge Sharing** | Para makabasa rin ang technician ng mga articles — educational materials, best practices, new techniques sa animal healthcare. | Halimbawa: Si Doc Santos ay gusto mag-aral ng bagong technique sa artificial insemination. Sa Knowledge Base, mababasa niya ang mga posted articles at guidelines. |
-| 4 | **Technician: Community Forum** | Para makapag-participate din ang technician sa discussions — mag-answer ng farmer questions o mag-share ng tips sa kapwa technicians. | Halimbawa: May farmer na nagtatanong sa forum kung paano i-prevent ang hog cholera. Si Doc Santos, bilang technician, pwede mag-reply ng expert advice. |
+| # | Feature | Para saan ito? |
+|---|---------|----------------|
+| 33 | **Knowledge Base (All Roles)** | Lahat ng users — farmer, technician, at admin — pwede na magbasa AT magsulat ng mga articles. Halimbawa si Mang Juan pwede na magbasa ng "Tamang Pag-aalaga ng Baka", at si Doc Santos pwede ring mag-share ng tips. Pwede mong i-edit o i-delete ang sarili mong post, pero si admin lang ang may full control sa lahat. |
+| 34 | **Community Forum (All Roles)** | Lahat pwede na mag-post ng tanong, mag-reply, at mag-like. Halimbawa si Aling Maria may tanong tungkol sa kambing niya — mag-post siya sa forum, at si Doc Santos mag-rereply ng expert advice. May threaded replies para organized ang usapan. |
+
+---
+
+## 🔴 HINDI PA TAPOS (Minor Items)
+
+| # | Item | Para saan ito? |
+|---|------|----------------|
+| 1 | **Navigation buttons** | Ang farmer at technician ay may Knowledge Base at Forum na page — pero kailangan pa lagyan ng button sa kanilang home screen para madali nilang ma-access. (Ang admin meron na.) |
+| 2 | **Map routing API key** | Ang technician map may directions feature na — pero kailangan lang mag-register ng free account para gumana ang actual directions. |
+| 3 | **Final testing** | Bago i-release ang app, kailangan i-test ang lahat ng features para walang bugs. |
 
 ---
 
@@ -89,20 +97,19 @@
 
 ```
 Admin Module:      ████████████████████ 100% (15/15) ✅
-Farmer Module:     ████████████████░░░░  86% (12/14)
-Technician Module: ████████████████░░░░  86% (12/14)
+Farmer Module:     ████████████████████ 100% (14/14) ✅
+Technician Module: ████████████████████ 100% (14/14) ✅
 Shared Features:   ████████████████████ 100% ✅
 
-OVERALL:           █████████████████░░░  90% (37/41)
-
+OVERALL:           ████████████████████ 100% (41/41) ✅
 ```
 
 ---
 
 ## ⏳ Timeline
 
-- **August 7–9** — Admin module complete, Security features, Push Notifications
-- **August 10–16** — Build the 4 remaining features (Knowledge Base + Forum for both roles)
+- **August 7–9** — Admin module complete, Security features, Push Notifications, Knowledge Base & Forum ✅
+- **August 10–16** — Navigation polish, testing, bug fixes
 - **August 17–22** — Polish, bug fixes, final improvements
 - **August 23** — MVP Deadline ✅
 

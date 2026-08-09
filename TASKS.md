@@ -75,14 +75,17 @@
 - [x] **Admin Reject Reason Modal** — 20 checkbox reasons + textarea, formatted notification to user
 
 ## Pending
-- [ ] **Farmer Knowledge Base reader page** — Admin has knowledge-base.tsx with CRUD, farmer has NO reader/viewer UI (need new file: farmer/home/knowledge-base.tsx)
-- [ ] **Farmer Community Forum page** — Admin has forum management, farmer has NO participation page (need new file: farmer/home/forum.tsx with read + post permissions)
-- [ ] **Technician Knowledge Sharing page** — No technician-facing knowledge publishing/reading UI (need new file: technician/home/knowledge-base.tsx)
-- [ ] **Technician Community Forum page** — No technician forum participation UI (need new file: technician/home/forum.tsx)
 - [ ] **OpenRouteService API key setup** — Code exists in (technician)/map/index.tsx line 45, user needs free account at openrouteservice.org + add key to env
 - [ ] **Final testing & polish** — Full integration testing, bug fixes, performance optimization before Aug 23 MVP deadline
+- [ ] **Navigation buttons** — Farmer home & Technician dashboard need grid/menu items linking to Knowledge Base & Forum pages (pages exist but no UI button to reach them)
 
 ## Completed (Post-Audit Aug 9 Eve)
+- [x] **Knowledge Base Shared Component** — `components/shared/KnowledgeBaseScreen.tsx` — All roles add/edit own, admin full control. Search, category filter, expand-to-read, view count.
+- [x] **Community Forum Shared Component** — `components/shared/ForumScreen.tsx` — All roles post/reply/like. Threaded replies, author permissions, admin full control.
+- [x] **Farmer KB + Forum routes** — `(farmer)/home/knowledge-base.tsx` + `(farmer)/home/forum.tsx`
+- [x] **Technician KB + Forum routes** — `(technician)/dashboard/knowledge-base.tsx` + `(technician)/dashboard/forum.tsx`
+- [x] **Admin KB & Forum refactored** — Now uses shared components instead of standalone code
+- [x] **"Appointments & Consultations" merge** — Admin appointments page renamed, consultations grid item removed
 - [x] **Supabase Edge Function for FCM Push** — supabase/functions/send-push/index.ts deployed with Firebase JWT + FCM v1 API
 - [x] **Single FCM Token per User** — Changed fcmTokens[] → fcmToken string, every login deletes old + generates fresh
 - [x] **FCM Background & Foreground Handlers** — _layout.tsx has messaging().setBackgroundMessageHandler() + onMessage(), notifications appear in notification bar ✅

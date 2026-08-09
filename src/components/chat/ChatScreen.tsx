@@ -19,6 +19,7 @@ import {
 } from '@/services/chatService';
 import { sendRateRequest, submitRating, getPendingRateRequest, getCompletedAppointment } from '@/services/ratingService';
 import { sendPushNotification } from '@/services/pushService';
+import { startTypingSound, stopTypingSound } from '@/services/soundService';
 
 // ─── Animated typing dot ───
 const TypingDot: React.FC<{ delay: number }> = ({ delay }) => {
@@ -221,6 +222,16 @@ export default function ChatScreen() {
     };
   }, [chatId]);
 
+  // ─── Typing sound: loop while other user is typing ───
+  useEffect(() => {
+    if (isOtherTyping) {
+      startTypingSound();
+    } else {
+      stopTypingSound();
+    }
+    return () => { stopTypingSound(); };
+  }, [isOtherTyping]);
+
   useEffect(() => {
     if (uid && chatId && messages.length > 0) {
       markMessagesAsRead(chatId, uid);
@@ -246,7 +257,19 @@ export default function ChatScreen() {
     setInputText('');
     setSending(true);
     setTyping(chatId, uid, false);
-    try { await sendMessage(chatId, uid, text); } catch (e: any) { console.error('Send error:', e); }
+    try {
+      await sendMessage(chatId, uid, text);
+      // Send FCM push notification to the other user with chat sound
+      if (otherUserId) {
+        await sendPushNotification(otherUserId, {
+          title: `💬 ${myName || 'Someone'}`,
+          body: text.length > 100 ? text.substring(0, 100) + '...' : text,
+          data: { type: 'new_chat_message', chatId, senderId: uid, senderName: myName || '' },
+        });
+      }
+    } catch (e: any) {
+      console.error('Send error:', e);
+    }
     setSending(false);
   };
 

@@ -5,6 +5,7 @@ import { Alert, Platform, StatusBar, StyleSheet } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import messaging from "@react-native-firebase/messaging";
+import { playNewChatSound, playNotificationSound } from "@/services/soundService";
 
 // ─── Background message handler (MUST be outside component, top-level) ───
 messaging().setBackgroundMessageHandler(async (remoteMessage) => {
@@ -14,9 +15,18 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
 export default function RootLayout() {
 
   useEffect(() => {
-    // Foreground notification listener — show alert when app is open
+    // Foreground notification listener — play appropriate sound + show alert
     const unsubscribe = messaging().onMessage(async (remoteMessage) => {
       console.log("[FCM] Foreground message:", remoteMessage.notification?.title);
+      const messageType = remoteMessage.data?.type as string || '';
+
+      // Play appropriate sound based on notification type
+      if (messageType === 'new_chat_message') {
+        await playNewChatSound();
+      } else {
+        await playNotificationSound();
+      }
+
       // Show in-app alert for foreground messages
       Alert.alert(
         remoteMessage.notification?.title || "AgriCare",

@@ -38,3 +38,19 @@ Health Check | Vaccination | Treatment | De-worming | A.I. | Others
 4. First login → biometric setup prompt (enable/skip)
 5. Next app open → session check → biometric gate → auto-redirect
 6. Biometric fails → shows Log In / Create Account buttons
+
+## Shared Components Pattern
+- `src/components/shared/KnowledgeBaseScreen.tsx` — used by all 3 roles
+- `src/components/shared/ForumScreen.tsx` — used by all 3 roles
+- Route files are 2-line re-exports: `import X from '@/components/shared/X'; export default X;`
+
+## Permission Model (KB & Forum)
+- All roles can **CREATE** articles/posts
+- Author can **EDIT/DELETE** their own content (`authorId === currentUser.id`)
+- Admin has **FULL CONTROL** over all content regardless of authorship
+- Firestore fields: `authorId`, `authorName`, `authorRole` on every document
+
+## Push Notifications
+- **Service**: Supabase Edge Function at `https://apwewgtkxschclewhaxz.supabase.co/functions/v1/send-push`
+- **Token**: Single `fcmToken` field per user (not array), refreshed every login
+- **Flow**: App calls `supabase.functions.invoke('send-push')` → Edge Function signs JWT with Firebase service account → sends FCM v1 API → user's phone shows notification

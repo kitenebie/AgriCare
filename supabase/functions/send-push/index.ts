@@ -99,7 +99,7 @@ serve(async (req) => {
   }
 
   try {
-    const { fcmTokens, title, body, data } = await req.json();
+    const { fcmTokens, title, body, data, sound } = await req.json();
 
     if (!fcmTokens || fcmTokens.length === 0) {
       return new Response(JSON.stringify({ error: "No FCM tokens provided" }), {
@@ -109,6 +109,10 @@ serve(async (req) => {
     }
 
     const accessToken = await getAccessToken();
+    
+    // Determine notification sound and channel
+    const notifSound = sound || "notification";
+    const channelId = notifSound === "new_chat" ? "chat_messages" : "default";
 
     // Send to each token
     const results = await Promise.allSettled(
@@ -127,8 +131,8 @@ serve(async (req) => {
               android: {
                 priority: "high",
                 notification: {
-                  channel_id: "default",
-                  sound: "default",
+                  channel_id: channelId,
+                  sound: notifSound,
                 },
               },
             },

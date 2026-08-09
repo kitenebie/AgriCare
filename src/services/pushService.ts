@@ -21,6 +21,7 @@ interface PushPayload {
   body: string;
   data?: Record<string, string>;
   imageUrl?: string;
+  sound?: string;
 }
 
 /**
@@ -49,6 +50,8 @@ export const sendPushNotification = async (
         title: payload.title,
         body: payload.body,
         data: payload.data || {},
+        // Use custom sound for chat messages, default for others
+        sound: payload.data?.type === 'new_chat_message' ? 'new_chat' : 'default',
       },
     });
 

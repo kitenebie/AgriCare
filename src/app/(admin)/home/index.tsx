@@ -72,17 +72,10 @@ const quickAccess: QuickAccessItem[] = [
   },
   {
     icon: "calendar",
-    label: "Appointments",
+    label: "Appointments &\nConsultations",
     route: "/(admin)/home/appointments",
     color: "#F57C00",
     bgColor: "#FFF3CD",
-  },
-  {
-    icon: "health-check",
-    label: "Consultations",
-    route: "/(admin)/home/consultations",
-    color: "#8E24AA",
-    bgColor: "#F3E5F5",
   },
   {
     icon: "user-cog",
@@ -165,9 +158,12 @@ const getRelativeTime = (
   if (diffDays < 7) return { timeStr: `${diffDays}d ago`, rawMs };
 
   return {
-    timeStr: date.toLocaleDateString("en-US", {
+  timeStr: date.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
     }),
     rawMs,
   };
@@ -257,86 +253,6 @@ export default function AdminHome() {
 
       setPendingCount(pendingTechs + pendingAppts + pendingReports);
       setStatsLoading(false);
-
-      // Compile Dynamic Realtime Activity Feed
-      const activityFeed: ActivityItem[] = [];
-
-      // Add recent users / technician signups
-      usersList.slice(0, 4).forEach((u) => {
-        const name = u.displayName || u.name || "User";
-        const roleStr = u.role === "technician" ? "Technician" : "Farmer";
-        const { timeStr, rawMs } = getRelativeTime(u.createdAt || Date.now());
-
-        activityFeed.push({
-          id: `user_${u.id}`,
-          text:
-            u.status === "pending"
-              ? `${name} applied for Technician verification`
-              : `Registered new ${roleStr}: ${name}`,
-          time: timeStr,
-          icon: "farmer",
-          route: "/(admin)/home/users",
-          rawTime: rawMs,
-        });
-      });
-
-      // Add recent appointments
-      apptsList.slice(0, 4).forEach((a) => {
-        const farmer = a.farmerName || "Farmer";
-        const tech = a.technicianName || "Technician";
-        const service = a.serviceType || "Appointment";
-        const status = a.status || "upcoming";
-        const { timeStr, rawMs } = getRelativeTime(a.createdAt || Date.now());
-
-        activityFeed.push({
-          id: `appt_${a.id}`,
-          text:
-            status === "completed"
-              ? `${service} completed for ${farmer}`
-              : `${service} scheduled with ${tech}`,
-          time: timeStr,
-          icon: "calendar",
-          route: "/(admin)/home/appointments",
-          rawTime: rawMs,
-        });
-      });
-
-      // Add recent reports
-      reportsList.slice(0, 3).forEach((r) => {
-        const reporter = r.reporterName || "User";
-        const type = (r.type || "issue").replace("_", " ");
-        const { timeStr, rawMs } = getRelativeTime(r.createdAt || Date.now());
-
-        activityFeed.push({
-          id: `report_${r.id}`,
-          text: `Report filed by ${reporter} (${type})`,
-          time: timeStr,
-          icon: "shield-alert",
-          route: "/(admin)/home/reports",
-          rawTime: rawMs,
-        });
-      });
-
-      // Add recent consultations
-      consultsList.slice(0, 3).forEach((c) => {
-        const farmer = c.farmerName || "Farmer";
-        const animal = c.animalName || "Livestock";
-        const { timeStr, rawMs } = getRelativeTime(c.createdAt || Date.now());
-
-        activityFeed.push({
-          id: `consult_${c.id}`,
-          text: `Consultation logged for ${animal} (${farmer})`,
-          time: timeStr,
-          icon: "health-check",
-          route: "/(admin)/home/consultations",
-          rawTime: rawMs,
-        });
-      });
-
-      // Sort chronological descending (most recent first)
-      activityFeed.sort((a, b) => b.rawTime - a.rawTime);
-      setActivities(activityFeed.slice(0, 6));
-      setActivitiesLoading(false);
     };
 
     try {
@@ -402,6 +318,46 @@ export default function AdminHome() {
     return () => unsubs.forEach((u) => u());
   }, []);
 
+  // ─── 3. Realtime Activity Logs (latest 7 from 'logs' collection) ───
+  useEffect(() => {
+    const unsubLogs = firestore()
+      .collection('logs')
+      .orderBy('timestamp', 'desc')
+      .limit(7)
+      .onSnapshot(
+        (snap) => {
+          if (snap) {
+            const logItems: ActivityItem[] = snap.docs.map((doc) => {
+              const data = doc.data();
+              const { timeStr, rawMs } = getRelativeTime(data.timestamp);
+              const iconMap: Record<string, IconName> = {
+                crud: 'clipboard',
+                auth: 'farmer',
+                system: 'settings',
+                error: 'shield-alert',
+              };
+              return {
+                id: doc.id,
+                text: `${data.action}${data.details ? ` — ${data.details}` : ''}`,
+                time: timeStr,
+                icon: iconMap[data.type] || 'clock',
+                route: '/(admin)/home/logs',
+                rawTime: rawMs,
+              };
+            });
+            setActivities(logItems);
+          }
+          setActivitiesLoading(false);
+        },
+        (err) => {
+          console.warn('Logs listen error:', err.message);
+          setActivitiesLoading(false);
+        },
+      );
+
+    return () => unsubLogs();
+  }, []);
+
   const statsList = [
     {
       icon: "farmer" as IconName,
@@ -424,7 +380,7 @@ export default function AdminHome() {
     {
       icon: "calendar" as IconName,
       value: appointmentsCount.toString(),
-      label: "Appointments",
+      label: "Appts & Consults",
       route: "/(admin)/home/appointments",
       bgColor: "#FFFFFF",
       iconColor: "#2E7D32",
@@ -565,12 +521,12 @@ export default function AdminHome() {
 
           <TouchableOpacity
             style={styles.activityHeader}
-            onPress={() => router.push("/(admin)/home/reports")}
+            onPress={() => router.push("/(admin)/home/logs")}
             activeOpacity={0.7}
           >
             <View style={styles.activityHeaderLeft}>
               <Icon name="clock" size={20} color={Colors.textSecondary} />
-              <Text style={styles.activityTitle}>Realtime Recent Activity</Text>
+              <Text style={styles.activityTitle}>Recent Activity Logs</Text>
             </View>
             <Icon name="chevron-right" size={20} color={Colors.textSecondary} />
           </TouchableOpacity>

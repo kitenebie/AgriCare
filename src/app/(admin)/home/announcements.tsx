@@ -6,6 +6,7 @@ import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/the
 import { Icon } from '@/components/ui';
 import { Collections } from '@/services/firebase';
 import { logCrud } from '@/services/logService';
+import { sendPushNotification } from '@/services/pushService';
 
 interface Announcement { id: string; title: string; content: string; audience: string; priority: string; createdAt?: any; }
 const AUDIENCES = ['all', 'farmers', 'technicians'];
@@ -43,6 +44,22 @@ export default function AnnouncementsPage() {
       } else {
         await firestore().collection(Collections.ANNOUNCEMENTS).add({ title: title.trim(), content: content.trim(), audience, priority, createdBy: 'admin_001', createdAt: firestore.FieldValue.serverTimestamp() });
         await logCrud('Announcement Created', `Added: ${title.trim()}`, 'announcements');
+
+        // Send FCM push to target audience
+        try {
+          let query = firestore().collection(Collections.USERS).where('status', '==', 'active');
+          if (audience === 'farmers') query = query.where('role', '==', 'farmer');
+          else if (audience === 'technicians') query = query.where('role', '==', 'technician');
+          const usersSnap = await query.get();
+          const pushPromises = usersSnap.docs.map(doc =>
+            sendPushNotification(doc.id, {
+              title: `📢 ${title.trim()}`,
+              body: content.trim().substring(0, 120),
+              data: { type: 'announcement', priority },
+            })
+          );
+          await Promise.all(pushPromises);
+        } catch (pushErr) { console.warn('Push notification failed:', pushErr); }
       }
       setModal(false); reset();
     } catch (e: any) { Alert.alert('Error', e.message); }

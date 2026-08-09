@@ -1,3 +1,22 @@
+## [5.2.0] - 2026-08-09 (Sun)
+### Added
+- **Knowledge Base Shared Component** (`src/components/shared/KnowledgeBaseScreen.tsx`) — All roles (admin, farmer, technician) can read, search, and add articles. Author can edit/delete own; admin has full control. Category filter, search, tap-to-expand, view counter.
+- **Community Forum Shared Component** (`src/components/shared/ForumScreen.tsx`) — All roles can create posts, reply, and like. Threaded replies with author avatars. Author edit/delete own posts/replies; admin full control.
+- **Farmer Knowledge Base route** (`(farmer)/home/knowledge-base.tsx`)
+- **Farmer Forum route** (`(farmer)/home/forum.tsx`)
+- **Technician Knowledge Base route** (`(technician)/dashboard/knowledge-base.tsx`)
+- **Technician Forum route** (`(technician)/dashboard/forum.tsx`)
+- **Admin KB & Forum refactored** — Now use shared components (same codebase, role-based permissions)
+
+### Changed
+- **Admin "Appointments" renamed to "Appointments & Consultations"** — Merged into single page, removed separate Consultations grid item and route
+- **Removed `@notifee/react-native`** — Foreground notifications use Alert.alert instead
+
+### Fixed
+- **`_layout.tsx` bundler crash** — Removed unused `@notifee/react-native` import
+
+---
+
 ## [5.1.0] - 2026-08-09 (Eve)
 ### Added
 - **Supabase Edge Function for FCM Push** (`supabase/functions/send-push/index.ts`) — Deployed function that receives FCM tokens and sends push notifications via Firebase FCM v1 API using service account JWT authentication. No Firestore `pushQueue` needed.

@@ -136,6 +136,7 @@ export default function HomeScreen() {
           <QuickAccessItem iconName="calendar" label="Appointments" onPress={() => router.push('/(farmer)/home/appointments')} />
           <QuickAccessItem iconName="clipboard" label={"Health\nRecords"} onPress={() => router.push('/(farmer)/home/health-records')} />
           <QuickAccessItem iconName="farmer" label="Technicians" onPress={() => router.push('/(farmer)/home/technicians')} />
+          <QuickAccessItem iconName="bell" label={"Announcements\n& Bulletins"} onPress={() => router.push('/(farmer)/home/announcements')} />
         </View>
       </Animated.View>
 

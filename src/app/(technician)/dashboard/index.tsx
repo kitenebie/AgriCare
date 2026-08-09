@@ -94,7 +94,7 @@ export default function TechDashboardScreen() {
           .where("date", ">=", today)
           .get();
         const upcomingAppointments = upcomingSnap.size;
-        // Count overdue (confirmed + date < today — past schedule na hindi na-complete)
+        // Count overdue (confirmed + date < today â€” past schedule na hindi na-complete)
         const overdueSnap = await firestore()
           .collection(Collections.APPOINTMENTS)
           .where("technicianId", "==", uid)
@@ -229,6 +229,11 @@ export default function TechDashboardScreen() {
             onPress={() =>
               router.push("/(technician)/dashboard/health-records")
             }
+          />
+          <QuickAccessItem
+            iconName="bell"
+            label={"Announcements\n& Bulletins"}
+            onPress={() => router.push("/(technician)/dashboard/announcements")}
           />
         </View>
       </Animated.View>

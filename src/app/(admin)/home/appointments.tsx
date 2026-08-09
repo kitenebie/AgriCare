@@ -342,7 +342,7 @@ export default function AdminAppointmentsScreen() {
             />
           </TouchableOpacity>
 
-          <Text style={styles.headerTitle}>Appointment Records</Text>
+          <Text style={styles.headerTitle}>Appointments & Consultations</Text>
 
           <View style={styles.readOnlyBadge}>
             <Icon name="lock" size={12} color="#15803D" />

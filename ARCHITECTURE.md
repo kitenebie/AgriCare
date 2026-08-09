@@ -55,12 +55,14 @@ src/
 │   ├── (technician)/      # Technician tab navigator (5 tabs)
 │   │   ├── dashboard/ | appointments/ | schedule/ | messages/ | profile/
 ├── components/       # ui/ | cards/ | map/ | layout/
+│   └── shared/       # Cross-role screens (KnowledgeBaseScreen, ForumScreen)
 ├── services/         # Firebase service functions
 ├── constants/        # Theme tokens
 ├── hooks/            # Animation hooks
 ├── types/            # TypeScript interfaces
 ├── data/             # Local mock data (fallback)
-└── utils/            # Helpers
+├── utils/            # Helpers (supabase client)
+└── supabase/functions/  # Edge Functions (send-push)
 ```
 
 ## Data Flow

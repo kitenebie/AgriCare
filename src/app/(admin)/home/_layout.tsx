@@ -6,7 +6,6 @@ export default function AdminHomeLayout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="knowledge-base" />
       <Stack.Screen name="appointments" />
-      <Stack.Screen name="consultations" />
       <Stack.Screen name="users" />
       <Stack.Screen name="reports" />
       <Stack.Screen name="message-reports" />
