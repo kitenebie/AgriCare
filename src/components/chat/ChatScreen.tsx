@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
+  KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
+import { modalAlert } from '@/components/ui/ModalAlert';
 import Animated, {
   useSharedValue, useAnimatedStyle, withRepeat, withTiming, withDelay, withSequence,
 } from 'react-native-reanimated';
@@ -150,6 +151,7 @@ export default function ChatScreen() {
   const [isOtherTyping, setIsOtherTyping] = useState(false);
   const [userRole, setUserRole] = useState('');
   const flatListRef = useRef<FlatList>(null);
+  const uidRef = useRef('');
 
   // Rating state (farmer side)
   const [showRatingCard, setShowRatingCard] = useState(false);
@@ -167,6 +169,7 @@ export default function ChatScreen() {
       const session = await getSession();
       if (!session) { setLoading(false); return; }
       setUid(session.uid);
+      uidRef.current = session.uid;
       setMyName(session.displayName || 'Me');
       setUserRole(session.role || 'farmer');
 
@@ -286,7 +289,7 @@ export default function ChatScreen() {
       // Check if technician has a completed appointment with this farmer
       const appointment = await getCompletedAppointment(uid, otherUserId);
       if (!appointment) {
-        Alert.alert(
+        modalAlert(
           'No Appointment Found',
           'You can only send a rate request to farmers you have a confirmed appointment with.',
         );
@@ -365,7 +368,7 @@ export default function ChatScreen() {
 
   // ─── Report Message Handler ───
   const handleReportMessage = (message: ChatMessage) => {
-    Alert.alert(
+    modalAlert(
       '⚠️ Report Message',
       'Are you sure you want to report this message as offensive or inappropriate? This will be reviewed by an admin.',
       [
@@ -417,9 +420,9 @@ export default function ChatScreen() {
               });
               await Promise.all(notifyPromises);
 
-              Alert.alert('Reported', 'Your report has been submitted. An admin will review it.');
+              modalAlert('Reported', 'Your report has been submitted. An admin will review it.');
             } catch (e: any) {
-              Alert.alert('Error', 'Failed to submit report. Please try again.');
+              modalAlert('Error', 'Failed to submit report. Please try again.');
             }
           },
         },
@@ -432,7 +435,7 @@ export default function ChatScreen() {
   const isRateRequestMessage = (text: string) => text.startsWith('⭐ Rate Request');
 
   const renderMessage = ({ item, index }: { item: ChatMessage; index: number }) => {
-    const isMe = item.senderId === uid;
+    const isMe = item.senderId !== '' && item.senderId === uid;
     const showDivider = shouldShowDateDivider(index);
     const isRating = isRatingMessage(item.text);
     const isRequest = isRateRequestMessage(item.text);
@@ -519,7 +522,7 @@ export default function ChatScreen() {
       </View>
 
       {/* Messages */}
-      {loading ? (
+      {loading || !uid ? (
         <View style={s.center}><ActivityIndicator size="large" color={Colors.primary} /></View>
       ) : (
         <FlatList
@@ -528,6 +531,7 @@ export default function ChatScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
           inverted
+          extraData={uid}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={s.messagesList}
           ListEmptyComponent={

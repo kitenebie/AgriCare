@@ -16,7 +16,6 @@ import { useEffect, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Modal,
   ScrollView,
@@ -26,6 +25,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { modalAlert } from '@/components/ui/ModalAlert';
 
 export interface LivestockCategory {
   id: string;
@@ -177,7 +177,7 @@ export default function LivestockCategoriesScreen() {
         }
       }
     } catch (err: any) {
-      Alert.alert("Image Error", err.message || "Failed to pick image.");
+      modalAlert("Image Error", err.message || "Failed to pick image.");
       setUploadingImage(false);
     }
   };
@@ -198,7 +198,7 @@ export default function LivestockCategoriesScreen() {
   // ─── Save to Firestore ───
   const handleSave = async () => {
     if (!formName.trim()) {
-      Alert.alert("Missing Name", "Please enter a category name.");
+      modalAlert("Missing Name", "Please enter a category name.");
       return;
     }
 
@@ -282,7 +282,7 @@ export default function LivestockCategoriesScreen() {
 
   // ─── Delete Category ───
   const handleDelete = (id: string, name: string) => {
-    Alert.alert("Delete Category", `Are you sure you want to delete "${name}"?`, [
+    modalAlert("Delete Category", `Are you sure you want to delete "${name}"?`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",

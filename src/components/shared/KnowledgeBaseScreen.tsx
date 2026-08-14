@@ -9,7 +9,8 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, ActivityIndicator } from 'react-native';
+import { modalAlert } from '@/components/ui/ModalAlert';
 import firestore from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
@@ -88,7 +89,7 @@ export default function KnowledgeBaseScreen() {
   };
 
   const handleSave = async () => {
-    if (!title.trim() || !content.trim()) { Alert.alert('Error', 'Title and content required.'); return; }
+    if (!title.trim() || !content.trim()) { modalAlert('Error', 'Title and content required.'); return; }
     setSaving(true);
     try {
       if (editId) {
@@ -96,7 +97,7 @@ export default function KnowledgeBaseScreen() {
           title: title.trim(),
           category,
           content: content.trim(),
-          updatedAt: firestore.FieldValue.serverTimestamp(),
+          updatedAt: firestore.FieldValue.serverTimestamp()
         });
         await logCrud('Article Updated', `Updated: ${title.trim()}`, 'knowledgeBase', editId);
       } else {
@@ -108,7 +109,7 @@ export default function KnowledgeBaseScreen() {
           authorName: currentUser.name,
           authorRole: currentUser.role,
           views: 0,
-          createdAt: firestore.FieldValue.serverTimestamp(),
+          createdAt: firestore.FieldValue.serverTimestamp()
         });
         await logCrud('Article Created', `Added: ${title.trim()}`, 'knowledgeBase');
 
@@ -120,25 +121,25 @@ export default function KnowledgeBaseScreen() {
             .map(doc => sendPushNotification(doc.id, {
               title: `📚 New Knowledge Base Article`,
               body: `${currentUser.name} published: ${title.trim()}`,
-              data: { type: 'knowledge_base', category },
+              data: { type: 'knowledge_base', category }
             }));
           await Promise.all(pushPromises);
         } catch (pushErr) { console.warn('KB push failed:', pushErr); }
       }
       setModal(false);
       reset();
-    } catch (e: any) { Alert.alert('Error', e.message); }
+    } catch (e: any) { modalAlert('Error', e.message); }
     finally { setSaving(false); }
   };
 
   const handleDelete = (id: string, name: string) => {
-    Alert.alert('Delete Article', `Delete "${name}"?`, [
+    modalAlert('Delete Article', `Delete "${name}"?`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
         try {
           await firestore().collection(Collections.KNOWLEDGE_BASE).doc(id).delete();
           await logCrud('Article Deleted', `Deleted: ${name}`, 'knowledgeBase', id);
-        } catch (e: any) { Alert.alert('Error', e.message); }
+        } catch (e: any) { modalAlert('Error', e.message); }
       }},
     ]);
   };
@@ -146,18 +147,17 @@ export default function KnowledgeBaseScreen() {
   const incrementViews = async (id: string) => {
     try {
       await firestore().collection(Collections.KNOWLEDGE_BASE).doc(id).update({
-        views: firestore.FieldValue.increment(1),
+        views: firestore.FieldValue.increment(1)
       });
     } catch (e) {}
   };
 
-  const toggleExpand = (id: string) => {
-    if (expanded === id) {
-      setExpanded(null);
-    } else {
-      setExpanded(id);
-      incrementViews(id);
-    }
+  const openArticle = (articleId: string) => {
+    // Determine route prefix based on current user's role
+    let prefix = '/(farmer)/home';
+    if (currentUser.role === 'admin') prefix = '/(admin)/home';
+    else if (currentUser.role === 'technician') prefix = '/(technician)/dashboard';
+    router.push({ pathname: `${prefix}/knowledge-base-view`, params: { id: articleId } } as any);
   };
 
   const getRoleColor = (role?: string) => role === 'admin' ? '#1565C0' : role === 'technician' ? '#2E7D32' : '#E65100';
@@ -206,7 +206,7 @@ export default function KnowledgeBaseScreen() {
           </View>
         )}
         {filtered.map(a => (
-          <TouchableOpacity key={a.id} style={s.card} onPress={() => toggleExpand(a.id)} activeOpacity={0.7}>
+          <TouchableOpacity key={a.id} style={s.card} onPress={() => openArticle(a.id)} activeOpacity={0.7}>
             <View style={s.cardHeader}>
               <View style={s.cardInfo}>
                 <Text style={s.cardTitle}>{a.title}</Text>
@@ -332,5 +332,5 @@ const s = StyleSheet.create({
   catBtnText: { fontSize: 12, color: Colors.textSecondary },
   catBtnTextActive: { color: Colors.white, fontWeight: '700' },
   saveBtn: { backgroundColor: Colors.primary, borderRadius: BorderRadius.full, paddingVertical: Spacing.lg, alignItems: 'center', marginTop: Spacing.xxl },
-  saveBtnText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '700' },
+  saveBtnText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '700' }
 });

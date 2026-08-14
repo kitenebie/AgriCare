@@ -16,7 +16,6 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Dimensions,
   Image,
   Modal,
@@ -27,6 +26,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { modalAlert } from '@/components/ui/ModalAlert';
 
 interface Animal {
   id: string;
@@ -144,14 +144,14 @@ export default function MyAnimalsPage() {
 
   const handlePickImage = async () => {
     try {
-      Alert.alert("Add Photo", "Choose an option", [
+      modalAlert("Add Photo", "Choose an option", [
         {
           text: "Camera",
           onPress: async () => {
             const { status } =
               await ImagePicker.requestCameraPermissionsAsync();
             if (status !== "granted") {
-              Alert.alert(
+              modalAlert(
                 "Permission Denied",
                 "Camera permission is required.",
               );
@@ -176,13 +176,13 @@ export default function MyAnimalsPage() {
         { text: "Cancel", style: "cancel" },
       ]);
     } catch (e: any) {
-      Alert.alert("Error", e.message);
+      modalAlert("Error", e.message);
     }
   };
 
   const handleSave = async () => {
     if (!formName.trim()) {
-      Alert.alert("Error", "Animal name is required.");
+      modalAlert("Error", "Animal name is required.");
       return;
     }
     setSaving(true);
@@ -236,9 +236,9 @@ export default function MyAnimalsPage() {
       );
       setModal(false);
       resetForm();
-      Alert.alert("Success", "Animal registered!");
+      modalAlert("Success", "Animal registered!");
     } catch (e: any) {
-      Alert.alert("Error", e.message);
+      modalAlert("Error", e.message);
     } finally {
       setSaving(false);
     }
@@ -264,7 +264,7 @@ export default function MyAnimalsPage() {
 
   const handleUpdate = async () => {
     if (!editingAnimal || !formName.trim()) {
-      Alert.alert('Error', 'Animal name is required.');
+      modalAlert('Error', 'Animal name is required.');
       return;
     }
     setSaving(true);
@@ -295,9 +295,9 @@ export default function MyAnimalsPage() {
       setModal(false);
       setEditingAnimal(null);
       resetForm();
-      Alert.alert('Success', 'Animal updated!');
+      modalAlert('Success', 'Animal updated!');
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      modalAlert('Error', e.message);
     } finally {
       setSaving(false);
     }
@@ -305,15 +305,15 @@ export default function MyAnimalsPage() {
 
   // ─── DELETE ANIMAL ───
   const handleDelete = (animal: Animal) => {
-    Alert.alert('Delete Animal', `Are you sure you want to remove "${animal.name}" from your list?`, [
+    modalAlert('Delete Animal', `Are you sure you want to remove "${animal.name}" from your list?`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
         try {
           await firestore().collection('animals').doc(animal.id).delete();
           await logCrud('Animal Deleted', `Removed: ${animal.name} (${animal.breed})`, 'animals', animal.id);
-          Alert.alert('Deleted', `${animal.name} has been removed.`);
+          modalAlert('Deleted', `${animal.name} has been removed.`);
         } catch (e: any) {
-          Alert.alert('Error', e.message);
+          modalAlert('Error', e.message);
         }
       }},
     ]);
@@ -441,7 +441,7 @@ export default function MyAnimalsPage() {
                 }}
               >
                 <Icon
-                  name={step > 1 ? "chevron-right" : "close"}
+                  name={step > 1 ? "chevron-left" : ""}
                   size={22}
                   color={Colors.text}
                   style={
@@ -456,7 +456,9 @@ export default function MyAnimalsPage() {
                     ? "Select Breed"
                     : editingAnimal ? "Edit Animal" : "Animal Details"}
               </Text>
-              <Text style={s.stepIndicator}>Step {step}/3</Text>
+              <TouchableOpacity onPress={() => { setModal(false); }}>
+                <Icon name="close" size={22} color={Colors.text} />
+              </TouchableOpacity>
             </View>
 
             {/* Step 1: Category Grid */}
@@ -808,7 +810,7 @@ const s = StyleSheet.create({
     overflow: "hidden",
     ...Shadow.light,
   },
-  cardImg: { width: 90, height: 90 },
+  cardImg: { width: 100, alignSelf: 'stretch' },
   cardImgPlaceholder: {
     backgroundColor: "#F1F5F9",
     justifyContent: "center",

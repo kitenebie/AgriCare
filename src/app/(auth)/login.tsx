@@ -6,11 +6,11 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { modalAlert } from '@/components/ui/ModalAlert';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -18,6 +18,8 @@ import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/the
 import { Icon } from '@/components/ui';
 import { signIn, getUser } from '@/services/authService';
 import { saveSession, getRouteForRole, hasBiometricsBeenAsked } from '@/services/sessionService';
+import { requestAllPermissions } from '@/services/permissionService';
+import { registerDeviceToken } from '@/services/notificationService';
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
@@ -28,7 +30,7 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert('Error', 'Please fill in all fields.');
+      modalAlert('Error', 'Please fill in all fields.');
       return;
     }
 
@@ -62,7 +64,7 @@ export default function LoginScreen() {
 
       // ─── Check if user is banned or deactivated ───
       if (profile?.status === 'deactivated') {
-        Alert.alert(
+        modalAlert(
           '🚫 Account Deactivated',
           'Your account has been permanently deactivated due to violation of community guidelines. Contact support for appeal.',
         );
@@ -74,7 +76,7 @@ export default function LoginScreen() {
         const banUntilDate = profile.banUntil.toDate ? profile.banUntil.toDate() : new Date(profile.banUntil);
         if (banUntilDate > new Date()) {
           const formattedDate = banUntilDate.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
-          Alert.alert(
+          modalAlert(
             '⛔ Account Suspended',
             `Your account is suspended until ${formattedDate} due to violation of community guidelines.`,
           );
@@ -86,6 +88,10 @@ export default function LoginScreen() {
 
       const role = profile?.role || 'farmer';
       console.log('🔐 Role detected:', role);
+
+      // Request permissions (Calendar, Notifications) + register FCM token
+      await requestAllPermissions();
+      await registerDeviceToken(user.uid);
 
       // Check if biometrics setup has been shown
       const biometricsAsked = await hasBiometricsBeenAsked();
@@ -109,7 +115,7 @@ export default function LoginScreen() {
       } else if (error.code === 'auth/too-many-requests') {
         message = 'Too many attempts. Please try again later.';
       }
-      Alert.alert('Login Failed', message);
+      modalAlert('Login Failed', message);
     } finally {
       setLoading(false);
     }
@@ -168,7 +174,7 @@ export default function LoginScreen() {
               secureTextEntry={!showPassword}
             />
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-              <Icon name={showPassword ? 'close' : 'search'} size={20} color={Colors.textSecondary} />
+              <Icon name={showPassword ? 'close-eye' : 'eye'} size={20} color={Colors.textSecondary} />
             </TouchableOpacity>
           </View>
 

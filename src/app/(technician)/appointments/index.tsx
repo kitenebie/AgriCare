@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { modalAlert } from '@/components/ui/ModalAlert';
 import Animated from 'react-native-reanimated';
 import firestore from '@react-native-firebase/firestore';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
@@ -62,11 +63,15 @@ export default function TechAppointmentsScreen() {
           (snap) => {
             let data = snap.docs
               .map(d => ({ id: d.id, ...d.data() } as Appointment))
-              .filter(a => !a.technicianId || a.technicianId === '' || a.technicianName === 'Unassigned');
+              .filter(a => !a.technicianId || a.technicianId === '' || a.technicianId === session.uid || (a.technicianName || '').toLowerCase() === 'unassigned');
 
             // Filter by technician's specialization
             if (expertise.length > 0) {
               data = data.filter(a => {
+                // Always show appointments specifically assigned to this technician
+                if (a.technicianId === session.uid) return true;
+                // Always show unassigned/open appointments (any technician can take them)
+                if (!a.technicianId || a.technicianId === '' || (a.technicianName || '').toLowerCase() === 'unassigned') return true;
                 const svc = (a.serviceType || '').toLowerCase();
                 return expertise.some(exp => {
                   const expLower = exp.toLowerCase();
@@ -101,7 +106,7 @@ export default function TechAppointmentsScreen() {
     return () => unsub();
   }, []);
   const handleAccept = (appt: Appointment) => {
-    Alert.alert('Accept Request', `Accept "${appt.serviceType}" for ${appt.farmerName}?`, [
+    modalAlert('Accept Request', `Accept "${appt.serviceType}" for ${appt.farmerName}?`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Accept', onPress: async () => {
         try {
@@ -114,15 +119,15 @@ export default function TechAppointmentsScreen() {
             farmerId: appt.farmerId,
             farmerName: appt.farmerName,
             technicianId: uid,
-            technicianName: userName,
+            technicianName: userName
           });
-          Alert.alert('Accepted! ✅', `You've accepted the request. A message has been sent to ${appt.farmerName}.`);
-        } catch (e: any) { Alert.alert('Error', e.message); }
+          modalAlert('Accepted! ✅', `You've accepted the request. A message has been sent to ${appt.farmerName}.`);
+        } catch (e: any) { modalAlert('Error', e.message); }
       }},
     ]);
   };
   const handleDecline = (appt: Appointment) => {
-    Alert.alert('Decline Request', `Decline "${appt.serviceType}" for ${appt.farmerName}?`, [
+    modalAlert('Decline Request', `Decline "${appt.serviceType}" for ${appt.farmerName}?`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Decline', style: 'destructive', onPress: async () => {
         try {
@@ -133,9 +138,9 @@ export default function TechAppointmentsScreen() {
             farmerId: appt.farmerId,
             farmerName: appt.farmerName,
             technicianId: uid,
-            technicianName: userName,
+            technicianName: userName
           });
-        } catch (e: any) { Alert.alert('Error', e.message); }
+        } catch (e: any) { modalAlert('Error', e.message); }
       }},
     ]);
   };
@@ -267,5 +272,5 @@ const s = StyleSheet.create({
   acceptBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: Colors.primary, paddingVertical: Spacing.md, borderRadius: BorderRadius.md },
   acceptBtnText: { color: Colors.white, fontWeight: '700', fontSize: FontSize.md },
   declineBtn: { flex: 0.7, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#FEE2E2', paddingVertical: Spacing.md, borderRadius: BorderRadius.md },
-  declineBtnText: { color: Colors.error, fontWeight: '700', fontSize: FontSize.md },
+  declineBtnText: { color: Colors.error, fontWeight: '700', fontSize: FontSize.md }
 });

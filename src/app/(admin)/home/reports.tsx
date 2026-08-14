@@ -6,8 +6,8 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
+import { modalAlert } from '@/components/ui/ModalAlert';
 import firestore from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
@@ -59,7 +59,7 @@ export default function ReportsPage() {
 
   const handleUpdateStatus = (report: Report, newStatus: 'resolved' | 'dismissed') => {
     const label = newStatus === 'resolved' ? 'Resolve' : 'Dismiss';
-    Alert.alert(`${label} Report`, `Mark this report as ${newStatus}?`, [
+    modalAlert(`${label} Report`, `Mark this report as ${newStatus}?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: label,
@@ -75,7 +75,7 @@ export default function ReportsPage() {
             );
             await logCrud('Report Status Updated', `Report ${newStatus}: ${report.description.slice(0, 50)}`, 'reports', report.id);
           } catch (err: any) {
-            Alert.alert('Error', err.message || 'Failed to update.');
+            modalAlert('Error', err.message || 'Failed to update.');
           }
         },
       },

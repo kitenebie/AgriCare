@@ -25,3 +25,23 @@
 | Service file | camelCase (`chatService.ts`) |
 | Hook file | camelCase + `use` prefix |
 | Type/Interface | PascalCase |
+
+## Alerts & Notifications
+- **NEVER use `Alert.alert()`** — Use `modalAlert()` from `@/components/ui/ModalAlert`
+- Import: `import { modalAlert } from '@/components/ui/ModalAlert';`
+- Same API: `modalAlert(title, message?, buttons?, type?)`
+- Types auto-detect from title: `'success'|'error'|'warning'|'info'|'confirm'`
+- Buttons: `[{ text: string, style?: 'default'|'cancel'|'destructive', onPress?: () => void }]`
+
+## In-App Chat Notifications (Toast)
+- For foreground incoming messages, use `showChatToast()` from `@/components/ui/ToastNotification`
+- Import: `import { showChatToast } from '@/components/ui/ToastNotification';`
+- API: `showChatToast({ senderName, message, senderPhoto?, onPress? })`
+- Max 320 characters displayed; auto-dismisses in 5s
+
+## Provider Setup (_layout.tsx)
+- `<ModalAlertProvider>` and `<ToastNotificationProvider>` must wrap the app's `<Stack>`
+- Both are already set up in `src/app/_layout.tsx`
+
+## UI Components (`src/components/ui/`)
+- Available: `Avatar`, `Badge`, `Button`, `Card`, `Icon`, `LeafDecor`, `ModalAlert`, `ToastNotification`, `DatePickerModal`, `TimePickerModal`

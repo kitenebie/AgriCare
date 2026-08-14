@@ -13,7 +13,7 @@
 │  (technician)→ Dashboard|Requests|Schedule|Msgs|Prof│
 ├─────────────────────────────────────────────────────┤
 │  Component Layer (components/)                       │
-│  ui/ | cards/ | map/ | layout/                      │
+│  ui/ | cards/ | chat/ | shared/ | map/ | layout/    │
 ├─────────────────────────────────────────────────────┤
 │  Service Layer (services/)                           │
 │  auth | firestore | chat | storage | notifications  │
@@ -54,8 +54,10 @@ src/
 │   │   ├── home/ | map/ | services/ | messages/ | profile/
 │   ├── (technician)/      # Technician tab navigator (5 tabs)
 │   │   ├── dashboard/ | appointments/ | schedule/ | messages/ | profile/
-├── components/       # ui/ | cards/ | map/ | layout/
-│   └── shared/       # Cross-role screens (KnowledgeBaseScreen, ForumScreen)
+├── components/       # ui/ | cards/ | chat/ | shared/ | map/ | layout/
+│   ├── ui/           # ModalAlert, ToastNotification, Avatar, Badge, Button, Card, Icon, LeafDecor
+│   ├── chat/         # ChatScreen (shared messaging UI)
+│   └── shared/       # Cross-role screens (KnowledgeBaseScreen, ForumScreen, ForumViewScreen)
 ├── services/         # Firebase service functions
 ├── constants/        # Theme tokens
 ├── hooks/            # Animation hooks

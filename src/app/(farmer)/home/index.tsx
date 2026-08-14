@@ -49,26 +49,19 @@ export default function HomeScreen() {
         const animalsSnap = await firestore().collection('animals').where('ownerId', '==', uid).get();
         const totalAnimals = animalsSnap.size;
 
-        // Count pending appointments
-        const pendingSnap = await firestore().collection(Collections.APPOINTMENTS)
+        // Single-field query + client-side filter to avoid composite index
+        const apptSnap = await firestore().collection(Collections.APPOINTMENTS)
           .where('farmerId', '==', uid)
-          .where('status', '==', 'pending')
           .get();
-        const pendingServices = pendingSnap.size;
+        const myAppts = apptSnap.docs.map(d => d.data());
+        const pendingServices = myAppts.filter(a => a.status === 'pending').length;
+        const upcomingVisits = myAppts.filter(a => a.status === 'confirmed').length;
 
-        // Count upcoming appointments (confirmed)
-        const upcomingSnap = await firestore().collection(Collections.APPOINTMENTS)
-          .where('farmerId', '==', uid)
-          .where('status', '==', 'confirmed')
-          .get();
-        const upcomingVisits = upcomingSnap.size;
-
-        // Count emergency/health alerts
+        // Single-field query + client-side filter for emergency requests
         const alertsSnap = await firestore().collection(Collections.EMERGENCY_REQUESTS)
           .where('farmerId', '==', uid)
-          .where('status', '==', 'active')
           .get();
-        const healthAlerts = alertsSnap.size;
+        const healthAlerts = alertsSnap.docs.filter(d => d.data().status === 'active').length;
 
         setFarmData({ totalAnimals, pendingServices, upcomingVisits, healthAlerts });
 
@@ -98,7 +91,7 @@ export default function HomeScreen() {
           <Text style={styles.role}>Farmer</Text>
         </View>
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.notifButton}>
+          <TouchableOpacity style={styles.notifButton} onPress={() => router.push('/(farmer)/messages?tab=notifications')}>
             <Icon name="bell" size={24} color={Colors.white} />
             {notifCount > 0 && (
               <View style={styles.notifBadge}>
@@ -137,6 +130,8 @@ export default function HomeScreen() {
           <QuickAccessItem iconName="clipboard" label={"Health\nRecords"} onPress={() => router.push('/(farmer)/home/health-records')} />
           <QuickAccessItem iconName="farmer" label="Technicians" onPress={() => router.push('/(farmer)/home/technicians')} />
           <QuickAccessItem iconName="bell" label={"Announcements\n& Bulletins"} onPress={() => router.push('/(farmer)/home/announcements')} />
+          <QuickAccessItem iconName="clipboard" label={"Knowledge\nBase"} onPress={() => router.push('/(farmer)/home/knowledge-base')} />
+          <QuickAccessItem iconName="messages" label={"Community\nForum"} onPress={() => router.push('/(farmer)/home/forum')} />
         </View>
       </Animated.View>
 

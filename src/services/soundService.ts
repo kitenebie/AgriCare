@@ -1,131 +1,139 @@
 /**
- * Sound Service — In-app notification sounds
- * 
- * Uses expo-av to play sounds when the app is in foreground.
- * For background notifications, Android uses the sound files
- * placed in android/app/src/main/res/raw/
- * 
- * Sounds:
- * - new_chat.mp3 → new chat messages
- * - notification.mp3 → all other notifications (announcements, forum, knowledge base, etc.)
- * - typing.mp3 → typing indicator loop (plays while other user is typing)
+ * Sound Service — In-app notification sounds using expo-audio
+ *
+ * assets/app/new-chat.mp3    → plays when a new chat message arrives (foreground + push)
+ * assets/app/notification.mp3 → plays for non-chat push notifications (foreground)
+ * assets/app/typing.mp3      → loops while the other user is typing in 1-on-1 chat
  */
 
-import { Audio } from 'expo-av';
+import { createAudioPlayer, setAudioModeAsync, AudioPlayer } from 'expo-audio';
 
-let chatSound: Audio.Sound | null = null;
-let notifSound: Audio.Sound | null = null;
-let typingSound: Audio.Sound | null = null;
+// ——— Sound sources ———
+const SOUND_NEW_CHAT = require('../../assets/app/new-chat.mp3');
+const SOUND_NOTIFICATION = require('../../assets/app/notification.mp3');
+const SOUND_TYPING = require('../../assets/app/typing.mp3');
+
+// ——— Sound instances (cached for reuse) ———
+let newChatPlayer: AudioPlayer | null = null;
+let notificationPlayer: AudioPlayer | null = null;
+let typingPlayer: AudioPlayer | null = null;
+let typingPlaying = false;
+let audioModeSet = false;
+
+// ——— Helpers ———
+
+/** Ensure audio mode allows playback even in silent mode (important for notifications) */
+const ensureAudioMode = async () => {
+  if (audioModeSet) return;
+  try {
+    await setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: false,
+      interruptionMode: 'mixWithOthers',
+    });
+    audioModeSet = true;
+  } catch (e) {
+    console.warn('[SoundService] setAudioModeAsync failed:', e);
+  }
+};
+
+/** Helper to play a sound with a cached player */
+const playWithPlayer = async (
+  source: any,
+  getPlayer: () => AudioPlayer | null,
+  setPlayer: (p: AudioPlayer) => void,
+  loop: boolean = false
+): Promise<void> => {
+  await ensureAudioMode();
+  let player = getPlayer();
+  if (!player) {
+    player = createAudioPlayer(source);
+    player.loop = loop;
+    setPlayer(player);
+  }
+  // Replace source to reset position and play from beginning
+  player.replace(source);
+  player.play();
+};
+
+// ——— Public API ———
 
 /**
- * Play the new chat message sound (in-app / foreground)
+ * Play new-chat.mp3 — called when a new chat message notification arrives
+ * (works both when the app is open and from push notification foreground handler)
  */
 export const playNewChatSound = async (): Promise<void> => {
   try {
-    if (chatSound) {
-      await chatSound.unloadAsync();
-      chatSound = null;
-    }
-
-    const { sound } = await Audio.Sound.createAsync(
-      require('../../assets/app/new-chat.mp3'),
-      { shouldPlay: true, volume: 1.0 }
+    await playWithPlayer(
+      SOUND_NEW_CHAT,
+      () => newChatPlayer,
+      (p) => { newChatPlayer = p; }
     );
-    chatSound = sound;
-
-    sound.setOnPlaybackStatusUpdate((status) => {
-      if (status.isLoaded && status.didJustFinish) {
-        sound.unloadAsync();
-        chatSound = null;
-      }
-    });
-  } catch (error: any) {
-    console.warn('[Sound] Failed to play new chat sound:', error.message);
+  } catch (error) {
+    console.warn('[SoundService] Failed to play new-chat sound:', error);
   }
 };
 
 /**
- * Play the general notification sound (in-app / foreground)
- * Used for: announcements, forum posts, knowledge base articles, approvals, etc.
+ * Play notification.mp3 — called for push notifications that are NOT chat messages
+ * (e.g. admin approvals, service updates, reminders)
  */
 export const playNotificationSound = async (): Promise<void> => {
   try {
-    if (notifSound) {
-      await notifSound.unloadAsync();
-      notifSound = null;
-    }
-
-    const { sound } = await Audio.Sound.createAsync(
-      require('../../assets/app/notification.mp3'),
-      { shouldPlay: true, volume: 1.0 }
+    await playWithPlayer(
+      SOUND_NOTIFICATION,
+      () => notificationPlayer,
+      (p) => { notificationPlayer = p; }
     );
-    notifSound = sound;
-
-    sound.setOnPlaybackStatusUpdate((status) => {
-      if (status.isLoaded && status.didJustFinish) {
-        sound.unloadAsync();
-        notifSound = null;
-      }
-    });
-  } catch (error: any) {
-    console.warn('[Sound] Failed to play notification sound:', error.message);
+  } catch (error) {
+    console.warn('[SoundService] Failed to play notification sound:', error);
   }
 };
 
 /**
- * Start playing the typing indicator sound on loop
- * Loops until stopTypingSound() is called
+ * Start looping typing.mp3 — called when the other user starts typing
+ * in a 1-on-1 chat conversation (typing indicator / 3 dots visible)
  */
 export const startTypingSound = async (): Promise<void> => {
   try {
-    // Don't restart if already playing
-    if (typingSound) {
-      const status = await typingSound.getStatusAsync();
-      if (status.isLoaded && status.isPlaying) return;
-      await typingSound.unloadAsync();
-      typingSound = null;
+    if (typingPlaying) return; // already playing
+    await ensureAudioMode();
+    if (!typingPlayer) {
+      typingPlayer = createAudioPlayer(SOUND_TYPING);
+      typingPlayer.loop = true;
     }
-
-    const { sound } = await Audio.Sound.createAsync(
-      require('../../assets/app/typing.mp3'),
-      { shouldPlay: true, isLooping: true, volume: 0.6 }
-    );
-    typingSound = sound;
-  } catch (error: any) {
-    console.warn('[Sound] Failed to start typing sound:', error.message);
+    typingPlayer.replace(SOUND_TYPING);
+    typingPlayer.play();
+    typingPlaying = true;
+  } catch (error) {
+    console.warn('[SoundService] Failed to start typing sound:', error);
   }
 };
 
 /**
- * Stop the typing indicator sound loop
+ * Stop the typing sound loop — called when the other user stops typing
  */
 export const stopTypingSound = async (): Promise<void> => {
   try {
-    if (typingSound) {
-      await typingSound.stopAsync();
-      await typingSound.unloadAsync();
-      typingSound = null;
-    }
-  } catch (error: any) {
-    console.warn('[Sound] Failed to stop typing sound:', error.message);
+    if (!typingPlaying || !typingPlayer) return;
+    typingPlayer.pause();
+    typingPlaying = false;
+  } catch (error) {
+    console.warn('[SoundService] Failed to stop typing sound:', error);
   }
 };
 
 /**
- * Cleanup — call on app unmount if needed
+ * Release all cached players — call on app unmount to free resources
  */
 export const unloadSounds = async (): Promise<void> => {
-  if (chatSound) {
-    await chatSound.unloadAsync();
-    chatSound = null;
-  }
-  if (notifSound) {
-    await notifSound.unloadAsync();
-    notifSound = null;
-  }
-  if (typingSound) {
-    await typingSound.stopAsync();
-    await typingSound.unloadAsync();
-    typingSound = null;
+  try {
+    if (newChatPlayer) { newChatPlayer.remove(); newChatPlayer = null; }
+    if (notificationPlayer) { notificationPlayer.remove(); notificationPlayer = null; }
+    if (typingPlayer) { typingPlayer.remove(); typingPlayer = null; }
+    typingPlaying = false;
+    audioModeSet = false;
+  } catch (error) {
+    console.warn('[SoundService] Failed to unload sounds:', error);
   }
 };

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Modal, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Modal, FlatList } from 'react-native';
+import { modalAlert } from '@/components/ui/ModalAlert';
 import Animated from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import firestore from '@react-native-firebase/firestore';
@@ -98,9 +99,9 @@ export default function ServicesScreen() {
   };
 
   const handleSubmit = async () => {
-    if (!selectedService) { Alert.alert('Error', 'Please select a service type.'); return; }
-    if (!selectedAnimal) { Alert.alert('Error', 'Please select an animal.'); return; }
-    if (!selectedTime) { Alert.alert('Error', 'Please select a time slot.'); return; }
+    if (!selectedService) { modalAlert('Error', 'Please select a service type.'); return; }
+    if (!selectedAnimal) { modalAlert('Error', 'Please select an animal.'); return; }
+    if (!selectedTime) { modalAlert('Error', 'Please select a time slot.'); return; }
 
     setSubmitting(true);
     try {
@@ -125,15 +126,15 @@ export default function ServicesScreen() {
         status: 'pending',
         description: description.trim(),
         location: '',
-        createdAt: firestore.FieldValue.serverTimestamp(),
+        createdAt: firestore.FieldValue.serverTimestamp()
       });
       await logCrud('Service Requested', `${serviceName} for ${selectedAnimal.name}`, 'appointments', docRef.id, {
         old: {},
-        new: { serviceType: serviceName, animalName: selectedAnimal.name, date: dateStr, time: selectedTime, technician: selectedTech?.displayName || 'Any' },
+        new: { serviceType: serviceName, animalName: selectedAnimal.name, date: dateStr, time: selectedTime, technician: selectedTech?.displayName || 'Any' }
       });
-      Alert.alert('Success', 'Service request submitted! A technician will be assigned soon.');
+      modalAlert('Success', 'Service request submitted! A technician will be assigned soon.');
       setSelectedService(null); setSelectedAnimal(null); setDescription(''); setSelectedTime(''); setSelectedTech(null);
-    } catch (e: any) { Alert.alert('Error', e.message); }
+    } catch (e: any) { modalAlert('Error', e.message); }
     finally { setSubmitting(false); }
   };
 
@@ -323,5 +324,5 @@ const s = StyleSheet.create({
   listRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.md, borderBottomWidth: 0.5, borderBottomColor: Colors.border },
   listRowTitle: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   listRowSub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 1 },
-  emptyModal: { color: Colors.textLight, textAlign: 'center', paddingVertical: 40 },
+  emptyModal: { color: Colors.textLight, textAlign: 'center', paddingVertical: 40 }
 });

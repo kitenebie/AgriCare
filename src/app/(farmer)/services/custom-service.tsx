@@ -12,7 +12,6 @@ import firestore from "@react-native-firebase/firestore";
 import { getSession } from "@/services/sessionService";
 import {
   Dimensions,
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -20,6 +19,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { modalAlert } from '@/components/ui/ModalAlert';
 
 const SCREEN_W = Dimensions.get("window").width;
 const GRID_GAP = 10;
@@ -113,7 +113,7 @@ export default function CustomServiceScreen() {
       });
       router.back();
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      modalAlert('Error', e.message);
     } finally { setSaving(false); }
   };
 

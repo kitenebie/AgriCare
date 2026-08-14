@@ -1,3 +1,25 @@
+## [5.3.0] - 2026-08-14 (Fri)
+### Added
+- **Custom Modal Alert Component** (`src/components/ui/ModalAlert.tsx`) — Drop-in replacement for React Native's default `Alert.alert()`. Features: animated spring modal, auto-detects type (success/error/warning/info/confirm) from title, color-coded icon circle, styled buttons (primary/destructive/cancel), backdrop dismiss, Android back button handling.
+- **Toast Notification Component** (`src/components/ui/ToastNotification.tsx`) — Top-toast pop-up for incoming chat messages while app is open. Shows sender avatar + name + message (max 320 chars), slides from top with spring animation, auto-dismiss after 5 seconds, tap-to-navigate, green left accent border.
+- **`modalAlert()` global function** — Same API as `Alert.alert(title, message, buttons)` for seamless migration.
+- **`showChatToast()` global function** — Call with `{ senderName, message, senderPhoto?, onPress? }` for in-app chat notifications.
+- **`ModalAlertProvider` + `ToastNotificationProvider`** wrappers in `_layout.tsx`
+
+### Changed
+- **`_layout.tsx`** — Wrapped app in `ModalAlertProvider` + `ToastNotificationProvider`; foreground FCM chat messages now show as top-toast (not Alert), other notifications use `modalAlert()`
+- **Replaced ALL `Alert.alert()` calls** across 27 files with `modalAlert()`:
+  - `(admin)/` — home/announcements, livestock-categories, message-reports, reports, users, livestock/index, livestock/preview, profile/index
+  - `(auth)/` — biometric-setup, capture-id, login, register
+  - `(farmer)/` — home/my-animals, profile/index, services/custom-service, services/index
+  - `(technician)/` — appointments/index, dashboard/health-records/form, profile/index
+  - `components/` — BanGuard, chat/ChatScreen, shared/ForumScreen, shared/ForumViewScreen, shared/KnowledgeBaseScreen
+  - `hooks/` — useLocationTracking
+  - `screens/` — AddAnimalExample
+  - `services/` — calendarService
+
+---
+
 ## [5.2.0] - 2026-08-09 (Sun)
 ### Added
 - **Knowledge Base Shared Component** (`src/components/shared/KnowledgeBaseScreen.tsx`) — All roles (admin, farmer, technician) can read, search, and add articles. Author can edit/delete own; admin has full control. Category filter, search, tap-to-expand, view counter.

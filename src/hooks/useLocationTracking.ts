@@ -12,7 +12,8 @@
  */
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Platform, PermissionsAndroid, Alert, AppState } from 'react-native';
+import { Platform, PermissionsAndroid, AppState } from 'react-native';
+import { modalAlert } from '@/components/ui/ModalAlert';
 import * as Location from 'expo-location';
 import { updateLocation, clearLocation } from '@/services/locationService';
 import { getSession } from '@/services/sessionService';
@@ -54,7 +55,7 @@ export const useLocationTracking = (): UseLocationTrackingResult => {
         sessionRef.current = {
           uid: session.uid,
           role: session.role || 'farmer',
-          displayName: session.displayName || 'User',
+          displayName: session.displayName || 'User'
         };
       }
     };
@@ -94,7 +95,7 @@ export const useLocationTracking = (): UseLocationTrackingResult => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         setError('Location permission denied');
-        Alert.alert(
+        modalAlert(
           'Location Permission',
           'AgriCare needs access to your location to show your position on the map and help connect you with nearby services.',
           [{ text: 'OK' }]
@@ -118,7 +119,7 @@ export const useLocationTracking = (): UseLocationTrackingResult => {
           longitude: loc.longitude,
           heading: loc.heading,
           speed: loc.speed,
-          accuracy: loc.accuracy,
+          accuracy: loc.accuracy
         },
         sessionRef.current.role,
         sessionRef.current.displayName
@@ -141,7 +142,7 @@ export const useLocationTracking = (): UseLocationTrackingResult => {
       sessionRef.current = {
         uid: session.uid,
         role: session.role || 'farmer',
-        displayName: session.displayName || 'User',
+        displayName: session.displayName || 'User'
       };
     }
 
@@ -155,14 +156,14 @@ export const useLocationTracking = (): UseLocationTrackingResult => {
     try {
       // Get initial location
       const initialLoc = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
+        accuracy: Location.Accuracy.High
       });
       const initialData: LocationData = {
         latitude: initialLoc.coords.latitude,
         longitude: initialLoc.coords.longitude,
         heading: initialLoc.coords.heading || 0,
         speed: initialLoc.coords.speed || 0,
-        accuracy: initialLoc.coords.accuracy || 0,
+        accuracy: initialLoc.coords.accuracy || 0
       };
       setLocation(initialData);
       await pushLocationToFirebase(initialData);
@@ -172,7 +173,7 @@ export const useLocationTracking = (): UseLocationTrackingResult => {
         {
           accuracy: Location.Accuracy.High,
           timeInterval: UPDATE_INTERVAL,
-          distanceInterval: DISTANCE_FILTER,
+          distanceInterval: DISTANCE_FILTER
         },
         (loc) => {
           const locData: LocationData = {
@@ -180,7 +181,7 @@ export const useLocationTracking = (): UseLocationTrackingResult => {
             longitude: loc.coords.longitude,
             heading: loc.coords.heading || 0,
             speed: loc.coords.speed || 0,
-            accuracy: loc.coords.accuracy || 0,
+            accuracy: loc.coords.accuracy || 0
           };
           setLocation(locData);
           pushLocationToFirebase(locData);

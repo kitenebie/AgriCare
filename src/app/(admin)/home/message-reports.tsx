@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Alert, TextInput, Modal,
+  ActivityIndicator, TextInput, Modal,
 } from 'react-native';
+import { modalAlert } from '@/components/ui/ModalAlert';
 import firestore from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
@@ -100,7 +101,7 @@ export default function MessageReportsPage() {
   // ─── Admin Reply / Resolve Report ───
   const handleReplyToReport = async (action: 'resolve' | 'dismiss') => {
     if (!selectedReport || !responseText.trim()) {
-      Alert.alert('Error', 'Please enter a response message.');
+      modalAlert('Error', 'Please enter a response message.');
       return;
     }
 
@@ -136,9 +137,9 @@ export default function MessageReportsPage() {
       setShowActionModal(false);
       setSelectedReport(null);
       setResponseText('');
-      Alert.alert('Done', `Report ${action === 'resolve' ? 'resolved' : 'dismissed'} and reporter notified.`);
+      modalAlert('Done', `Report ${action === 'resolve' ? 'resolved' : 'dismissed'} and reporter notified.`);
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to process report.');
+      modalAlert('Error', e.message || 'Failed to process report.');
     } finally {
       setProcessing(false);
     }
@@ -147,14 +148,14 @@ export default function MessageReportsPage() {
   // ─── Ban / Deactivate User ───
   const handleBanUser = async () => {
     if (!selectedReport || !selectedBanDuration) {
-      Alert.alert('Error', 'Please select a ban duration.');
+      modalAlert('Error', 'Please select a ban duration.');
       return;
     }
 
     const banOption = BAN_OPTIONS.find(b => b.value === selectedBanDuration);
     if (!banOption) return;
 
-    Alert.alert(
+    modalAlert(
       '⚠️ Confirm Ban',
       `Are you sure you want to ${banOption.value === 'permanent' ? 'permanently deactivate' : `ban for ${banOption.label}`} the account of ${selectedReport.reportedUserName}?`,
       [
@@ -233,9 +234,9 @@ export default function MessageReportsPage() {
               setSelectedReport(null);
               setSelectedBanDuration(null);
               setResponseText('');
-              Alert.alert('Done', `User ${isPermanent ? 'permanently deactivated' : `banned for ${banOption.label}`}.`);
+              modalAlert('Done', `User ${isPermanent ? 'permanently deactivated' : `banned for ${banOption.label}`}.`);
             } catch (e: any) {
-              Alert.alert('Error', e.message || 'Failed to ban user.');
+              modalAlert('Error', e.message || 'Failed to ban user.');
             } finally {
               setProcessing(false);
             }

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { modalAlert } from '@/components/ui/ModalAlert';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as LocalAuthentication from 'expo-local-authentication';
@@ -9,7 +10,7 @@ import {
   setBiometricsEnabled,
   markBiometricsAsked,
   getSession,
-  getRouteForRole,
+  getRouteForRole
 } from '@/services/sessionService';
 
 export default function BiometricSetupScreen() {
@@ -21,21 +22,21 @@ export default function BiometricSetupScreen() {
     try {
       const compatible = await LocalAuthentication.hasHardwareAsync();
       if (!compatible) {
-        Alert.alert('Not Supported', 'This device does not support biometric authentication.');
+        modalAlert('Not Supported', 'This device does not support biometric authentication.');
         setLoading(false);
         return;
       }
 
       const enrolled = await LocalAuthentication.isEnrolledAsync();
       if (!enrolled) {
-        Alert.alert('Not Set Up', 'No biometrics enrolled on this device. Please set up fingerprint or face in your device settings.');
+        modalAlert('Not Set Up', 'No biometrics enrolled on this device. Please set up fingerprint or face in your device settings.');
         setLoading(false);
         return;
       }
 
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: 'Verify to enable biometrics',
-        fallbackLabel: 'Use passcode',
+        fallbackLabel: 'Use passcode'
       });
 
       if (result.success) {
@@ -43,10 +44,10 @@ export default function BiometricSetupScreen() {
         await markBiometricsAsked(true);
         await navigateToHome();
       } else {
-        Alert.alert('Failed', 'Biometric authentication failed. Please try again.');
+        modalAlert('Failed', 'Biometric authentication failed. Please try again.');
       }
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Something went wrong.');
+      modalAlert('Error', e.message || 'Something went wrong.');
     } finally {
       setLoading(false);
     }
@@ -139,30 +140,30 @@ const s = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.white,
     paddingHorizontal: Spacing.xl,
-    justifyContent: 'center',
+    justifyContent: 'center'
   },
   iconContainer: {
     alignItems: 'center',
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.xl
   },
   biometricIcon: {
     width: 110,
     height: 110,
-    resizeMode: 'contain',
+    resizeMode: 'contain'
   },
   title: {
     fontSize: 22,
     fontWeight: '800',
     color: Colors.text,
     textAlign: 'center',
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.sm
   },
   description: {
     fontSize: FontSize.md,
     color: Colors.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.xl
   },
   benefitsCard: {
     backgroundColor: Colors.surface,
@@ -171,12 +172,12 @@ const s = StyleSheet.create({
     marginBottom: Spacing.xxl,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 14,
+    gap: 14
   },
   benefitRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 12
   },
   benefitIcon: {
     width: 24,
@@ -184,16 +185,16 @@ const s = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: Colors.primary,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'center'
   },
   benefitText: {
     fontSize: FontSize.sm,
     color: Colors.text,
     flex: 1,
-    lineHeight: 20,
+    lineHeight: 20
   },
   buttonsContainer: {
-    gap: 12,
+    gap: 12
   },
   enableBtn: {
     flexDirection: 'row',
@@ -202,12 +203,12 @@ const s = StyleSheet.create({
     gap: 8,
     backgroundColor: Colors.primary,
     borderRadius: BorderRadius.lg,
-    paddingVertical: Spacing.lg,
+    paddingVertical: Spacing.lg
   },
   enableBtnText: {
     fontSize: FontSize.md,
     fontWeight: '700',
-    color: Colors.white,
+    color: Colors.white
   },
   skipBtn: {
     backgroundColor: Colors.surface,
@@ -215,11 +216,11 @@ const s = StyleSheet.create({
     paddingVertical: Spacing.lg,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: Colors.border
   },
   skipBtnText: {
     fontSize: FontSize.md,
     fontWeight: '600',
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary
+  }
 });

@@ -9,7 +9,8 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, ActivityIndicator } from 'react-native';
+import { modalAlert } from '@/components/ui/ModalAlert';
 import firestore from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
@@ -17,7 +18,7 @@ import { Icon, Avatar } from '@/components/ui';
 import { Collections } from '@/services/firebase';
 import { getCurrentUserProfile } from '@/services/authService';
 import { logCrud } from '@/services/logService';
-import { sendPushNotification } from '@/services/pushService';
+import { sendPushNotification, sendPushNotificationToMany } from '@/services/pushService';
 
 interface Post {
   id: string;
@@ -27,6 +28,8 @@ interface Post {
   authorId: string;
   authorName: string;
   authorRole: string;
+  authorPhotoURL?: string;
+  authorPhotoURL?: string;
   likes: number;
   replies: number;
   views: number;
@@ -57,7 +60,7 @@ export default function ForumScreen() {
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('General');
   const [content, setContent] = useState('');
-  const [currentUser, setCurrentUser] = useState({ id: '', name: '', role: '' });
+  const [currentUser, setCurrentUser] = useState({ id: '', name: '', role: '', photoURL: '' });
 
   // Reply state
   const [replyModal, setReplyModal] = useState(false);
@@ -70,7 +73,7 @@ export default function ForumScreen() {
   useEffect(() => {
     const load = async () => {
       const p = await getCurrentUserProfile();
-      if (p) setCurrentUser({ id: (p as any).id || '', name: (p as any).displayName || '', role: (p as any).role || '' });
+      if (p) setCurrentUser({ id: (p as any).id || '', name: (p as any).displayName || '', role: (p as any).role || '', photoURL: (p as any).photoURL || '' });
     };
     load();
   }, []);
@@ -80,7 +83,23 @@ export default function ForumScreen() {
       .collection(Collections.COMMUNITY_FORUM)
       .orderBy('createdAt', 'desc')
       .onSnapshot(
-        (snap) => { setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() } as Post))); setLoading(false); },
+        async (snap) => {
+          const postsData = snap.docs.map(d => ({ id: d.id, ...d.data() } as Post));
+          // Fetch photoURL from users collection for posts missing authorPhotoURL
+          const postsWithPhotos = await Promise.all(
+            postsData.map(async (post) => {
+              if (!post.authorPhotoURL && post.authorId) {
+                try {
+                  const userDoc = await firestore().collection(Collections.USERS).doc(post.authorId).get();
+                  if (userDoc.exists) post.authorPhotoURL = userDoc.data()?.photoURL || '';
+                } catch (e) {}
+              }
+              return post;
+            })
+          );
+          setPosts(postsWithPhotos);
+          setLoading(false);
+        },
         () => setLoading(false)
       );
     return () => unsub();
@@ -112,7 +131,7 @@ export default function ForumScreen() {
   };
 
   const handleSave = async () => {
-    if (!title.trim() || !content.trim()) { Alert.alert('Error', 'Title and content required.'); return; }
+    if (!title.trim() || !content.trim()) { modalAlert('Error', 'Title and content required.'); return; }
     setSaving(true);
     try {
       if (editId) {
@@ -120,7 +139,7 @@ export default function ForumScreen() {
           title: title.trim(),
           category,
           content: content.trim(),
-          updatedAt: firestore.FieldValue.serverTimestamp(),
+          updatedAt: firestore.FieldValue.serverTimestamp()
         });
         await logCrud('Forum Post Updated', `Updated: ${title.trim()}`, 'communityForum', editId);
       } else {
@@ -131,41 +150,43 @@ export default function ForumScreen() {
           authorId: currentUser.id,
           authorName: currentUser.name,
           authorRole: currentUser.role,
+          authorPhotoURL: currentUser.photoURL,
           likes: 0,
           replies: 0,
           views: 0,
           status: 'active',
-          createdAt: firestore.FieldValue.serverTimestamp(),
+          createdAt: firestore.FieldValue.serverTimestamp()
         });
         await logCrud('Forum Post Created', `New post: ${title.trim()}`, 'communityForum');
 
         // Send FCM push to all active users (except author)
         try {
           const usersSnap = await firestore().collection(Collections.USERS).where('status', '==', 'active').get();
-          const pushPromises = usersSnap.docs
+          const contentPreview = content.trim().substring(0, 180);
+          const targetUserIds = usersSnap.docs
             .filter(doc => doc.id !== currentUser.id)
-            .map(doc => sendPushNotification(doc.id, {
-              title: `💬 New Forum Post`,
-              body: `${currentUser.name}: ${title.trim()}`,
-              data: { type: 'forum_post' },
-            }));
-          await Promise.all(pushPromises);
+            .map(doc => doc.id);
+          await sendPushNotificationToMany(targetUserIds, {
+            title: `${currentUser.name} was posted on Forum`,
+            body: `${title.trim()} - ${contentPreview}`,
+            data: { type: 'forum_post' }
+          });
         } catch (pushErr) { console.warn('Forum push failed:', pushErr); }
       }
       setModal(false);
       reset();
-    } catch (e: any) { Alert.alert('Error', e.message); }
+    } catch (e: any) { modalAlert('Error', e.message); }
     finally { setSaving(false); }
   };
 
   const handleDelete = (id: string, postTitle: string) => {
-    Alert.alert('Delete Post', `Delete "${postTitle}"?`, [
+    modalAlert('Delete Post', `Delete "${postTitle}"?`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
         try {
           await firestore().collection(Collections.COMMUNITY_FORUM).doc(id).delete();
           await logCrud('Forum Post Deleted', `Deleted: ${postTitle}`, 'communityForum', id);
-        } catch (e: any) { Alert.alert('Error', e.message); }
+        } catch (e: any) { modalAlert('Error', e.message); }
       }},
     ]);
   };
@@ -173,34 +194,30 @@ export default function ForumScreen() {
   const handleLike = async (postId: string) => {
     try {
       await firestore().collection(Collections.COMMUNITY_FORUM).doc(postId).update({
-        likes: firestore.FieldValue.increment(1),
+        likes: firestore.FieldValue.increment(1)
       });
+
+      // Send FCM push to post author for react
+      const likedPost = posts.find(p => p.id === postId);
+      if (likedPost && likedPost.authorId && likedPost.authorId !== currentUser.id) {
+        try {
+          await sendPushNotification(likedPost.authorId, {
+            title: `${currentUser.name} was react on ${likedPost.authorName}'s post`,
+            body: `❤️`,
+            data: { type: 'forum_react', postId }
+          });
+        } catch (pushErr) { console.warn('React push failed:', pushErr); }
+      }
     } catch (e) {}
   };
 
   // View post with replies
-  const openPost = async (post: Post) => {
-    setViewingPost(post);
-    setReplyPostId(post.id);
-    setReplyModal(true);
-    setLoadingReplies(true);
-    // Increment views
-    try {
-      await firestore().collection(Collections.COMMUNITY_FORUM).doc(post.id).update({
-        views: firestore.FieldValue.increment(1),
-      });
-    } catch (e) {}
-    // Load replies
-    try {
-      const snap = await firestore()
-        .collection(Collections.COMMUNITY_FORUM)
-        .doc(post.id)
-        .collection('replies')
-        .orderBy('createdAt', 'asc')
-        .get();
-      setReplies(snap.docs.map(d => ({ id: d.id, ...d.data() } as Reply)));
-    } catch (e) { setReplies([]); }
-    finally { setLoadingReplies(false); }
+  const openPost = (post: Post) => {
+    // Navigate to full view page
+    let prefix = '/(farmer)/home';
+    if (currentUser.role === 'admin') prefix = '/(admin)/home';
+    else if (currentUser.role === 'technician') prefix = '/(technician)/dashboard';
+    router.push({ pathname: `${prefix}/forum-view`, params: { id: post.id } } as any);
   };
 
   const handleReply = async () => {
@@ -215,20 +232,22 @@ export default function ForumScreen() {
           authorId: currentUser.id,
           authorName: currentUser.name,
           authorRole: currentUser.role,
-          createdAt: firestore.FieldValue.serverTimestamp(),
+          authorPhotoURL: currentUser.photoURL,
+          createdAt: firestore.FieldValue.serverTimestamp()
         });
       // Update reply count
       await firestore().collection(Collections.COMMUNITY_FORUM).doc(replyPostId).update({
-        replies: firestore.FieldValue.increment(1),
+        replies: firestore.FieldValue.increment(1)
       });
 
       // Send FCM push to post author (if not replying to own post)
       if (viewingPost && viewingPost.authorId && viewingPost.authorId !== currentUser.id) {
         try {
+          const replyPreview = replyContent.trim().substring(0, 180);
           await sendPushNotification(viewingPost.authorId, {
-            title: `💬 New Reply on your post`,
-            body: `${currentUser.name} replied: "${replyContent.trim().substring(0, 80)}"`,
-            data: { type: 'forum_reply' },
+            title: `${currentUser.name} was posted on Forum ${viewingPost.title}`,
+            body: replyPreview,
+            data: { type: 'forum_reply', postId: viewingPost.id }
           });
         } catch (pushErr) { console.warn('Reply push failed:', pushErr); }
       }
@@ -242,19 +261,19 @@ export default function ForumScreen() {
         .get();
       setReplies(snap.docs.map(d => ({ id: d.id, ...d.data() } as Reply)));
       setReplyContent('');
-    } catch (e: any) { Alert.alert('Error', e.message); }
+    } catch (e: any) { modalAlert('Error', e.message); }
   };
 
   const handleDeleteReply = async (replyId: string) => {
     if (!replyPostId) return;
-    Alert.alert('Delete Reply', 'Delete this reply?', [
+    modalAlert('Delete Reply', 'Delete this reply?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
         try {
           await firestore().collection(Collections.COMMUNITY_FORUM).doc(replyPostId).collection('replies').doc(replyId).delete();
           await firestore().collection(Collections.COMMUNITY_FORUM).doc(replyPostId).update({ replies: firestore.FieldValue.increment(-1) });
           setReplies(prev => prev.filter(r => r.id !== replyId));
-        } catch (e: any) { Alert.alert('Error', e.message); }
+        } catch (e: any) { modalAlert('Error', e.message); }
       }},
     ]);
   };
@@ -303,7 +322,7 @@ export default function ForumScreen() {
         {filtered.map(p => (
           <TouchableOpacity key={p.id} style={s.card} onPress={() => openPost(p)} activeOpacity={0.7}>
             <View style={s.cardTop}>
-              <Avatar name={p.authorName} size={36} />
+              <Avatar name={p.authorName} imageUrl={p.authorPhotoURL} size={36} />
               <View style={s.cardAuthor}>
                 <Text style={s.authorName}>{p.authorName}</Text>
                 <View style={[s.roleBadge, { backgroundColor: getRoleColor(p.authorRole) + '15' }]}>
@@ -496,5 +515,5 @@ const s = StyleSheet.create({
   replyContent: { fontSize: FontSize.sm, color: Colors.text, lineHeight: 18, marginLeft: 36 },
   replyInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: Spacing.md, borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: Spacing.md },
   replyInput: { flex: 1, backgroundColor: Colors.surface, borderRadius: BorderRadius.lg, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, fontSize: FontSize.sm, borderWidth: 1, borderColor: Colors.border, maxHeight: 80, color: Colors.text },
-  replyBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center' },
+  replyBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center' }
 });

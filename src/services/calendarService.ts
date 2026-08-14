@@ -4,7 +4,8 @@
  */
 
 import * as Calendar from 'expo-calendar';
-import { Platform, Alert } from 'react-native';
+import { Platform } from 'react-native';
+import { modalAlert } from '@/components/ui/ModalAlert';
 
 /**
  * Request calendar permission and return whether granted
@@ -21,10 +22,7 @@ export const requestCalendarPermission = async (): Promise<boolean> => {
 export const getAgriCareCalendarId = async (): Promise<string | null> => {
   const hasPermission = await requestCalendarPermission();
   if (!hasPermission) {
-    Alert.alert(
-      'Calendar Permission Required',
-      'AgriCare needs access to your calendar to create appointment reminders. Please enable in Settings.',
-    );
+    console.warn('Calendar permission not granted, skipping calendar event.');
     return null;
   }
 
@@ -57,7 +55,7 @@ export const getAgriCareCalendarId = async (): Promise<string | null> => {
       source: defaultCalendarSource as any,
       name: 'AgriCare',
       ownerAccount: 'AgriCare',
-      accessLevel: Calendar.CalendarAccessLevel.OWNER,
+      accessLevel: Calendar.CalendarAccessLevel.OWNER
     });
     return newCalendarId;
   } catch (e: any) {
@@ -111,7 +109,7 @@ export const createAppointmentEvent = async (params: {
       alarms: [
         { relativeOffset: -60 },   // 1 hour before
         { relativeOffset: -1440 }, // 1 day before
-      ],
+      ]
     });
 
     return eventId;

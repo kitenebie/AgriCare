@@ -60,6 +60,18 @@ export const acceptAppointment = async (params: AcceptParams) => {
   const autoMessage = `Hi ${farmerName}! I've accepted your ${serviceType} request for ${animalName}. I'll visit on ${formatDateForMessage(date)}${time ? ` at ${time}` : ''}. Feel free to message me if you have any questions or concerns. See you soon! 🐄`;
   await sendMessage(chatId, technicianId, autoMessage);
 
+  // 4a. FCM push — Chat message notification (plays chat sound, shows toast)
+  await sendPushNotification(farmerId, {
+    title: `💬 ${technicianName}`,
+    body: autoMessage.substring(0, 100) + (autoMessage.length > 100 ? '...' : ''),
+    data: {
+      type: 'new_chat_message',
+      chatId,
+      senderId: technicianId,
+      senderName: technicianName,
+    },
+  });
+
   // 4. Create notification for farmer
   await firestore().collection(Collections.NOTIFICATIONS).add({
     userId: farmerId,

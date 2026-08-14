@@ -1,7 +1,7 @@
 import { Colors } from "@/constants/theme";
-import { Image } from "react-native";
 import {
   Activity,
+  AlertCircle,
   AlertTriangle,
   Atom,
   Bandage,
@@ -13,10 +13,13 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  ChevronsLeftIcon,
   ClipboardList,
   Clock,
   Dna,
   Edit,
+  EyeClosed,
+  EyeIcon,
   FlaskConical,
   Heart,
   HeartHandshake,
@@ -24,6 +27,7 @@ import {
   HelpCircle,
   Home,
   Image as ImageIcon,
+  Info,
   Lock,
   LogOut,
   Logs,
@@ -60,13 +64,18 @@ import {
   Video as VideoIcon,
   Wrench,
   X,
-  type LucideProps,
+  type LucideProps
 } from "lucide-react-native";
 import React from "react";
+import { Image } from "react-native";
 
 export type IconName =
   | "home"
   | "map"
+  | "alert-circle"
+  | "alert-triangle"
+  | "info"
+  | "help-circle"
   | "services"
   | "messages"
   | "profile"
@@ -143,6 +152,9 @@ export type IconName =
   | "med-piggy-bank"
   | "med-cow"
   | "gallery"
+  | "chevron-left"
+  | "eye"
+  | "close-eye"
   | "refresh";
 
 interface IconProps {
@@ -165,6 +177,10 @@ const iconMap: Record<IconName, React.FC<LucideProps> | string> = {
   clipboard: ClipboardList,
   calendar: Calendar,
   alert: AlertTriangle,
+  "alert-circle": AlertCircle,
+  "alert-triangle": AlertTriangle,
+  "info": Info,
+  "help-circle": HelpCircle,
   paw: PawPrint,
   pencil: Pencil,
   "health-check": HeartPulse,
@@ -232,7 +248,11 @@ const iconMap: Record<IconName, React.FC<LucideProps> | string> = {
   "med-test-tube": TestTube,
   "med-pipette": Pipette,
   "med-piggy-bank": PiggyBank,
-  "med-cow": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGNsYXNzPSJsdWNpZGUgbHVjaWRlLWNvdy1oZWFkLWljb24gbHVjaWRlLWNvdy1oZWFkIj48cGF0aCBkPSJNMTcuOCAxNS4xYTEwIDEwIDAgMCAwIC45LTcuMWguM2MxLjcgMCAzLTEuMyAzLTNWM2gtM2MtMS4zIDAtMi40LjgtMi44IDEuOWExMCAxMCAwIDAgMC04LjQgMEM3LjQgMy44IDYuMyAzIDUgM0gydjJjMCAxLjcgMS4zIDMgMyAzaC4zYTEwIDEwIDAgMCAwIC45IDcuMSIvPjxwYXRoIGQ9Ik05IDkuNXYuNSIvPjxwYXRoIGQ9Ik0xNSA5LjV2LjUiLz48cGF0aCBkPSJNMTUgMjJhNCA0IDAgMSAwLTMtNi42QTQgNCAwIDEgMCA5IDIyWiIvPjxwYXRoIGQ9Ik05IDE4aC4wMSIvPjxwYXRoIGQ9Ik0xNSAxOGguMDEiLz48L3N2Zz4=",
+  "chevron-left": ChevronsLeftIcon,
+  "eye": EyeIcon,
+  "close-eye": EyeClosed,
+  "med-cow":
+    "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGNsYXNzPSJsdWNpZGUgbHVjaWRlLWNvdy1oZWFkLWljb24gbHVjaWRlLWNvdy1oZWFkIj48cGF0aCBkPSJNMTcuOCAxNS4xYTEwIDEwIDAgMCAwIC45LTcuMWguM2MxLjcgMCAzLTEuMyAzLTNWM2gtM2MtMS4zIDAtMi40LjgtMi44IDEuOWExMCAxMCAwIDAgMC04LjQgMEM3LjQgMy44IDYuMyAzIDUgM0gydjJjMCAxLjcgMS4zIDMgMyAzaC4zYTEwIDEwIDAgMCAwIC45IDcuMSIvPjxwYXRoIGQ9Ik05IDkuNXYuNSIvPjxwYXRoIGQ9Ik0xNSA5LjV2LjUiLz48cGF0aCBkPSJNMTUgMjJhNCA0IDAgMSAwLTMtNi42QTQgNCAwIDEgMCA5IDIyWiIvPjxwYXRoIGQ9Ik05IDE4aC4wMSIvPjxwYXRoIGQ9Ik0xNSAxOGguMDEiLz48L3N2Zz4=",
 };
 
 export const Icon: React.FC<IconProps> = ({
@@ -250,8 +270,13 @@ export const Icon: React.FC<IconProps> = ({
 
   // Handle data URL strings (SVG as image)
   if (typeof LucideIcon === "string") {
-    return <Image source={{ uri: LucideIcon }} style={[{ width: size, height: size, tintColor: color }, style]} />;
-    }
+    return (
+      <Image
+        source={{ uri: LucideIcon }}
+        style={[{ width: size, height: size, tintColor: color }, style]}
+      />
+    );
+  }
 
   return <LucideIcon size={size} color={color} strokeWidth={strokeWidth} />;
 };

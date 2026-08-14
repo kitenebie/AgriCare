@@ -1,6 +1,8 @@
 import { Button } from "@/components/ui";
 import { Colors, FontSize, Spacing } from "@/constants/theme";
 import { getRouteForRole, getSession, isBiometricsEnabled, authenticateWithBiometrics } from "@/services/sessionService";
+import { requestAllPermissions } from "@/services/permissionService";
+import { registerDeviceToken } from "@/services/notificationService";
 import firestore from '@react-native-firebase/firestore';
 import { Collections } from '@/services/firebase';
 import { Image } from "expo-image";
@@ -77,6 +79,10 @@ export default function LoginScreen() {
           }
         }
 
+        // Request all permissions (Calendar, Notifications) on app start
+        await requestAllPermissions();
+        // Register/refresh FCM token
+        await registerDeviceToken(session.uid);
         const route = getRouteForRole(session.role);
         router.replace(route as any);
         return;

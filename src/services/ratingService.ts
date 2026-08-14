@@ -13,17 +13,19 @@ import { sendPushNotification } from './pushService';
  * Returns the appointment data (with animal info) or null
  */
 export const getCompletedAppointment = async (technicianId: string, farmerId: string) => {
+  // Single-field query to avoid composite index requirement
   const snapshot = await firestore()
     .collection(Collections.APPOINTMENTS)
     .where('technicianId', '==', technicianId)
-    .where('farmerId', '==', farmerId)
-    .where('status', '==', 'confirmed')
-    .orderBy('date', 'desc')
-    .limit(1)
     .get();
 
-  if (snapshot.empty) return null;
-  return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+  // Filter remaining conditions client-side
+  const matches = snapshot.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .filter((a: any) => a.farmerId === farmerId && a.status === 'confirmed')
+    .sort((a: any, b: any) => (b.date || '').localeCompare(a.date || ''));
+
+  return matches.length > 0 ? matches[0] : null;
 };
 
 /**
@@ -187,15 +189,17 @@ export const submitRating = async (params: {
  * Includes animal info for display in rating card
  */
 export const getPendingRateRequest = async (chatId: string, farmerId: string) => {
+  // Single-field query to avoid composite index requirement
   const snapshot = await firestore()
     .collection('rateRequests')
     .where('chatId', '==', chatId)
-    .where('farmerId', '==', farmerId)
-    .where('status', '==', 'pending')
-    .orderBy('createdAt', 'desc')
-    .limit(1)
     .get();
 
-  if (snapshot.empty) return null;
-  return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+  // Filter remaining conditions client-side
+  const matches = snapshot.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .filter((r: any) => r.farmerId === farmerId && r.status === 'pending')
+    .sort((a: any, b: any) => ((b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0)));
+
+  return matches.length > 0 ? matches[0] : null;
 };

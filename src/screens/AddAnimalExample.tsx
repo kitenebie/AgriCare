@@ -12,10 +12,10 @@ import {
   TextInput,
   TouchableOpacity,
   Image,
-  Alert,
   ActivityIndicator,
   ScrollView,
 } from "react-native";
+import { modalAlert } from '@/components/ui/ModalAlert';
 import { Colors, Spacing, FontSize, BorderRadius } from "@/constants/theme";
 import { pickImage, uploadAnimalWithImage } from "@/services/storage";
 
@@ -31,17 +31,17 @@ export default function AddAnimalExample() {
       const uri = await pickImage();
       if (uri) setImageUri(uri);
     } catch (error: any) {
-      Alert.alert("Error", error.message);
+      modalAlert("Error", error.message);
     }
   };
 
   const handleSubmit = async () => {
     if (!animalName.trim() || !breed.trim() || !owner.trim()) {
-      Alert.alert("Error", "Please fill in all fields.");
+      modalAlert("Error", "Please fill in all fields.");
       return;
     }
     if (!imageUri) {
-      Alert.alert("Error", "Please select an image.");
+      modalAlert("Error", "Please select an image.");
       return;
     }
 
@@ -50,17 +50,17 @@ export default function AddAnimalExample() {
       const result = await uploadAnimalWithImage(imageUri, animalName.trim(), breed.trim(), owner.trim());
 
       if (result.success) {
-        Alert.alert("Success", `Animal saved! ID: ${result.documentId}`);
+        modalAlert("Success", `Animal saved! ID: ${result.documentId}`);
         // Reset form
         setAnimalName("");
         setBreed("");
         setOwner("");
         setImageUri(null);
       } else {
-        Alert.alert("Error", result.error || "Failed to save.");
+        modalAlert("Error", result.error || "Failed to save.");
       }
     } catch (error: any) {
-      Alert.alert("Error", error.message);
+      modalAlert("Error", error.message);
     } finally {
       setLoading(false);
     }

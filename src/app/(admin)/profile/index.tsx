@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, TextInput, Switch, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Switch, ActivityIndicator } from 'react-native';
+import { modalAlert } from '@/components/ui/ModalAlert';
 import { router } from 'expo-router';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
 import { Icon, Avatar } from '@/components/ui';
@@ -59,7 +60,7 @@ export default function AdminProfileScreen() {
 
   // ─── Logout ───
   const handleLogout = () => {
-    Alert.alert('Log Out', 'Are you sure you want to log out?', [
+    modalAlert('Log Out', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Log Out', style: 'destructive', onPress: async () => {
@@ -68,14 +69,14 @@ export default function AdminProfileScreen() {
             await auth().signOut();
           } catch (e) {}
           router.replace('/');
-        },
+        }
       },
     ]);
   };
 
   // ─── Account Settings Save ───
   const handleSaveAccount = async () => {
-    if (!editName.trim()) { Alert.alert('Error', 'Name cannot be empty.'); return; }
+    if (!editName.trim()) { modalAlert('Error', 'Name cannot be empty.'); return; }
     setSaving(true);
     try {
       const currentUser = auth().currentUser;
@@ -88,9 +89,9 @@ export default function AdminProfileScreen() {
         await saveSession(updated);
         setUser(updated);
       }
-      Alert.alert('Success', 'Profile updated.');
+      modalAlert('Success', 'Profile updated.');
       setAccountModal(false);
-    } catch (e: any) { Alert.alert('Error', e.message); }
+    } catch (e: any) { modalAlert('Error', e.message); }
     finally { setSaving(false); }
   };
 
@@ -98,17 +99,17 @@ export default function AdminProfileScreen() {
   const handleBiometricsToggle = async (enable: boolean) => {
     if (enable) {
       const compatible = await LocalAuthentication.hasHardwareAsync();
-      if (!compatible) { Alert.alert('Not Supported', 'This device does not support biometric authentication.'); return; }
+      if (!compatible) { modalAlert('Not Supported', 'This device does not support biometric authentication.'); return; }
 
       const enrolled = await LocalAuthentication.isEnrolledAsync();
-      if (!enrolled) { Alert.alert('Not Set Up', 'No biometrics enrolled on this device. Please set up fingerprint or face in your device settings.'); return; }
+      if (!enrolled) { modalAlert('Not Set Up', 'No biometrics enrolled on this device. Please set up fingerprint or face in your device settings.'); return; }
 
       const result = await LocalAuthentication.authenticateAsync({ promptMessage: 'Verify to enable biometrics', fallbackLabel: 'Use passcode' });
       if (!result.success) { return; }
 
       setBiometrics(true);
       await AsyncStorage.setItem(BIOMETRICS_KEY, 'true');
-      Alert.alert('Enabled', 'Biometric login is now active.');
+      modalAlert('Enabled', 'Biometric login is now active.');
     } else {
       setBiometrics(false);
       await AsyncStorage.setItem(BIOMETRICS_KEY, 'false');
@@ -221,5 +222,5 @@ const styles = StyleSheet.create({
   // Settings rows
   settingRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.lg, borderBottomWidth: 0.5, borderBottomColor: Colors.border },
   settingLabel: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
-  settingDesc: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
+  settingDesc: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 }
 });

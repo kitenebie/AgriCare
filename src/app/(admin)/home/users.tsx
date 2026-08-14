@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, TextInput, Modal, Animated, Dimensions, Pressable, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput, Modal, Animated, Dimensions, Pressable, Linking } from 'react-native';
+import { modalAlert } from '@/components/ui/ModalAlert';
 import firestore from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
@@ -67,7 +68,7 @@ export default function UsersPage() {
       toValue: 0,
       useNativeDriver: true,
       tension: 65,
-      friction: 11,
+      friction: 11
     }).start();
   };
 
@@ -75,7 +76,7 @@ export default function UsersPage() {
     Animated.timing(slideAnim, {
       toValue: SCREEN_HEIGHT,
       duration: 250,
-      useNativeDriver: true,
+      useNativeDriver: true
     }).start(() => {
       setDrawerVisible(false);
       setSelectedUser(null);
@@ -84,7 +85,7 @@ export default function UsersPage() {
 
   // ─── APPROVE USER ───
   const handleApprove = (user: User) => {
-    Alert.alert(
+    modalAlert(
       'Approve Account',
       `Approve ${user.displayName} (${user.role}) to use AgriCare?`,
       [
@@ -95,7 +96,7 @@ export default function UsersPage() {
             try {
               await firestore().collection(Collections.USERS).doc(user.id).update({
                 status: 'active',
-                verifiedAt: firestore.FieldValue.serverTimestamp(),
+                verifiedAt: firestore.FieldValue.serverTimestamp()
               });
 
               // Notify user via notification page
@@ -106,24 +107,24 @@ export default function UsersPage() {
                 body: `Welcome to AgriCare! Your ${user.role} account has been verified and activated. You can now log in and start using the app.`,
                 read: false,
                 data: { action: 'approved' },
-                createdAt: firestore.FieldValue.serverTimestamp(),
+                createdAt: firestore.FieldValue.serverTimestamp()
               });
 
               // FCM push notification
               await sendPushNotification(user.id, {
                 title: 'Account Approved!',
                 body: `Your AgriCare ${user.role} account has been verified. You can now log in!`,
-                data: { type: 'account_approved' },
+                data: { type: 'account_approved' }
               });
 
               await logCrud('User Approved', `Approved ${user.role}: ${user.displayName}`, 'users', user.id, {
                 old: { status: 'pending' },
-                new: { status: 'active' },
+                new: { status: 'active' }
               });
             } catch (e: any) {
-              Alert.alert('Error', e.message);
+              modalAlert('Error', e.message);
             }
-          },
+          }
         },
       ]
     );
@@ -167,7 +168,7 @@ export default function UsersPage() {
   const submitReject = async () => {
     if (!rejectUser) return;
     if (rejectReasons.length === 0 && !rejectNote.trim()) {
-      Alert.alert('Required', 'Please select at least one reason or add a note.');
+      modalAlert('Required', 'Please select at least one reason or add a note.');
       return;
     }
     const selectedLabels = REJECT_REASON_OPTIONS.filter(o => rejectReasons.includes(o.id)).map(o => o.label);
@@ -182,7 +183,7 @@ export default function UsersPage() {
       await firestore().collection(Collections.USERS).doc(user.id).update({
         status: 'rejected',
         rejectionReason: reason,
-        rejectedAt: firestore.FieldValue.serverTimestamp(),
+        rejectedAt: firestore.FieldValue.serverTimestamp()
       });
 
       // Notify user
@@ -193,34 +194,34 @@ export default function UsersPage() {
         body: `Your AgriCare registration was not approved.\n\nReason: ${reason}\n\nPlease re-register with valid documents.`,
         read: false,
         data: { action: 'rejected', reason },
-        createdAt: firestore.FieldValue.serverTimestamp(),
+        createdAt: firestore.FieldValue.serverTimestamp()
       });
 
       // FCM push
       await sendPushNotification(user.id, {
         title: 'Registration Not Approved',
         body: reason,
-        data: { type: 'account_rejected' },
+        data: { type: 'account_rejected' }
       });
 
       await logCrud('User Rejected', `Rejected ${user.role}: ${user.displayName}. Reason: ${reason}`, 'users', user.id, {
         old: { status: 'pending' },
-        new: { status: 'rejected' },
+        new: { status: 'rejected' }
       });
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      modalAlert('Error', e.message);
     }
   };
 
   // ─── DELETE USER ───
   const handleDelete = (id: string, name: string) => {
-    Alert.alert('Delete User', `Permanently delete "${name}"?`, [
+    modalAlert('Delete User', `Permanently delete "${name}"?`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
         try {
           await firestore().collection(Collections.USERS).doc(id).delete();
           await logCrud('User Deleted', `Deleted user: ${name}`, 'users', id);
-        } catch (e: any) { Alert.alert('Error', e.message); }
+        } catch (e: any) { modalAlert('Error', e.message); }
       }},
     ]);
   };
@@ -399,14 +400,15 @@ export default function UsersPage() {
       </Modal>
 
       <Modal visible={drawerVisible} transparent animationType="none" onRequestClose={closeDrawer}>
-        <Pressable style={s.drawerOverlay} onPress={closeDrawer}>
+        <View style={s.drawerOverlay}>
+          <Pressable style={{ flex: 1 }} onPress={closeDrawer} />
           <Animated.View style={[s.drawerContainer, { transform: [{ translateY: slideAnim }] }]}>
-            <Pressable onPress={() => {}}>
+            <View>
               {/* Drag Handle */}
               <View style={s.drawerHandle} />
 
               {selectedUser && (
-                <ScrollView showsVerticalScrollIndicator={false} style={s.drawerScroll} contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}>
+                <ScrollView showsVerticalScrollIndicator={false} style={s.drawerScroll} contentContainerStyle={{ paddingBottom: 220 }}>
                   {/* Header */}
                   <View style={s.drawerHeader}>
                     {selectedUser.photoURL ? (
@@ -509,9 +511,9 @@ export default function UsersPage() {
                   </View>
                 </ScrollView>
               )}
-            </Pressable>
+            </View>
           </Animated.View>
-        </Pressable>
+        </View>
       </Modal>
     </View>
   );
@@ -557,8 +559,8 @@ const s = StyleSheet.create({
   rejectBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center' },
   delBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.error + '15', justifyContent: 'center', alignItems: 'center' },
   // Drawer
-  drawerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  drawerContainer: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: SCREEN_HEIGHT * 0.85, minHeight: 300 },
+  drawerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
+  drawerContainer: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: SCREEN_HEIGHT * 0.92 },
   drawerHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#DDD', alignSelf: 'center', marginTop: 12, marginBottom: 8 },
   drawerScroll: { paddingHorizontal: Spacing.xl },
   drawerHeader: { alignItems: 'center', paddingVertical: Spacing.lg, borderBottomWidth: 1, borderBottomColor: Colors.border },
@@ -590,5 +592,5 @@ const s = StyleSheet.create({
   rejectModalCancelBtn: { flex: 1, paddingVertical: 13, borderRadius: BorderRadius.lg, backgroundColor: '#F3F4F6', alignItems: 'center' },
   rejectModalCancelText: { fontSize: FontSize.md, fontWeight: '600', color: Colors.textSecondary },
   rejectModalSubmitBtn: { flex: 1, flexDirection: 'row', paddingVertical: 13, borderRadius: BorderRadius.lg, backgroundColor: '#EF4444', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  rejectModalSubmitText: { fontSize: FontSize.md, fontWeight: '700', color: Colors.white },
+  rejectModalSubmitText: { fontSize: FontSize.md, fontWeight: '700', color: Colors.white }
 });

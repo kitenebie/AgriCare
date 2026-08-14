@@ -6,12 +6,12 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Image,
 } from 'react-native';
+import { modalAlert } from '@/components/ui/ModalAlert';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import WebView from 'react-native-webview';
@@ -227,7 +227,7 @@ export default function RegisterScreen() {
   const toggleExpertise = (label: string) => {
     if (selectedExpertise.includes(label)) {
       if (selectedExpertise.length === 1) {
-        Alert.alert('Required', 'Please keep at least one expertise role selected.');
+        modalAlert('Required', 'Please keep at least one expertise role selected.');
         return;
       }
       setSelectedExpertise(selectedExpertise.filter((item) => item !== label));
@@ -266,7 +266,7 @@ export default function RegisterScreen() {
         }
       }
     } catch (err: any) {
-      Alert.alert('Image Error', err.message || 'Failed to pick proof image.');
+      modalAlert('Image Error', err.message || 'Failed to pick proof image.');
       setUploadingProof(false);
     }
   };
@@ -274,30 +274,30 @@ export default function RegisterScreen() {
   const handleRegister = async () => {
     // Basic Validation
     if (!displayName.trim() || !email.trim() || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all required fields.');
+      modalAlert('Error', 'Please fill in all required fields.');
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match.');
+      modalAlert('Error', 'Passwords do not match.');
       return;
     }
     if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters.');
+      modalAlert('Error', 'Password must be at least 6 characters.');
       return;
     }
     if (!profilePhotoUrl) {
-      Alert.alert('Error', 'Please take or upload a profile photo.');
+      modalAlert('Error', 'Please take or upload a profile photo.');
       return;
     }
 
     // Technician Specific Validation
     if (role === 'technician') {
       if (selectedExpertise.length === 0) {
-        Alert.alert('Error', 'Please select at least one expertise role.');
+        modalAlert('Error', 'Please select at least one expertise role.');
         return;
       }
       if (!proofImageUrl.trim()) {
-        Alert.alert(
+        modalAlert(
           'Proof Required',
           'Please upload a photo of your technician license, ID, or certificate of qualification.'
         );
@@ -307,7 +307,7 @@ export default function RegisterScreen() {
 
     // Farmer requires ID photo
     if (role === 'farmer' && !idImageUrl) {
-      Alert.alert('Error', 'Please capture or upload your valid ID for verification.');
+      modalAlert('Error', 'Please capture or upload your valid ID for verification.');
       return;
     }
 
@@ -350,7 +350,7 @@ export default function RegisterScreen() {
             }
       );
 
-      Alert.alert(
+      modalAlert(
         '✅ Registration Submitted!',
         'Your account is pending verification by an admin. You will be notified once your account is approved.',
         [
@@ -371,7 +371,7 @@ export default function RegisterScreen() {
       } else if (error.code === 'auth/weak-password') {
         message = 'Password is too weak. Use at least 6 characters.';
       }
-      Alert.alert('Registration Failed', message);
+      modalAlert('Registration Failed', message);
     } finally {
       setLoading(false);
     }
@@ -527,7 +527,7 @@ export default function RegisterScreen() {
               secureTextEntry={!showPassword}
             />
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-              <Icon name={showPassword ? 'close' : 'search'} size={20} color={Colors.textSecondary} />
+              <Icon name={showPassword ? 'close-eye' : 'eye'} size={20} color={Colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -592,10 +592,10 @@ export default function RegisterScreen() {
               <TouchableOpacity
                 style={[styles.uploadProofBtn, { marginBottom: 8 }]}
                 onPress={() => {
-                  Alert.alert('Capture ID', 'Choose an option', [
+                  modalAlert('Capture ID', 'Choose an option', [
                     { text: 'Camera', onPress: async () => {
                       const { status } = await ImagePicker.requestCameraPermissionsAsync();
-                      if (status !== 'granted') { Alert.alert('Permission Denied', 'Camera permission is required.'); return; }
+                      if (status !== 'granted') { modalAlert('Permission Denied', 'Camera permission is required.'); return; }
                       const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.8 });
                       if (!result.canceled && result.assets?.[0]?.uri) setIdImageUrl(result.assets[0].uri);
                     }},

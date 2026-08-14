@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, Alert, ActivityIndicator, Switch,
+  TextInput, ActivityIndicator, Switch,
 } from 'react-native';
+import { modalAlert } from '@/components/ui/ModalAlert';
 import firestore from '@react-native-firebase/firestore';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
@@ -108,11 +109,11 @@ export default function HealthRecordFormScreen() {
 
   const handleSubmit = async () => {
     if (!params.animalId) {
-      Alert.alert('Error', 'No animal selected.');
+      modalAlert('Error', 'No animal selected.');
       return;
     }
     if (!diagnosis.trim() && recordType !== 'vaccination') {
-      Alert.alert('Error', 'Please enter a diagnosis.');
+      modalAlert('Error', 'Please enter a diagnosis.');
       return;
     }
 
@@ -261,11 +262,11 @@ export default function HealthRecordFormScreen() {
         new: { recordType, animalName: params.animalName, diagnosis, status },
       });
 
-      Alert.alert('Success', 'Health record saved and notifications sent!', [
+      modalAlert('Success', 'Health record saved and notifications sent!', [
         { text: 'OK', onPress: () => router.back() },
       ]);
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to save.');
+      modalAlert('Error', e.message || 'Failed to save.');
     } finally {
       setSubmitting(false);
     }

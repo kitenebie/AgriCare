@@ -51,7 +51,7 @@ export const sendPushNotification = async (
         body: payload.body,
         data: payload.data || {},
         // Use custom sound for chat messages, default for others
-        sound: payload.data?.type === 'new_chat_message' ? 'new_chat' : 'default',
+        sound: payload.data?.type === 'new_chat_message' ? 'new_chat' : 'notification',
       },
     });
 

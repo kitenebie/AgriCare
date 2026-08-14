@@ -11,7 +11,7 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { Alert } from 'react-native';
+import { modalAlert } from '@/components/ui/ModalAlert';
 import firestore from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
 import { getSession, clearSession } from '@/services/sessionService';
@@ -41,7 +41,7 @@ export const BanGuard: React.FC = () => {
           // Check if deactivated
           if (status === 'deactivated' && !hasShownAlert.current) {
             hasShownAlert.current = true;
-            Alert.alert(
+            modalAlert(
               '🚫 Account Deactivated',
               'Your account has been permanently deactivated due to violation of community guidelines. Contact support for appeal.',
               [{
@@ -49,7 +49,7 @@ export const BanGuard: React.FC = () => {
                 onPress: async () => {
                   await clearSession();
                   router.replace('/(auth)/login');
-                },
+                }
               }],
               { cancelable: false }
             );
@@ -61,9 +61,9 @@ export const BanGuard: React.FC = () => {
             if (banUntilDate > new Date()) {
               hasShownAlert.current = true;
               const formattedDate = banUntilDate.toLocaleDateString('en-PH', {
-                month: 'long', day: 'numeric', year: 'numeric',
+                month: 'long', day: 'numeric', year: 'numeric'
               });
-              Alert.alert(
+              modalAlert(
                 '⛔ Account Suspended',
                 `Your account has been suspended${banDuration ? ` for ${banDuration}` : ''} until ${formattedDate} due to violation of community guidelines.`,
                 [{
@@ -71,7 +71,7 @@ export const BanGuard: React.FC = () => {
                   onPress: async () => {
                     await clearSession();
                     router.replace('/(auth)/login');
-                  },
+                  }
                 }],
                 { cancelable: false }
               );

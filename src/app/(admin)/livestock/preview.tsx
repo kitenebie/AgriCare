@@ -6,9 +6,9 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
+import { modalAlert } from '@/components/ui/ModalAlert';
 import firestore from '@react-native-firebase/firestore';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
@@ -48,7 +48,7 @@ export default function LivestockPreviewForm() {
 
   const handleSave = async () => {
     if (!name.trim()) {
-      Alert.alert('Error', 'Category name is required.');
+      modalAlert('Error', 'Category name is required.');
       return;
     }
     setSaving(true);
@@ -64,7 +64,7 @@ export default function LivestockPreviewForm() {
       if (isEditing && params.id) {
         await firestore().collection(Collections.LIVESTOCK_CATEGORIES).doc(params.id).update(data);
         await logCrud('Category Updated', 'Updated: ' + name.trim(), 'livestockCategories', params.id);
-        Alert.alert('Updated', `"${name.trim()}" has been updated.`, [
+        modalAlert('Updated', `"${name.trim()}" has been updated.`, [
           { text: 'OK', onPress: () => router.back() },
         ]);
       } else {
@@ -74,12 +74,12 @@ export default function LivestockPreviewForm() {
           createdAt: firestore.FieldValue.serverTimestamp(),
         });
         await logCrud('Category Created', 'Added: ' + name.trim(), 'livestockCategories');
-        Alert.alert('Added', `"${name.trim()}" has been added.`, [
+        modalAlert('Added', `"${name.trim()}" has been added.`, [
           { text: 'OK', onPress: () => router.back() },
         ]);
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to save.');
+      modalAlert('Error', error.message || 'Failed to save.');
     } finally {
       setSaving(false);
     }
@@ -87,7 +87,7 @@ export default function LivestockPreviewForm() {
 
   const handleDelete = () => {
     if (!params.id) return;
-    Alert.alert('Delete Category', `Delete "${name}"? This cannot be undone.`, [
+    modalAlert('Delete Category', `Delete "${name}"? This cannot be undone.`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -96,11 +96,11 @@ export default function LivestockPreviewForm() {
           try {
             await firestore().collection(Collections.LIVESTOCK_CATEGORIES).doc(params.id).delete();
             await logCrud('Category Deleted', 'Deleted: ' + name, 'livestockCategories', params.id);
-            Alert.alert('Deleted', 'Category removed.', [
+            modalAlert('Deleted', 'Category removed.', [
               { text: 'OK', onPress: () => router.back() },
             ]);
           } catch (error: any) {
-            Alert.alert('Error', error.message || 'Failed to delete.');
+            modalAlert('Error', error.message || 'Failed to delete.');
           }
         },
       },

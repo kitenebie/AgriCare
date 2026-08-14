@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { modalAlert } from '@/components/ui/ModalAlert';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -21,7 +22,7 @@ export default function CaptureIdScreen() {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.8 });
       if (photo?.uri) setCapturedUri(photo.uri);
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to capture photo.');
+      modalAlert('Error', e.message || 'Failed to capture photo.');
     }
   };
 
@@ -31,13 +32,13 @@ export default function CaptureIdScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
-        quality: 0.8,
+        quality: 0.8
       });
       if (!result.canceled && result.assets?.[0]?.uri) {
         setCapturedUri(result.assets[0].uri);
       }
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to pick image.');
+      modalAlert('Error', e.message || 'Failed to pick image.');
     }
   };
 
@@ -192,5 +193,5 @@ const s = StyleSheet.create({
   retakeBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 24, paddingVertical: 14, borderRadius: BorderRadius.full, backgroundColor: Colors.white },
   retakeBtnText: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   confirmBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 24, paddingVertical: 14, borderRadius: BorderRadius.full, backgroundColor: Colors.primary },
-  confirmBtnText: { fontSize: FontSize.md, fontWeight: '600', color: Colors.white },
+  confirmBtnText: { fontSize: FontSize.md, fontWeight: '600', color: Colors.white }
 });

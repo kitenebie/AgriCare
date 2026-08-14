@@ -2,7 +2,7 @@
   "expo": {
     "name": "AgriCare",
     "slug": "AgriCare",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "agricare",
@@ -33,6 +33,7 @@
     "plugins": [
       "expo-router",
       "expo-calendar",
+      "expo-audio",
       "@react-native-firebase/app",
       "@react-native-firebase/auth",
       "@react-native-firebase/messaging",

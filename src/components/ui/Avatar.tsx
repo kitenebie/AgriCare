@@ -9,39 +9,16 @@ interface AvatarProps {
   name: string;
   imageUrl?: string;
   size?: number;
-  /** 'person' (default) shows face photo fallback, 'animal' shows paw icon fallback */
+  /** 'person' (default) shows initials fallback, 'animal' shows paw icon fallback */
   type?: 'person' | 'animal';
 }
 
-// Generate a consistent avatar URL from name (same name = same photo always)
-const getPersonAvatarUrl = (name: string, size: number): string => {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const seed = Math.abs(hash % 70) + 1;
-  return `https://i.pravatar.cc/${size * 2}?img=${seed}`;
-};
-
 export const Avatar: React.FC<AvatarProps> = ({ name, imageUrl, size = 48, type = 'person' }) => {
-  // If imageUrl provided, always use it
+  // If imageUrl provided, show real profile photo
   if (imageUrl) {
     return (
       <Image
         source={{ uri: imageUrl }}
-        style={[styles.image, { width: size, height: size, borderRadius: size / 2 }]}
-        contentFit="cover"
-        transition={200}
-      />
-    );
-  }
-
-  // For person type: generate face photo from pravatar
-  if (type === 'person' && name) {
-    const avatarUrl = getPersonAvatarUrl(name, size);
-    return (
-      <Image
-        source={{ uri: avatarUrl }}
         style={[styles.image, { width: size, height: size, borderRadius: size / 2 }]}
         contentFit="cover"
         transition={200}
@@ -68,7 +45,7 @@ export const Avatar: React.FC<AvatarProps> = ({ name, imageUrl, size = 48, type 
     );
   }
 
-  // Fallback: colored circle with initials
+  // Fallback: colored circle with initials (NO dummy pravatar photos)
   return (
     <View
       style={[

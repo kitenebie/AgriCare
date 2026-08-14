@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import Animated from 'react-native-reanimated';
 import firestore from '@react-native-firebase/firestore';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
@@ -8,6 +8,7 @@ import { Icon, Avatar } from '@/components/ui';
 import { useFadeInUp, useFadeIn } from '@/hooks/useAnimatedEntry';
 import { getSession } from '@/services/sessionService';
 import { getUserChatRooms, ChatRoom } from '@/services/chatService';
+import { listenToTyping } from '@/services/chatService';
 import { Collections } from '@/services/firebase';
 
 type MessageTab = 'chats' | 'notifications';
@@ -28,17 +29,22 @@ interface Notification {
 }
 
 export default function TechMessagesScreen() {
-  const [activeTab, setActiveTab] = useState<MessageTab>('chats');
+  const params = useLocalSearchParams<{ tab?: string }>();
+  const [activeTab, setActiveTab] = useState<MessageTab>(
+    params.tab === 'notifications' ? 'notifications' : 'chats'
+  );
   const [chatRooms, setChatRooms] = useState<(ChatRoom & { otherName: string; otherPhoto?: string })[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState('');
+  const [typingMap, setTypingMap] = useState<Record<string, boolean>>({});
   const headerAnim = useFadeIn(100);
   const contentAnim = useFadeInUp(200);
 
   useEffect(() => {
     let unsubChats: (() => void) | null = null;
     let unsubNotifs: (() => void) | null = null;
+    let typingUnsubs: (() => void)[] = [];
 
     const load = async () => {
       const session = await getSession();
@@ -73,6 +79,19 @@ export default function TechMessagesScreen() {
         );
         setChatRooms(enrichedRooms);
         setLoading(false);
+
+        // Listen to typing status for each chat room
+        typingUnsubs.forEach(u => u());
+        typingUnsubs = [];
+        enrichedRooms.forEach((room) => {
+          const otherUserId = room.participants.find(p => p !== session.uid) || '';
+          if (otherUserId && room.id) {
+            const unsub = listenToTyping(room.id, otherUserId, (isTyping) => {
+              setTypingMap(prev => ({ ...prev, [room.id]: isTyping }));
+            });
+            typingUnsubs.push(unsub);
+          }
+        });
       });
 
       // Listen to notifications from Firestore
@@ -95,6 +114,7 @@ export default function TechMessagesScreen() {
     return () => {
       if (unsubChats) unsubChats();
       if (unsubNotifs) unsubNotifs();
+      typingUnsubs.forEach(u => u());
     };
   }, []);
 
@@ -182,9 +202,15 @@ export default function TechMessagesScreen() {
                         <Text style={[styles.chatName, unread > 0 && styles.chatNameBold]}>{item.otherName}</Text>
                         <Text style={styles.chatTime}>{formatTime(item.lastMessageTime)}</Text>
                       </View>
-                      <Text style={[styles.chatMessage, unread > 0 && styles.chatMessageBold]} numberOfLines={1}>
-                        {item.lastSenderId === uid ? 'You: ' : ''}{item.lastMessage || 'Start a conversation'}
-                      </Text>
+                      {typingMap[item.id] ? (
+                        <Text style={[styles.chatMessage, { color: Colors.primary, fontStyle: 'italic' }]} numberOfLines={1}>
+                          typing...
+                        </Text>
+                      ) : (
+                        <Text style={[styles.chatMessage, unread > 0 && styles.chatMessageBold]} numberOfLines={1}>
+                          {item.lastSenderId === uid ? 'You: ' : ''}{item.lastMessage || 'Start a conversation'}
+                        </Text>
+                      )}
                     </View>
                     {unread > 0 && (
                       <View style={styles.unreadBadge}>

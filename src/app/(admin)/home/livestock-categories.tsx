@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, ActivityIndicator } from 'react-native';
+import { modalAlert } from '@/components/ui/ModalAlert';
 import firestore from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
@@ -38,7 +39,7 @@ export default function LivestockCategoriesPage() {
   const openEdit = (c: Category) => { setName(c.name); setType(c.type); setBreeds((c.breeds || []).join(', ')); setEditId(c.id); setModal(true); };
 
   const handleSave = async () => {
-    if (!name.trim()) { Alert.alert('Error', 'Name is required.'); return; }
+    if (!name.trim()) { modalAlert('Error', 'Name is required.'); return; }
     const breedList = breeds.split(',').map(b => b.trim()).filter(b => b);
     setSaving(true);
     try {
@@ -55,18 +56,18 @@ export default function LivestockCategoriesPage() {
       setModal(false); reset();
     } catch (e: any) {
       console.error('[DEBUG] ❌ Write failed:', e.code, e.message);
-      Alert.alert('Error', (e.code || '') + ': ' + (e.message || 'Failed'));
+      modalAlert('Error', (e.code || '') + ': ' + (e.message || 'Failed'));
     } finally { setSaving(false); }
   };
 
   const handleDelete = (id: string, catName: string) => {
-    Alert.alert('Delete', `Delete "${catName}"?`, [
+    modalAlert('Delete', `Delete "${catName}"?`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
         try {
           await firestore().collection(Collections.LIVESTOCK_CATEGORIES).doc(id).delete();
           await logCrud('Category Deleted', `Deleted: ${catName}`, 'livestockCategories', id);
-        } catch (e: any) { Alert.alert('Error', e.message || 'Failed'); }
+        } catch (e: any) { modalAlert('Error', e.message || 'Failed'); }
       }},
     ]);
   };
@@ -165,5 +166,5 @@ const s = StyleSheet.create({
   typeBtn: { flex: 1, paddingVertical: Spacing.md, borderRadius: BorderRadius.lg, borderWidth: 1.5, borderColor: Colors.border, alignItems: 'center' },
   typeBtnText: { fontSize: FontSize.sm, color: Colors.textSecondary },
   saveBtn: { backgroundColor: Colors.primary, borderRadius: BorderRadius.full, paddingVertical: Spacing.lg, alignItems: 'center', marginTop: Spacing.xxl, marginBottom: Spacing.xxl },
-  saveBtnText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '700' },
+  saveBtnText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '700' }
 });

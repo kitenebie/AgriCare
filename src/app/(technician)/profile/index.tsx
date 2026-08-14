@@ -1,213 +1,232 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
-import Animated from 'react-native-reanimated';
-import { Image } from 'expo-image';
-import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Switch, ActivityIndicator } from 'react-native';
+import { modalAlert } from '@/components/ui/ModalAlert';
 import { router } from 'expo-router';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
-import { Icon, IconName, Avatar } from '@/components/ui';
-import { useFadeInUp, useScaleIn, useFadeIn } from '@/hooks/useAnimatedEntry';
-import { getSession, clearSession } from '@/services/sessionService';
-import { Collections } from '@/services/firebase';
+import { Icon, Avatar } from '@/components/ui';
+import { clearSession, getSession, saveSession, UserSession } from '@/services/sessionService';
+import firestore from '@react-native-firebase/firestore';
+import auth from '@react-native-firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as LocalAuthentication from 'expo-local-authentication';
 
-export default function TechProfileScreen() {
-  const avatarAnim = useScaleIn(200);
-  const infoAnim = useFadeInUp(300);
-  const menuAnim = useFadeInUp(500);
+const BIOMETRICS_KEY = '@agricare_biometrics_enabled';
+const NOTIFICATIONS_KEY = '@agricare_notifications_enabled';
 
+export default function TechnicianProfileScreen() {
+  const [user, setUser] = useState<UserSession | null>(null);
+  const [photoURL, setPhotoURL] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
-  const [userName, setUserName] = useState('');
-  const [userRole, setUserRole] = useState('');
-  const [specialization, setSpecialization] = useState('');
-  const [photoURL, setPhotoURL] = useState('');
-  const [rating, setRating] = useState(0);
-  const [reviewCount, setReviewCount] = useState(0);
-  const [completedCount, setCompletedCount] = useState(0);
-  const [experience, setExperience] = useState('');
-  const [verificationStatus, setVerificationStatus] = useState('');
+
+  // Account Settings
+  const [accountModal, setAccountModal] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editLocation, setEditLocation] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // Security
+  const [securityModal, setSecurityModal] = useState(false);
+  const [biometrics, setBiometrics] = useState(false);
+
+  // Notifications
+  const [notifModal, setNotifModal] = useState(false);
+  const [notifsEnabled, setNotifsEnabled] = useState(true);
 
   useEffect(() => {
     const load = async () => {
       const session = await getSession();
-      if (!session) { setLoading(false); return; }
-
-      setUserName(session.displayName || 'Technician');
-      setUserRole(session.role || 'technician');
-
-      try {
-        const uid = session.uid;
-
-        // Get user details
-        const userDoc = await firestore().collection(Collections.USERS).doc(uid).get();
-        if (userDoc.exists) {
-          const data = userDoc.data();
-          if (data?.photoURL) setPhotoURL(data.photoURL);
-          if (data?.specialization) setSpecialization(data.specialization);
-          if (data?.experience) setExperience(data.experience);
-          if (data?.verificationStatus) setVerificationStatus(data.verificationStatus);
-        }
-
-        // Get technician-specific data
-        const techSnap = await firestore().collection('technician').where('userId', '==', uid).get();
-        if (!techSnap.empty) {
-          const techData = techSnap.docs[0].data();
-          if (techData?.specializations) setSpecialization(techData.specializations.join(', '));
-          if (techData?.experience) setExperience(techData.experience);
-          if (techData?.verificationStatus) setVerificationStatus(techData.verificationStatus);
-        }
-
-        // Count reviews and avg rating
-        const reviewsSnap = await firestore().collection(Collections.REVIEWS).where('technicianId', '==', uid).get();
-        setReviewCount(reviewsSnap.size);
-        if (reviewsSnap.size > 0) {
-          const total = reviewsSnap.docs.reduce((sum, d) => sum + (d.data().rating || 0), 0);
-          setRating(parseFloat((total / reviewsSnap.size).toFixed(1)));
-        }
-
-        // Count completed appointments
-        const completedSnap = await firestore().collection(Collections.APPOINTMENTS)
-          .where('technicianId', '==', uid)
-          .where('status', '==', 'completed')
-          .get();
-        setCompletedCount(completedSnap.size);
-      } catch (e) {
-        console.warn('Profile load error:', e);
+      setUser(session);
+      if (session) {
+        setEditName(session.displayName);
+        setEditEmail(session.email);
+        try {
+          const uid = auth().currentUser?.uid || session.uid;
+          const doc = await firestore().collection('users').doc(uid).get();
+          if (doc.exists) {
+            const data = doc.data();
+            if (data?.photoURL) setPhotoURL(data.photoURL);
+            if (data?.phoneNumber) setEditPhone(data.phoneNumber);
+            if (data?.location) setEditLocation(data.location);
+          }
+        } catch (e) {}
       }
+      const bio = await AsyncStorage.getItem(BIOMETRICS_KEY);
+      setBiometrics(bio === 'true');
+      const notif = await AsyncStorage.getItem(NOTIFICATIONS_KEY);
+      setNotifsEnabled(notif !== 'false');
       setLoading(false);
     };
     load();
   }, []);
 
+  // ─── Logout ───
   const handleLogout = () => {
-    Alert.alert('Log Out', 'Are you sure you want to log out?', [
+    modalAlert('Log Out', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Log Out', style: 'destructive', onPress: async () => {
-        try { await clearSession(); await auth().signOut(); } catch (e) {}
-        router.replace('/');
-      }},
+      {
+        text: 'Log Out', style: 'destructive', onPress: async () => {
+          try {
+            await clearSession();
+            await auth().signOut();
+          } catch (e) {}
+          router.replace('/');
+        }
+      },
     ]);
+  };
+
+  // ─── Account Settings Save ───
+  const handleSaveAccount = async () => {
+    if (!editName.trim()) { modalAlert('Error', 'Name cannot be empty.'); return; }
+    setSaving(true);
+    try {
+      const currentUser = auth().currentUser;
+      if (currentUser) {
+        await currentUser.updateProfile({ displayName: editName.trim() });
+        await firestore().collection('users').doc(currentUser.uid).update({
+          displayName: editName.trim(),
+          phoneNumber: editPhone.trim(),
+          location: editLocation.trim()
+        });
+      }
+      if (user) {
+        const updated: UserSession = { ...user, displayName: editName.trim() };
+        await saveSession(updated);
+        setUser(updated);
+      }
+      modalAlert('Success', 'Profile updated.');
+      setAccountModal(false);
+    } catch (e: any) { modalAlert('Error', e.message); }
+    finally { setSaving(false); }
+  };
+
+  // ─── Security ───
+  const handleBiometricsToggle = async (enable: boolean) => {
+    if (enable) {
+      const compatible = await LocalAuthentication.hasHardwareAsync();
+      if (!compatible) { modalAlert('Not Supported', 'This device does not support biometric authentication.'); return; }
+      const enrolled = await LocalAuthentication.isEnrolledAsync();
+      if (!enrolled) { modalAlert('Not Set Up', 'No biometrics enrolled on this device. Please set up fingerprint or face in your device settings.'); return; }
+      const result = await LocalAuthentication.authenticateAsync({ promptMessage: 'Verify to enable biometrics', fallbackLabel: 'Use passcode' });
+      if (!result.success) return;
+      setBiometrics(true);
+      await AsyncStorage.setItem(BIOMETRICS_KEY, 'true');
+      modalAlert('Enabled', 'Biometric login is now active.');
+    } else {
+      setBiometrics(false);
+      await AsyncStorage.setItem(BIOMETRICS_KEY, 'false');
+    }
+  };
+
+  // ─── Notifications ───
+  const handleNotifsToggle = async (val: boolean) => {
+    setNotifsEnabled(val);
+    await AsyncStorage.setItem(NOTIFICATIONS_KEY, val ? 'true' : 'false');
   };
 
   if (loading) return <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}><ActivityIndicator size="large" color={Colors.primary} /></View>;
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Profile Header */}
       <View style={styles.header}>
-        <Animated.View style={[styles.avatarContainer, avatarAnim]}>
-          {photoURL ? (
-            <Image source={{ uri: photoURL }} style={styles.avatar} contentFit="cover" />
-          ) : (
-            <Avatar name={userName} size={100} />
-          )}
-          {verificationStatus === 'verified' && (
-            <View style={styles.verifiedBadge}>
-              <Icon name="check" size={14} color={Colors.white} />
-            </View>
-          )}
-        </Animated.View>
-
-        <Animated.View style={[styles.profileInfo, infoAnim]}>
-          <Text style={styles.name}>{userName}</Text>
-          <Text style={styles.role}>Veterinary Technician</Text>
-          {specialization ? (
-            <Text style={styles.specialization}>{specialization}</Text>
-          ) : null}
-          {verificationStatus && (
-            <View style={[styles.verifyBadge, verificationStatus === 'verified' ? styles.verifiedBg : styles.pendingBg]}>
-              <Text style={[styles.verifyText, verificationStatus === 'verified' ? styles.verifiedText : styles.pendingText]}>
-                {verificationStatus === 'verified' ? '✓ Verified' : '⏳ Pending Verification'}
-              </Text>
-            </View>
-          )}
-        </Animated.View>
+        <Avatar name={user?.displayName || 'Technician'} imageUrl={photoURL} size={80} />
+        <Text style={styles.name}>{user?.displayName || 'Technician'}</Text>
+        <Text style={styles.role}>{user?.role || 'technician'}</Text>
       </View>
+      <View style={styles.menu}>
+        <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => setAccountModal(true)}>
+          <View style={styles.menuIcon}><Icon name="profile" size={18} color={Colors.primary} /></View>
+          <Text style={styles.menuLabel}>Account Settings</Text>
+          <Icon name="chevron-right" size={18} color={Colors.textLight} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => setNotifModal(true)}>
+          <View style={styles.menuIcon}><Icon name="bell" size={18} color={Colors.primary} /></View>
+          <Text style={styles.menuLabel}>Notification Settings</Text>
+          <Icon name="chevron-right" size={18} color={Colors.textLight} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => setSecurityModal(true)}>
+          <View style={styles.menuIcon}><Icon name="lock" size={18} color={Colors.primary} /></View>
+          <Text style={styles.menuLabel}>Security</Text>
+          <Icon name="chevron-right" size={18} color={Colors.textLight} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
+          <View style={[styles.menuIcon, { backgroundColor: '#FFEBEE' }]}><Icon name="logout" size={18} color={Colors.error} /></View>
+          <Text style={[styles.menuLabel, { color: Colors.error }]}>Log Out</Text>
+          <Icon name="chevron-right" size={18} color={Colors.textLight} />
+        </TouchableOpacity>
+      </View>
+      <View style={{ height: 30 }} />
 
-      {/* Stats */}
-      <Animated.View style={[styles.statsContainer, infoAnim]}>
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>{rating > 0 ? `${rating} ⭐` : '--'}</Text>
-          <Text style={styles.statLabel}>Rating</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>{reviewCount}</Text>
-          <Text style={styles.statLabel}>Reviews</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>{completedCount}</Text>
-          <Text style={styles.statLabel}>Completed</Text>
-        </View>
-      </Animated.View>
+      {/* Account Settings Modal */}
+      <Modal visible={accountModal} transparent animationType="slide">
+        <View style={styles.overlay}><View style={styles.modal}>
+          <View style={styles.modalHead}><Text style={styles.modalTitle}>Account Settings</Text><TouchableOpacity onPress={() => setAccountModal(false)}><Icon name="close" size={22} color={Colors.text} /></TouchableOpacity></View>
+          <Text style={styles.label}>Display Name</Text>
+          <TextInput style={styles.input} value={editName} onChangeText={setEditName} placeholder="Your name" placeholderTextColor={Colors.textLight} />
+          <Text style={styles.label}>Email</Text>
+          <TextInput style={[styles.input, { color: Colors.textLight }]} value={editEmail} editable={false} />
+          <Text style={{ fontSize: 11, color: Colors.textLight, marginTop: 4 }}>Email cannot be changed</Text>
+          <Text style={styles.label}>Phone Number</Text>
+          <TextInput style={styles.input} value={editPhone} onChangeText={setEditPhone} placeholder="09xxxxxxxxx" placeholderTextColor={Colors.textLight} keyboardType="phone-pad" />
+          <Text style={styles.label}>Location</Text>
+          <TextInput style={styles.input} value={editLocation} onChangeText={setEditLocation} placeholder="Your location" placeholderTextColor={Colors.textLight} />
+          <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSaveAccount} disabled={saving}>
+            {saving ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.saveBtnText}>Save Changes</Text>}
+          </TouchableOpacity>
+        </View></View>
+      </Modal>
 
-      {/* Menu Items */}
-      <Animated.View style={[styles.menuContainer, menuAnim]}>
-        <MenuItem iconName="profile" label="Edit Profile" subtitle="Update your information" />
-        <MenuItem iconName="clipboard" label="Specializations" subtitle={specialization || 'Set your expertise'} />
-        <MenuItem iconName="calendar" label="Schedule Settings" subtitle="Manage availability" onPress={() => router.push('/(technician)/schedule')} />
-        <MenuItem iconName="star" label="My Reviews" subtitle={`${reviewCount} reviews`} />
-        <MenuItem iconName="bell" label="Notification Settings" subtitle="Manage alerts" />
-        <MenuItem iconName="lock" label="Privacy & Security" subtitle="Account settings" />
-        <MenuItem iconName="help" label="Help & Support" subtitle="FAQs and contact us" />
-        <MenuItem iconName="logout" label="Log Out" subtitle="" isDestructive onPress={handleLogout} />
-      </Animated.View>
+      {/* Security Modal */}
+      <Modal visible={securityModal} transparent animationType="slide">
+        <View style={styles.overlay}><View style={styles.modal}>
+          <View style={styles.modalHead}><Text style={styles.modalTitle}>Security</Text><TouchableOpacity onPress={() => setSecurityModal(false)}><Icon name="close" size={22} color={Colors.text} /></TouchableOpacity></View>
+          <View style={styles.settingRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.settingLabel}>Biometric Authentication</Text>
+              <Text style={styles.settingDesc}>Use fingerprint or face to unlock</Text>
+            </View>
+            <Switch value={biometrics} onValueChange={handleBiometricsToggle} trackColor={{ false: '#E2E8F0', true: Colors.primary + '80' }} thumbColor={biometrics ? Colors.primary : '#f4f4f4'} />
+          </View>
+        </View></View>
+      </Modal>
 
-      <View style={{ height: 40 }} />
+      {/* Notification Modal */}
+      <Modal visible={notifModal} transparent animationType="slide">
+        <View style={styles.overlay}><View style={styles.modal}>
+          <View style={styles.modalHead}><Text style={styles.modalTitle}>Notifications</Text><TouchableOpacity onPress={() => setNotifModal(false)}><Icon name="close" size={22} color={Colors.text} /></TouchableOpacity></View>
+          <View style={styles.settingRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.settingLabel}>Push Notifications</Text>
+              <Text style={styles.settingDesc}>Receive alerts for updates and messages</Text>
+            </View>
+            <Switch value={notifsEnabled} onValueChange={handleNotifsToggle} trackColor={{ false: '#E2E8F0', true: Colors.primary + '80' }} thumbColor={notifsEnabled ? Colors.primary : '#f4f4f4'} />
+          </View>
+        </View></View>
+      </Modal>
     </ScrollView>
   );
 }
 
-interface MenuItemProps {
-  iconName: IconName;
-  label: string;
-  subtitle: string;
-  isDestructive?: boolean;
-  onPress?: () => void;
-}
-
-const MenuItem: React.FC<MenuItemProps> = ({ iconName, label, subtitle, isDestructive, onPress }) => (
-  <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={onPress}>
-    <View style={styles.menuIcon}>
-      <Icon name={iconName} size={18} color={isDestructive ? Colors.error : Colors.primary} />
-    </View>
-    <View style={styles.menuContent}>
-      <Text style={[styles.menuLabel, isDestructive && styles.destructiveText]}>{label}</Text>
-      {subtitle ? <Text style={styles.menuSubtitle}>{subtitle}</Text> : null}
-    </View>
-    <Icon name="chevron-right" size={18} color={Colors.textLight} />
-  </TouchableOpacity>
-);
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.surface },
-  header: { alignItems: 'center', backgroundColor: Colors.primary, paddingVertical: Spacing.xxxl, paddingTop: Spacing.xl, borderBottomLeftRadius: BorderRadius.xl * 2, borderBottomRightRadius: BorderRadius.xl * 2 },
-  avatarContainer: { position: 'relative' },
-  avatar: { width: 100, height: 100, borderRadius: 50, borderWidth: 4, borderColor: Colors.white },
-  verifiedBadge: { position: 'absolute', bottom: 2, right: 2, width: 28, height: 28, borderRadius: 14, backgroundColor: '#4CAF50', justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: Colors.white },
-  profileInfo: { alignItems: 'center', marginTop: Spacing.md },
-  name: { fontSize: FontSize.xxl, fontWeight: '800', color: Colors.white },
-  role: { fontSize: FontSize.lg, color: Colors.accent, marginTop: 2 },
-  specialization: { fontSize: FontSize.sm, color: Colors.white, opacity: 0.8, marginTop: 4, textAlign: 'center' },
-  verifyBadge: { marginTop: Spacing.sm, paddingHorizontal: Spacing.md, paddingVertical: 4, borderRadius: BorderRadius.full },
-  verifiedBg: { backgroundColor: 'rgba(76, 175, 80, 0.3)' },
-  pendingBg: { backgroundColor: 'rgba(255, 152, 0, 0.3)' },
-  verifyText: { fontSize: FontSize.xs, fontWeight: '700' },
-  verifiedText: { color: '#A5D6A7' },
-  pendingText: { color: '#FFE0B2' },
-  // Stats
-  statsContainer: { flexDirection: 'row', backgroundColor: Colors.white, marginHorizontal: Spacing.lg, marginTop: -Spacing.xl, borderRadius: BorderRadius.xl, padding: Spacing.xl, ...Shadow.medium },
-  statItem: { flex: 1, alignItems: 'center' },
-  statValue: { fontSize: FontSize.xxl, fontWeight: '800', color: Colors.primary },
-  statLabel: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
-  statDivider: { width: 1, backgroundColor: Colors.border, marginVertical: Spacing.xs },
-  // Menu
-  menuContainer: { backgroundColor: Colors.white, marginHorizontal: Spacing.lg, marginTop: Spacing.xl, borderRadius: BorderRadius.xl, overflow: 'hidden', ...Shadow.light },
-  menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.lg, paddingHorizontal: Spacing.lg, borderBottomWidth: 0.5, borderBottomColor: Colors.border },
-  menuIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.surface, justifyContent: 'center', alignItems: 'center' },
-  menuContent: { flex: 1, marginLeft: Spacing.md },
-  menuLabel: { fontSize: FontSize.lg, fontWeight: '600', color: Colors.text },
-  menuSubtitle: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 1 },
-  destructiveText: { color: Colors.error },
+  header: { alignItems: 'center', paddingVertical: Spacing.xxxl, backgroundColor: Colors.primary, borderBottomLeftRadius: BorderRadius.xl * 2, borderBottomRightRadius: BorderRadius.xl * 2 },
+  name: { fontSize: FontSize.xxl, fontWeight: '800', color: Colors.white, marginTop: Spacing.md },
+  role: { fontSize: FontSize.md, color: Colors.accent, marginTop: 2, textTransform: 'capitalize' },
+  menu: { marginHorizontal: Spacing.lg, marginTop: Spacing.xl, backgroundColor: Colors.white, borderRadius: BorderRadius.xl, ...Shadow.light },
+  menuItem: { flexDirection: 'row', alignItems: 'center', padding: Spacing.lg, borderBottomWidth: 0.5, borderBottomColor: Colors.border },
+  menuIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.surface, justifyContent: 'center', alignItems: 'center', marginRight: Spacing.md },
+  menuLabel: { flex: 1, fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modal: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: Spacing.xl, paddingBottom: 40 },
+  modalHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg },
+  modalTitle: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },
+  label: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.text, marginTop: Spacing.lg, marginBottom: Spacing.sm },
+  input: { backgroundColor: Colors.surface, borderRadius: BorderRadius.lg, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, fontSize: FontSize.md, borderWidth: 1, borderColor: Colors.border, color: Colors.text },
+  saveBtn: { backgroundColor: Colors.primary, borderRadius: BorderRadius.full, paddingVertical: Spacing.lg, alignItems: 'center', marginTop: Spacing.xxl },
+  saveBtnText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '700' },
+  settingRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.lg, borderBottomWidth: 0.5, borderBottomColor: Colors.border },
+  settingLabel: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
+  settingDesc: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 }
 });

@@ -5,6 +5,7 @@ export default function AdminHomeLayout() {
     <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="knowledge-base" />
+      <Stack.Screen name="knowledge-base-view" />
       <Stack.Screen name="appointments" />
       <Stack.Screen name="users" />
       <Stack.Screen name="reports" />
@@ -14,6 +15,7 @@ export default function AdminHomeLayout() {
       <Stack.Screen name="announcements" />
       <Stack.Screen name="livestock-categories" />
       <Stack.Screen name="roles" />
+      <Stack.Screen name="forum-view" />
     </Stack>
   );
 }

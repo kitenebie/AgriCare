@@ -26,7 +26,7 @@ import { Collections } from "@/services/firebase";
 interface DashboardData {
   pendingRequests: number;
   acceptedRequests: number;
-  upcomingAppointments: number;
+  averageRating: number;
   overdueSchedules: number;
 }
 export default function TechDashboardScreen() {
@@ -39,9 +39,10 @@ export default function TechDashboardScreen() {
   const [dashData, setDashData] = useState<DashboardData>({
     pendingRequests: 0,
     acceptedRequests: 0,
-    upcomingAppointments: 0,
+    averageRating: 0,
     overdueSchedules: 0,
   });
+  const [reviewCount, setReviewCount] = useState(0);
   const [notifCount, setNotifCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [available, setAvailable] = useState(true);
@@ -64,48 +65,47 @@ export default function TechDashboardScreen() {
           const data = userDoc.data();
           if (data?.photoURL) setPhotoURL(data.photoURL);
           if (data?.available !== undefined) setAvailable(data.available);
+          // Get rating from user doc (already aggregated by ratingService)
+          const avgRating = data?.rating || 0;
+          const rvCount = data?.reviewCount || 0;
+          setReviewCount(rvCount);
         }
-        // Count ALL unassigned pending requests (available for this technician to accept)
-        const pendingSnap = await firestore()
+        // Fetch ALL appointments (single collection scan, no composite index needed)
+        const allApptsSnap = await firestore()
           .collection(Collections.APPOINTMENTS)
-          .where("status", "==", "pending")
           .get();
-        const pendingRequests = pendingSnap.docs.filter((d) => {
-          const data = d.data();
+        const allAppts = allApptsSnap.docs.map(d => d.data());
+        
+        // Pending: status "pending" AND (unassigned OR assigned to this tech)
+        const pendingRequests = allAppts.filter(a => {
+          if (a.status !== "pending") return false;
           return (
-            !data.technicianId ||
-            data.technicianId === "" ||
-            data.technicianName === "Unassigned"
+            !a.technicianId ||
+            a.technicianId === "" ||
+            a.technicianId === uid ||
+            (a.technicianName || "").toLowerCase() === "unassigned"
           );
         }).length;
-        // Count accepted requests (confirmed appointments)
-        const acceptedSnap = await firestore()
-          .collection(Collections.APPOINTMENTS)
-          .where("technicianId", "==", uid)
-          .where("status", "==", "confirmed")
-          .get();
-        const acceptedRequests = acceptedSnap.size;
-        // Count upcoming appointments (confirmed + date >= today)
+
+        // Accepted: confirmed appointments where technicianId matches this user
+        const myAppts = allAppts.filter(a => a.technicianId === uid);
+        const acceptedRequests = myAppts.filter(a => a.status === "confirmed").length;
+        
+        // Get average rating from user doc
         const today = new Date().toISOString().split("T")[0];
-        const upcomingSnap = await firestore()
-          .collection(Collections.APPOINTMENTS)
-          .where("technicianId", "==", uid)
-          .where("status", "==", "confirmed")
-          .where("date", ">=", today)
-          .get();
-        const upcomingAppointments = upcomingSnap.size;
-        // Count overdue (confirmed + date < today — past schedule na hindi na-complete)
-        const overdueSnap = await firestore()
-          .collection(Collections.APPOINTMENTS)
-          .where("technicianId", "==", uid)
-          .where("status", "==", "confirmed")
-          .where("date", "<", today)
-          .get();
-        const overdueSchedules = overdueSnap.size;
+        const averageRating = userDoc.exists ? (userDoc.data()?.rating || 0) : 0;
+        
+        // Overdue: confirmed + date < today (past schedule na hindi na-complete)
+        const overdueSchedules = myAppts.filter(
+          a => a.status === "confirmed" && a.date && a.date < today
+        ).length;
+
+        console.log("📊 Dashboard Debug — uid:", uid, "| allAppts:", allAppts.length, "| pending:", pendingRequests, "| accepted:", acceptedRequests, "| overdue:", overdueSchedules);
+
         setDashData({
           pendingRequests,
           acceptedRequests,
-          upcomingAppointments,
+          averageRating,
           overdueSchedules,
         });
         // Notification count
@@ -161,7 +161,7 @@ export default function TechDashboardScreen() {
           <Text style={styles.role}>Technician</Text>
         </View>
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.notifButton}>
+          <TouchableOpacity style={styles.notifButton} onPress={() => router.push('/(technician)/messages?tab=notifications')}>
             <Icon name="bell" size={24} color={Colors.white} />
             {notifCount > 0 && (
               <View style={styles.notifBadge}>
@@ -191,9 +191,10 @@ export default function TechDashboardScreen() {
               iconName="check-circle"
             />
             <OverviewItem
-              value={dashData.upcomingAppointments}
-              label="Upcoming Appointments"
-              iconName="calendar"
+              value={dashData.averageRating}
+              label={`Ratings (${reviewCount})`}
+              iconName="star"
+              isRating
             />
             <OverviewItem
               value={dashData.overdueSchedules}
@@ -214,11 +215,6 @@ export default function TechDashboardScreen() {
             onPress={() => router.push("/(technician)/appointments")}
           />
           <QuickAccessItem
-            iconName="check-circle"
-            label={"Accepted\nRequests"}
-            onPress={() => router.push("/(technician)/schedule")}
-          />
-          <QuickAccessItem
             iconName="calendar"
             label="Appointments"
             onPress={() => router.push("/(technician)/schedule")}
@@ -234,6 +230,16 @@ export default function TechDashboardScreen() {
             iconName="bell"
             label={"Announcements\n& Bulletins"}
             onPress={() => router.push("/(technician)/dashboard/announcements")}
+          />
+          <QuickAccessItem
+            iconName="clipboard"
+            label={"Knowledge\nBase"}
+            onPress={() => router.push("/(technician)/dashboard/knowledge-base")}
+          />
+          <QuickAccessItem
+            iconName="messages"
+            label={"Community\nForum"}
+            onPress={() => router.push("/(technician)/dashboard/forum")}
           />
         </View>
       </Animated.View>
@@ -270,22 +276,24 @@ interface OverviewItemProps {
   label: string;
   iconName: IconName;
   isAlert?: boolean;
+  isRating?: boolean;
 }
 const OverviewItem: React.FC<OverviewItemProps> = ({
   value,
   label,
   iconName,
   isAlert,
+  isRating,
 }) => (
   <View style={styles.overviewItem}>
     <View style={styles.overviewItemHeader}>
-      <Text style={[styles.overviewValue, isAlert && styles.alertValue]}>
-        {value}
+      <Text style={[styles.overviewValue, isAlert && styles.alertValue, isRating && styles.ratingValue]}>
+        {isRating ? (value > 0 ? value.toFixed(1) : "N/A") : value}
       </Text>
       <Icon
         name={iconName}
         size={24}
-        color={isAlert ? Colors.error : Colors.primary}
+        color={isRating ? "#FFC107" : isAlert ? Colors.error : Colors.primary}
       />
     </View>
     <Text style={styles.overviewLabel}>{label}</Text>
@@ -397,6 +405,7 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
   alertValue: { color: Colors.error },
+  ratingValue: { color: "#FFC107" },
   overviewLabel: {
     fontSize: FontSize.sm,
     color: Colors.textSecondary,
