@@ -1,12 +1,15 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Dimensions, Modal,
+  Pressable,
 } from 'react-native';
 import { modalAlert } from '@/components/ui/ModalAlert';
 import Animated, {
-  useSharedValue, useAnimatedStyle, withRepeat, withTiming, withDelay, withSequence,
+  useSharedValue, useAnimatedStyle, withRepeat, withTiming, withDelay,
+  withSequence, withSpring, runOnJS,
 } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import firestore from '@react-native-firebase/firestore';
@@ -15,12 +18,17 @@ import { Icon, Avatar } from '@/components/ui';
 import { getSession } from '@/services/sessionService';
 import { Collections } from '@/services/firebase';
 import {
-  listenToMessages, sendMessage, markMessagesAsRead,
+  listenToMessages, sendMessage, sendReplyMessage, markMessagesAsRead,
   setTyping, listenToTyping, ChatMessage,
+  addReaction, removeReaction,
 } from '@/services/chatService';
 import { sendRateRequest, submitRating, getPendingRateRequest, getCompletedAppointment } from '@/services/ratingService';
 import { sendPushNotification } from '@/services/pushService';
 import { startTypingSound, stopTypingSound } from '@/services/soundService';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const SWIPE_THRESHOLD = -60; // swipe left threshold
+const REACTION_EMOJIS = ['💓', '👍', '😆', '😟', '💢'];
 
 // ─── Animated typing dot ───
 const TypingDot: React.FC<{ delay: number }> = ({ delay }) => {
@@ -133,9 +141,171 @@ const MessageSuggestion: React.FC<{ onPress: () => void }> = ({ onPress }) => {
   );
 };
 
-// ═══════════════════════════════════════════════════════
+// ─── Reaction Popup ───
+const ReactionPopup: React.FC<{
+  visible: boolean;
+  position: { x: number; y: number };
+  onSelect: (emoji: string) => void;
+  onClose: () => void;
+}> = ({ visible, position, onSelect, onClose }) => {
+  const scale = useSharedValue(0);
+
+  useEffect(() => {
+    if (visible) {
+      scale.value = withSpring(1, { damping: 12, stiffness: 200 });
+    } else {
+      scale.value = withTiming(0, { duration: 150 });
+    }
+  }, [visible]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    opacity: scale.value,
+  }));
+
+  if (!visible) return null;
+
+  return (
+    <Modal transparent visible={visible} animationType="none" onRequestClose={onClose}>
+      <Pressable style={s.reactionOverlay} onPress={onClose}>
+        <Animated.View style={[s.reactionPopup, animStyle, { top: position.y - 60, left: Math.max(10, Math.min(position.x - 100, SCREEN_WIDTH - 220)) }]}>
+          {REACTION_EMOJIS.map((emoji, index) => (
+            <TouchableOpacity
+              key={emoji}
+              style={s.reactionEmojiBtn}
+              onPress={() => { onSelect(emoji); onClose(); }}
+              activeOpacity={0.6}
+            >
+              <Text style={s.reactionEmoji}>{emoji}</Text>
+            </TouchableOpacity>
+          ))}
+        </Animated.View>
+      </Pressable>
+    </Modal>
+  );
+};
+
+// ─── Reactions Display (below bubble) ───
+const ReactionsDisplay: React.FC<{
+  reactions: Record<string, string[]> | undefined;
+  onPress: (emoji: string) => void;
+  uid: string;
+}> = ({ reactions, onPress, uid }) => {
+  if (!reactions || Object.keys(reactions).length === 0) return null;
+
+  return (
+    <View style={s.reactionsContainer}>
+      {Object.entries(reactions).map(([emoji, userIds]) => {
+        if (!userIds || userIds.length === 0) return null;
+        const iReacted = userIds.includes(uid);
+        return (
+          <TouchableOpacity
+            key={emoji}
+            style={[s.reactionChip, iReacted && s.reactionChipActive]}
+            onPress={() => onPress(emoji)}
+            activeOpacity={0.7}
+          >
+            <Text style={s.reactionChipEmoji}>{emoji}</Text>
+            {userIds.length > 1 && <Text style={s.reactionChipCount}>{userIds.length}</Text>}
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+};
+
+// ─── Reply Preview Bar (in input area) ───
+const ReplyPreview: React.FC<{
+  replyTo: { id: string; text: string; senderId: string } | null;
+  otherUserName: string;
+  myName: string;
+  uid: string;
+  onCancel: () => void;
+}> = ({ replyTo, otherUserName, myName, uid, onCancel }) => {
+  if (!replyTo) return null;
+
+  const isReplyToMe = replyTo.senderId === uid;
+
+  return (
+    <View style={s.replyPreviewBar}>
+      <View style={s.replyPreviewLine} />
+      <View style={s.replyPreviewContent}>
+        <Text style={s.replyPreviewName}>{isReplyToMe ? 'You' : otherUserName}</Text>
+        <Text style={s.replyPreviewText} numberOfLines={1}>{replyTo.text}</Text>
+      </View>
+      <TouchableOpacity onPress={onCancel} style={s.replyPreviewClose}>
+        <Icon name="x" size={18} color={Colors.textSecondary} />
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+// ─── Swipeable Message Row ───
+const SwipeableMessage: React.FC<{
+  children: React.ReactNode;
+  onSwipeReply: () => void;
+  onLongPress: (x: number, y: number) => void;
+}> = ({ children, onSwipeReply, onLongPress }) => {
+  const translateX = useSharedValue(0);
+  const replyIconOpacity = useSharedValue(0);
+
+  const panGesture = Gesture.Pan()
+    .activeOffsetX([-10, 10000])
+    .onUpdate((event) => {
+      'worklet';
+      if (event.translationX < 0) {
+        translateX.value = Math.max(event.translationX, -80);
+        replyIconOpacity.value = Math.min(Math.abs(event.translationX) / 60, 1);
+      }
+    })
+    .onEnd((event) => {
+      'worklet';
+      if (event.translationX < SWIPE_THRESHOLD) {
+        runOnJS(onSwipeReply)();
+      }
+      translateX.value = withSpring(0, { damping: 15, stiffness: 150 });
+      replyIconOpacity.value = withTiming(0, { duration: 200 });
+    });
+
+  const longPressGesture = Gesture.LongPress()
+    .minDuration(400)
+    .onStart((event) => {
+      'worklet';
+      runOnJS(onLongPress)(event.absoluteX, event.absoluteY);
+    });
+
+  const composedGesture = Gesture.Race(panGesture, longPressGesture);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  const replyIconStyle = useAnimatedStyle(() => ({
+    opacity: replyIconOpacity.value,
+    transform: [{ scale: replyIconOpacity.value }],
+  }));
+
+  return (
+    <View style={s.swipeableContainer}>
+      {/* Reply icon behind the message */}
+      <Animated.View style={[s.swipeReplyIcon, replyIconStyle]}>
+        <View style={s.swipeReplyIconCircle}>
+          <Icon name="corner-up-left" size={16} color={Colors.primary} />
+        </View>
+      </Animated.View>
+
+      <GestureDetector gesture={composedGesture}>
+        <Animated.View style={animStyle}>
+          {children}
+        </Animated.View>
+      </GestureDetector>
+    </View>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════
 // MAIN CHAT SCREEN
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
 export default function ChatScreen() {
   const params = useLocalSearchParams<{ chatId: string; otherUserId: string; otherUserName: string; otherPhoto?: string }>();
   const { chatId, otherUserId, otherUserName } = params;
@@ -152,6 +322,7 @@ export default function ChatScreen() {
   const [userRole, setUserRole] = useState('');
   const flatListRef = useRef<FlatList>(null);
   const uidRef = useRef('');
+  const inputRef = useRef<TextInput>(null);
 
   // Rating state (farmer side)
   const [showRatingCard, setShowRatingCard] = useState(false);
@@ -159,6 +330,16 @@ export default function ChatScreen() {
 
   // Rate request sending state (technician side)
   const [sendingRateRequest, setSendingRateRequest] = useState(false);
+
+  // Reply state
+  const [replyTo, setReplyTo] = useState<{ id: string; text: string; senderId: string } | null>(null);
+
+  // Reaction popup state
+  const [reactionPopup, setReactionPopup] = useState<{
+    visible: boolean;
+    position: { x: number; y: number };
+    message: ChatMessage | null;
+  }>({ visible: false, position: { x: 0, y: 0 }, message: null });
 
   useEffect(() => {
     if (!chatId) return;
@@ -261,7 +442,12 @@ export default function ChatScreen() {
     setSending(true);
     setTyping(chatId, uid, false);
     try {
-      await sendMessage(chatId, uid, text);
+      if (replyTo) {
+        await sendReplyMessage(chatId, uid, text, replyTo);
+        setReplyTo(null);
+      } else {
+        await sendMessage(chatId, uid, text);
+      }
       // Send FCM push notification to the other user with chat sound
       if (otherUserId) {
         await sendPushNotification(otherUserId, {
@@ -280,6 +466,41 @@ export default function ChatScreen() {
     setInputText(text);
     if (uid && chatId) setTyping(chatId, uid, text.length > 0);
   };
+
+  // ─── Swipe Reply Handler ───
+  const handleSwipeReply = useCallback((message: ChatMessage) => {
+    setReplyTo({ id: message.id, text: message.text, senderId: message.senderId });
+    inputRef.current?.focus();
+  }, []);
+
+  // ─── Reaction Handlers ───
+  const handleLongPress = useCallback((message: ChatMessage, x: number, y: number) => {
+    setReactionPopup({ visible: true, position: { x, y }, message });
+  }, []);
+
+  const handleReactionSelect = useCallback(async (emoji: string) => {
+    if (!reactionPopup.message || !chatId || !uid) return;
+    const msg = reactionPopup.message;
+    const currentReactions = msg.reactions || {};
+    const emojiUsers = currentReactions[emoji] || [];
+
+    if (emojiUsers.includes(uid)) {
+      // Toggle off
+      await removeReaction(chatId, msg.id, emoji, uid);
+    } else {
+      await addReaction(chatId, msg.id, emoji, uid);
+    }
+  }, [reactionPopup.message, chatId, uid]);
+
+  const handleReactionChipPress = useCallback(async (messageId: string, emoji: string, reactions: Record<string, string[]> | undefined) => {
+    if (!chatId || !uid) return;
+    const emojiUsers = reactions?.[emoji] || [];
+    if (emojiUsers.includes(uid)) {
+      await removeReaction(chatId, messageId, emoji, uid);
+    } else {
+      await addReaction(chatId, messageId, emoji, uid);
+    }
+  }, [chatId, uid]);
 
   // ─── TASK #2: Technician sends rate request ───
   const handleSendRateRequest = async () => {
@@ -447,60 +668,86 @@ export default function ChatScreen() {
             <Text style={s.dateDividerText}>{formatDateDivider(item.timestamp)}</Text>
           </View>
         )}
-        <View style={[s.messageRow, isMe ? s.messageRowRight : s.messageRowLeft]}>
-          {!isMe && <Avatar name={otherUserName || 'User'} size={30} imageUrl={otherPhoto || undefined} />}
-          <View style={[
-            s.bubble,
-            isMe ? s.bubbleMe : s.bubbleOther,
-            (isRating || isRequest) && s.bubbleSpecial,
-          ]}>
-            {item.imageUrl && <Image source={{ uri: item.imageUrl }} style={s.messageImage} contentFit="cover" />}
-
-            {/* Special rendering for rating messages */}
-            {isRating ? (
-              <View style={s.ratingMessageContent}>
-                <View style={s.ratingStarsDisplay}>
-                  {[1, 2, 3, 4, 5].map((star) => {
-                    const ratingMatch = item.text.match(/\((\d)\/5\)/);
-                    const ratingNum = ratingMatch ? parseInt(ratingMatch[1]) : 0;
-                    return (
-                      <Text key={star} style={{ fontSize: 18, color: star <= ratingNum ? '#FFD700' : '#CCC' }}>
-                        {star <= ratingNum ? '★' : '☆'}
-                      </Text>
-                    );
-                  })}
+        <SwipeableMessage
+          onSwipeReply={() => handleSwipeReply(item)}
+          onLongPress={(x, y) => handleLongPress(item, x, y)}
+        >
+          <View style={[s.messageRow, isMe ? s.messageRowRight : s.messageRowLeft]}>
+            {!isMe && <Avatar name={otherUserName || 'User'} size={30} imageUrl={otherPhoto || undefined} />}
+            <View style={{ maxWidth: '70%' }}>
+              {/* Reply reference (if this message is a reply) */}
+              {item.replyTo && (
+                <View style={[s.replyRefContainer, isMe ? s.replyRefContainerMe : s.replyRefContainerOther]}>
+                  <View style={s.replyRefLine} />
+                  <View style={s.replyRefContent}>
+                    <Text style={s.replyRefName}>
+                      {item.replyTo.senderId === uid ? 'You' : otherUserName}
+                    </Text>
+                    <Text style={s.replyRefText} numberOfLines={1}>{item.replyTo.text}</Text>
+                  </View>
                 </View>
-                <Text style={[s.messageText, isMe ? s.messageTextMe : s.messageTextOther]}>
-                  {item.text.split('\n').slice(2).join('\n')}
-                </Text>
-              </View>
-            ) : isRequest ? (
-              <View style={s.rateRequestContent}>
-                <View style={s.rateRequestHeader}>
-                  {[1, 2, 3, 4, 5].map(star => (
-                    <Icon key={star} name="star" size={16} color="#FFD700" />
-                  ))}
-                </View>
-                <Text style={[s.messageText, isMe ? s.messageTextMe : s.messageTextOther]}>
-                  {item.text.split('\n').slice(2).join('\n')}
-                </Text>
-              </View>
-            ) : (
-              <Text style={[s.messageText, isMe ? s.messageTextMe : s.messageTextOther]}>{item.text}</Text>
-            )}
-
-            <View style={s.messageFooter}>
-              {!isMe && (
-                <TouchableOpacity onPress={() => handleReportMessage(item)} style={s.reportBtn} activeOpacity={0.6}>
-                  <Icon name="shield-alert" size={11} color={isMe ? 'rgba(255,255,255,0.4)' : Colors.textLight} />
-                </TouchableOpacity>
               )}
-              <Text style={[s.messageTime, isMe ? s.messageTimeMe : s.messageTimeOther]}>{formatTime(item.timestamp)}</Text>
-              {isMe && <Icon name={item.read ? 'check-circle' : 'check'} size={12} color={item.read ? '#4CAF50' : 'rgba(255,255,255,0.5)'} />}
+              <View style={[
+                s.bubble,
+                isMe ? s.bubbleMe : s.bubbleOther,
+                (isRating || isRequest) && s.bubbleSpecial,
+              ]}>
+                {item.imageUrl && <Image source={{ uri: item.imageUrl }} style={s.messageImage} contentFit="cover" />}
+
+                {/* Special rendering for rating messages */}
+                {isRating ? (
+                  <View style={s.ratingMessageContent}>
+                    <View style={s.ratingStarsDisplay}>
+                      {[1, 2, 3, 4, 5].map((star) => {
+                        const ratingMatch = item.text.match(/\((\d)\/5\)/);
+                        const ratingNum = ratingMatch ? parseInt(ratingMatch[1]) : 0;
+                        return (
+                          <Text key={star} style={{ fontSize: 18, color: star <= ratingNum ? '#FFD700' : '#CCC' }}>
+                            {star <= ratingNum ? '★' : '☆'}
+                          </Text>
+                        );
+                      })}
+                    </View>
+                    <Text style={[s.messageText, isMe ? s.messageTextMe : s.messageTextOther]}>
+                      {item.text.split('\n').slice(2).join('\n')}
+                    </Text>
+                  </View>
+                ) : isRequest ? (
+                  <View style={s.rateRequestContent}>
+                    <View style={s.rateRequestHeader}>
+                      {[1, 2, 3, 4, 5].map(star => (
+                        <Icon key={star} name="star" size={16} color="#FFD700" />
+                      ))}
+                    </View>
+                    <Text style={[s.messageText, isMe ? s.messageTextMe : s.messageTextOther]}>
+                      {item.text.split('\n').slice(2).join('\n')}
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={[s.messageText, isMe ? s.messageTextMe : s.messageTextOther]}>{item.text}</Text>
+                )}
+
+                <View style={s.messageFooter}>
+                  {!isMe && (
+                    <TouchableOpacity onPress={() => handleReportMessage(item)} style={s.reportBtn} activeOpacity={0.6}>
+                      <Icon name="shield-alert" size={11} color={isMe ? 'rgba(255,255,255,0.4)' : Colors.textLight} />
+                    </TouchableOpacity>
+                  )}
+                  <Text style={[s.messageTime, isMe ? s.messageTimeMe : s.messageTimeOther]}>{formatTime(item.timestamp)}</Text>
+                  {isMe && <Icon name={item.read ? 'check-circle' : 'check'} size={12} color={item.read ? '#4CAF50' : 'rgba(255,255,255,0.5)'} />}
+                </View>
+              </View>
+
+              {/* Reactions display */}
+              <ReactionsDisplay
+                reactions={item.reactions}
+                onPress={(emoji) => handleReactionChipPress(item.id, emoji, item.reactions)}
+                uid={uid}
+              />
             </View>
+            {isMe && <Avatar name={myName || 'Me'} size={30} imageUrl={myPhoto || undefined} />}
           </View>
-          {isMe && <Avatar name={myName || 'Me'} size={30} imageUrl={myPhoto || undefined} />}
-        </View>
+        </SwipeableMessage>
       </View>
     );
   };
@@ -571,9 +818,19 @@ export default function ChatScreen() {
         </View>
       )}
 
+      {/* Reply Preview */}
+      <ReplyPreview
+        replyTo={replyTo}
+        otherUserName={otherUserName || 'User'}
+        myName={myName}
+        uid={uid}
+        onCancel={() => setReplyTo(null)}
+      />
+
       {/* Input Bar */}
       <View style={s.inputBar}>
         <TextInput
+          ref={inputRef}
           style={s.input}
           placeholder="Type a message..."
           placeholderTextColor={Colors.textLight}
@@ -591,6 +848,14 @@ export default function ChatScreen() {
           {sending ? <ActivityIndicator size="small" color={Colors.white} /> : <Icon name="send" size={20} color={Colors.white} />}
         </TouchableOpacity>
       </View>
+
+      {/* Reaction Popup */}
+      <ReactionPopup
+        visible={reactionPopup.visible}
+        position={reactionPopup.position}
+        onSelect={handleReactionSelect}
+        onClose={() => setReactionPopup({ visible: false, position: { x: 0, y: 0 }, message: null })}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -611,7 +876,7 @@ const s = StyleSheet.create({
   messageRow: { marginBottom: Spacing.sm, flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
   messageRowRight: { justifyContent: 'flex-end' },
   messageRowLeft: { justifyContent: 'flex-start' },
-  bubble: { maxWidth: '70%', borderRadius: 18, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm + 2 },
+  bubble: { borderRadius: 18, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm + 2 },
   bubbleMe: { backgroundColor: Colors.primary, borderBottomRightRadius: 4 },
   bubbleOther: { backgroundColor: Colors.white, borderBottomLeftRadius: 4, ...Shadow.light },
   bubbleSpecial: { borderWidth: 1, borderColor: '#FFD700' },
@@ -684,4 +949,156 @@ const s = StyleSheet.create({
   ratingStarsDisplay: { flexDirection: 'row', gap: 2, marginBottom: 6 },
   rateRequestContent: { alignItems: 'flex-start', paddingVertical: 4 },
   rateRequestHeader: { flexDirection: 'row', gap: 2, marginBottom: 6 },
+
+  // ─── Swipe Reply ───
+  swipeableContainer: {
+    position: 'relative',
+    overflow: 'visible',
+  },
+  swipeReplyIcon: {
+    position: 'absolute',
+    right: 8,
+    top: '50%',
+    marginTop: -14,
+    zIndex: -1,
+  },
+  swipeReplyIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#E8F5E9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+
+  // ─── Reply Preview Bar (above input) ───
+  replyPreviewBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderTopWidth: 0.5,
+    borderTopColor: Colors.border,
+    gap: Spacing.sm,
+  },
+  replyPreviewLine: {
+    width: 3,
+    height: '100%',
+    minHeight: 32,
+    backgroundColor: Colors.primary,
+    borderRadius: 2,
+  },
+  replyPreviewContent: {
+    flex: 1,
+  },
+  replyPreviewName: {
+    fontSize: FontSize.xs,
+    fontWeight: '700',
+    color: Colors.primary,
+    marginBottom: 2,
+  },
+  replyPreviewText: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+  },
+  replyPreviewClose: {
+    padding: 4,
+  },
+
+  // ─── Reply Reference (inside message bubble) ───
+  replyRefContainer: {
+    flexDirection: 'row',
+    borderRadius: BorderRadius.md,
+    padding: Spacing.sm,
+    marginBottom: 4,
+    gap: 6,
+  },
+  replyRefContainerMe: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  replyRefContainerOther: {
+    backgroundColor: 'rgba(0,0,0,0.04)',
+  },
+  replyRefLine: {
+    width: 3,
+    borderRadius: 2,
+    backgroundColor: Colors.accent,
+  },
+  replyRefContent: {
+    flex: 1,
+  },
+  replyRefName: {
+    fontSize: FontSize.xs,
+    fontWeight: '700',
+    color: Colors.accent,
+    marginBottom: 1,
+  },
+  replyRefText: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+  },
+
+  // ─── Reaction Popup ───
+  reactionOverlay: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  reactionPopup: {
+    position: 'absolute',
+    flexDirection: 'row',
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    gap: 2,
+    ...Shadow.heavy,
+    borderWidth: 0.5,
+    borderColor: Colors.border,
+  },
+  reactionEmojiBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  reactionEmoji: {
+    fontSize: 24,
+  },
+
+  // ─── Reactions Display (below bubble) ───
+  reactionsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: 4,
+    paddingHorizontal: 4,
+  },
+  reactionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    ...Shadow.light,
+  },
+  reactionChipActive: {
+    borderColor: Colors.primary,
+    backgroundColor: '#E8F5E9',
+  },
+  reactionChipEmoji: {
+    fontSize: 14,
+  },
+  reactionChipCount: {
+    fontSize: 10,
+    color: Colors.textSecondary,
+    fontWeight: '600',
+  },
 });

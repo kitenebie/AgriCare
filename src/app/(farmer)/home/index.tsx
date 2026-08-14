@@ -28,6 +28,16 @@ export default function HomeScreen() {
   const [farmData, setFarmData] = useState<FarmData>({ totalAnimals: 0, pendingServices: 0, upcomingVisits: 0, healthAlerts: 0 });
   const [notifCount, setNotifCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [badgeCounts, setBadgeCounts] = useState({
+    myAnimals: 0,
+    requestService: 0,
+    appointments: 0,
+    healthRecords: 0,
+    technicians: 0,
+    announcements: 0,
+    knowledgeBase: 0,
+    forum: 0,
+  });
 
   useEffect(() => {
     const load = async () => {
@@ -71,6 +81,23 @@ export default function HomeScreen() {
           .where('read', '==', false)
           .get();
         setNotifCount(notifSnap.size);
+
+        // Badge counts for Quick Access
+        const techSnap = await firestore().collection(Collections.USERS).where('role', '==', 'technician').where('status', '==', 'active').get();
+        const announcementsSnap = await firestore().collection(Collections.ANNOUNCEMENTS).get();
+        const kbSnap = await firestore().collection(Collections.KNOWLEDGE_BASE).get();
+        const forumSnap = await firestore().collection(Collections.COMMUNITY_FORUM).get();
+
+        setBadgeCounts({
+          myAnimals: totalAnimals,
+          requestService: 0,
+          appointments: myAppts.length,
+          healthRecords: myAppts.filter(a => a.status === 'completed').length,
+          technicians: techSnap.size,
+          announcements: announcementsSnap.size,
+          knowledgeBase: kbSnap.size,
+          forum: forumSnap.size,
+        });
       } catch (e) {
         console.warn('Farmer home load error:', e);
       }
@@ -124,14 +151,14 @@ export default function HomeScreen() {
       <Animated.View style={[styles.quickAccessSection, quickAccessAnim]}>
         <Text style={styles.sectionTitle}>Quick Access</Text>
         <View style={styles.quickGrid}>
-          <QuickAccessItem iconName="paw" label="My Animals" onPress={() => router.push('/(farmer)/home/my-animals')} />
+          <QuickAccessItem iconName="paw" label="My Animals" onPress={() => router.push('/(farmer)/home/my-animals')} badge={badgeCounts.myAnimals} />
           <QuickAccessItem iconName="pencil" label={"Request\nService"} onPress={() => router.push('/(farmer)/services')} />
-          <QuickAccessItem iconName="calendar" label="Appointments" onPress={() => router.push('/(farmer)/home/appointments')} />
-          <QuickAccessItem iconName="clipboard" label={"Health\nRecords"} onPress={() => router.push('/(farmer)/home/health-records')} />
-          <QuickAccessItem iconName="farmer" label="Technicians" onPress={() => router.push('/(farmer)/home/technicians')} />
-          <QuickAccessItem iconName="bell" label={"Announcements\n& Bulletins"} onPress={() => router.push('/(farmer)/home/announcements')} />
-          <QuickAccessItem iconName="clipboard" label={"Knowledge\nBase"} onPress={() => router.push('/(farmer)/home/knowledge-base')} />
-          <QuickAccessItem iconName="messages" label={"Community\nForum"} onPress={() => router.push('/(farmer)/home/forum')} />
+          <QuickAccessItem iconName="calendar" label="Appointments" onPress={() => router.push('/(farmer)/home/appointments')} badge={badgeCounts.appointments} />
+          <QuickAccessItem iconName="clipboard" label={"Health\nRecords"} onPress={() => router.push('/(farmer)/home/health-records')} badge={badgeCounts.healthRecords} />
+          <QuickAccessItem iconName="farmer" label="Technicians" onPress={() => router.push('/(farmer)/home/technicians')} badge={badgeCounts.technicians} />
+          <QuickAccessItem iconName="bell" label={"Announcements\n& Bulletins"} onPress={() => router.push('/(farmer)/home/announcements')} badge={badgeCounts.announcements} />
+          <QuickAccessItem iconName="clipboard" label={"Knowledge\nBase"} onPress={() => router.push('/(farmer)/home/knowledge-base')} badge={badgeCounts.knowledgeBase} />
+          <QuickAccessItem iconName="messages" label={"Community\nForum"} onPress={() => router.push('/(farmer)/home/forum')} badge={badgeCounts.forum} />
         </View>
       </Animated.View>
 
@@ -170,11 +197,18 @@ const OverviewItem: React.FC<OverviewItemProps> = ({ value, label, iconName, isA
   </View>
 );
 
-interface QuickAccessItemProps { iconName: IconName; label: string; onPress: () => void; }
-const QuickAccessItem: React.FC<QuickAccessItemProps> = ({ iconName, label, onPress }) => (
+interface QuickAccessItemProps { iconName: IconName; label: string; onPress: () => void; badge?: number; }
+const QuickAccessItem: React.FC<QuickAccessItemProps> = ({ iconName, label, onPress, badge }) => (
   <TouchableOpacity style={styles.quickItem} onPress={onPress} activeOpacity={0.7}>
     <View style={styles.quickIcon}>
       <Icon name={iconName} size={26} color={Colors.primary} />
+      {badge !== undefined && badge > 0 && (
+        <View style={styles.quickBadge}>
+          <Text style={styles.quickBadgeText}>
+            {badge > 99 ? '99+' : badge}
+          </Text>
+        </View>
+      )}
     </View>
     <Text style={styles.quickLabel}>{label}</Text>
   </TouchableOpacity>
@@ -205,6 +239,8 @@ const styles = StyleSheet.create({
   quickItem: { alignItems: 'center', width: '23%' },
   quickIcon: { width: 56, height: 56, borderRadius: BorderRadius.lg, backgroundColor: Colors.white, justifyContent: 'center', alignItems: 'center', ...Shadow.light },
   quickLabel: { fontSize: FontSize.xs, color: Colors.text, textAlign: 'center', marginTop: Spacing.sm, lineHeight: 14 },
+  quickBadge: { position: 'absolute', top: -4, right: -4, minWidth: 20, height: 20, borderRadius: 10, backgroundColor: Colors.error, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 },
+  quickBadgeText: { color: Colors.white, fontSize: 10, fontWeight: '700' },
   helpBanner: { backgroundColor: Colors.primary, borderRadius: BorderRadius.xl, padding: Spacing.lg, paddingRight: 100, overflow: 'hidden' },
   helpContent: { zIndex: 2 },
   helpTitle: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.white },

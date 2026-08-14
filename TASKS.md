@@ -1,4 +1,4 @@
-# ✅ TASKS.md — AgriCare (Updated: 2026-08-09 Eve)
+# ✅ TASKS.md — AgriCare (Updated: 2026-08-14)
 
 ## Completed
 - [x] Reset Expo template, build hierarchical structure
@@ -39,6 +39,7 @@
 - [x] Technician Messages — chat list + notifications tab
 - [x] Technician Profile — rating, reviews, verification badge
 - [x] Chat System (1-on-1 Messenger-style) — shared ChatScreen component
+- [x] Chat Swipe-to-Reply (Messenger-style swipe left) + Long-press Reaction Popup (💓👍😆😟💢)
 - [x] Appointment Service — auto chat room + message + notification on accept
 - [x] Real-Time Location Tracking — expo-location + Firebase RTDB
 - [x] Avatar component — person/animal type support, pravatar.cc fallback

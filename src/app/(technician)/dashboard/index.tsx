@@ -46,6 +46,14 @@ export default function TechDashboardScreen() {
   const [notifCount, setNotifCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [available, setAvailable] = useState(true);
+  const [badgeCounts, setBadgeCounts] = useState({
+    availableRequests: 0,
+    appointments: 0,
+    healthRecords: 0,
+    announcements: 0,
+    knowledgeBase: 0,
+    forum: 0,
+  });
   const fetchDashboard = useCallback(async () => {
     setLoading(true);
       try {
@@ -115,6 +123,28 @@ export default function TechDashboardScreen() {
           .where("read", "==", false)
           .get();
         setNotifCount(notifSnap.size);
+
+        // Badge counts for Quick Access items
+        const appointments = myAppts.filter(a => a.status === "confirmed").length;
+        const availableRequests = pendingRequests;
+
+        const healthSnap = await firestore()
+          .collection(Collections.APPOINTMENTS)
+          .where("technicianId", "==", uid)
+          .where("status", "==", "completed")
+          .get();
+        const announcementsSnap = await firestore().collection(Collections.ANNOUNCEMENTS).get();
+        const kbSnap = await firestore().collection(Collections.KNOWLEDGE_BASE).get();
+        const forumSnap = await firestore().collection(Collections.COMMUNITY_FORUM).get();
+
+        setBadgeCounts({
+          availableRequests,
+          appointments,
+          healthRecords: healthSnap.size,
+          announcements: announcementsSnap.size,
+          knowledgeBase: kbSnap.size,
+          forum: forumSnap.size,
+        });
       } catch (e) {
         console.warn("Tech dashboard load error:", e);
       }
@@ -213,11 +243,13 @@ export default function TechDashboardScreen() {
             iconName="clipboard"
             label={"Available\nRequests"}
             onPress={() => router.push("/(technician)/appointments")}
+            badge={badgeCounts.availableRequests}
           />
           <QuickAccessItem
             iconName="calendar"
             label="Appointments"
             onPress={() => router.push("/(technician)/schedule")}
+            badge={badgeCounts.appointments}
           />
           <QuickAccessItem
             iconName="health-check"
@@ -225,21 +257,25 @@ export default function TechDashboardScreen() {
             onPress={() =>
               router.push("/(technician)/dashboard/health-records")
             }
+            badge={badgeCounts.healthRecords}
           />
           <QuickAccessItem
             iconName="bell"
             label={"Announcements\n& Bulletins"}
             onPress={() => router.push("/(technician)/dashboard/announcements")}
+            badge={badgeCounts.announcements}
           />
           <QuickAccessItem
             iconName="clipboard"
             label={"Knowledge\nBase"}
             onPress={() => router.push("/(technician)/dashboard/knowledge-base")}
+            badge={badgeCounts.knowledgeBase}
           />
           <QuickAccessItem
             iconName="messages"
             label={"Community\nForum"}
             onPress={() => router.push("/(technician)/dashboard/forum")}
+            badge={badgeCounts.forum}
           />
         </View>
       </Animated.View>
@@ -303,11 +339,13 @@ interface QuickAccessItemProps {
   iconName: IconName;
   label: string;
   onPress: () => void;
+  badge?: number;
 }
 const QuickAccessItem: React.FC<QuickAccessItemProps> = ({
   iconName,
   label,
   onPress,
+  badge,
 }) => (
   <TouchableOpacity
     style={styles.quickItem}
@@ -316,6 +354,13 @@ const QuickAccessItem: React.FC<QuickAccessItemProps> = ({
   >
     <View style={styles.quickIcon}>
       <Icon name={iconName} size={26} color={Colors.primary} />
+      {badge !== undefined && badge > 0 && (
+        <View style={styles.quickBadge}>
+          <Text style={styles.quickBadgeText}>
+            {badge > 99 ? '99+' : badge}
+          </Text>
+        </View>
+      )}
     </View>
     <Text style={styles.quickLabel}>{label}</Text>
   </TouchableOpacity>
@@ -436,6 +481,8 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
     lineHeight: 14,
   },
+  quickBadge: { position: 'absolute', top: -4, right: -4, minWidth: 20, height: 20, borderRadius: 10, backgroundColor: Colors.error, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 },
+  quickBadgeText: { color: Colors.white, fontSize: 10, fontWeight: '700' },
   // Help Banner
   helpBanner: {
     backgroundColor: Colors.primary,

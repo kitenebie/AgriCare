@@ -180,6 +180,7 @@ export default function AdminHome() {
   const [appointmentsCount, setAppointmentsCount] = useState<number>(0);
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [badgeCounts, setBadgeCounts] = useState<Record<string, number>>({});
 
   // Dynamic Realtime Activity Stream
   const [activities, setActivities] = useState<ActivityItem[]>([]);
@@ -253,6 +254,20 @@ export default function AdminHome() {
 
       setPendingCount(pendingTechs + pendingAppts + pendingReports);
       setStatsLoading(false);
+
+      // Badge counts for Quick Access grid
+      setBadgeCounts({
+        "/(admin)/livestock": 0, // loaded separately
+        "/(admin)/forum": 0, // loaded separately
+        "/(admin)/home/knowledge-base": 0, // loaded separately
+        "/(admin)/home/announcements": 0, // loaded separately
+        "/(admin)/home/appointments": apptsList.length,
+        "/(admin)/home/users": usersList.length,
+        "/(admin)/home/reports": reportsList.length,
+        "/(admin)/home/message-reports": 0, // loaded separately
+        "/(admin)/home/reviews": 0, // loaded separately
+        "/(admin)/home/logs": 0, // loaded separately
+      });
     };
 
     try {
@@ -316,6 +331,36 @@ export default function AdminHome() {
     }
 
     return () => unsubs.forEach((u) => u());
+  }, []);
+
+  // ─── Badge counts for remaining Quick Access items ───
+  useEffect(() => {
+    const loadBadges = async () => {
+      try {
+        const [livestockSnap, forumSnap, kbSnap, announcementsSnap, reviewsSnap, logsSnap, msgReportsSnap] = await Promise.all([
+          firestore().collection(Collections.LIVESTOCK_CATEGORIES).get(),
+          firestore().collection(Collections.COMMUNITY_FORUM).get(),
+          firestore().collection(Collections.KNOWLEDGE_BASE).get(),
+          firestore().collection(Collections.ANNOUNCEMENTS).get(),
+          firestore().collection(Collections.REVIEWS).get(),
+          firestore().collection('logs').get(),
+          firestore().collection('messageReports').get(),
+        ]);
+        setBadgeCounts(prev => ({
+          ...prev,
+          "/(admin)/livestock": livestockSnap.size,
+          "/(admin)/forum": forumSnap.size,
+          "/(admin)/home/knowledge-base": kbSnap.size,
+          "/(admin)/home/announcements": announcementsSnap.size,
+          "/(admin)/home/reviews": reviewsSnap.size,
+          "/(admin)/home/logs": logsSnap.size,
+          "/(admin)/home/message-reports": msgReportsSnap.size,
+        }));
+      } catch (e) {
+        console.warn('Admin badge counts error:', e);
+      }
+    };
+    loadBadges();
   }, []);
 
   // ─── 3. Realtime Activity Logs (latest 7 from 'logs' collection) ───
@@ -506,6 +551,13 @@ export default function AdminHome() {
                     color={item.color}
                     strokeWidth={1.8}
                   />
+                  {(badgeCounts[item.route] || 0) > 0 && (
+                    <View style={styles.quickBadge}>
+                      <Text style={styles.quickBadgeText}>
+                        {(badgeCounts[item.route] || 0) > 99 ? '99+' : badgeCounts[item.route]}
+                      </Text>
+                    </View>
+                  )}
                 </View>
                 <Text style={styles.quickLabel}>{item.label}</Text>
               </TouchableOpacity>
@@ -705,6 +757,8 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 14,
   },
+  quickBadge: { position: 'absolute', top: -4, right: -4, minWidth: 20, height: 20, borderRadius: 10, backgroundColor: '#E53935', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 },
+  quickBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
   // ─── Recent Activity ───
   activityCard: {
     backgroundColor: Colors.white,

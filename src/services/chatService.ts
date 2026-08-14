@@ -26,6 +26,8 @@ export interface ChatMessage {
   imageUrl?: string;
   timestamp: number;
   read: boolean;
+  replyTo?: { id: string; text: string; senderId: string } | null;
+  reactions?: Record<string, string[]>; // emoji -> userId[]
 }
 
 export interface ChatRoom {
@@ -151,6 +153,54 @@ export const listenToTyping = (chatId: string, otherUserId: string, callback: (i
   return onValue(typingRef, (snapshot) => {
     callback(snapshot.val() === true);
   });
+};
+
+// ─── REACTIONS ───
+
+export const addReaction = async (chatId: string, messageId: string, emoji: string, userId: string) => {
+  const reactionsRef = ref(rtdb, `${RealtimeDB.MESSAGES}/${chatId}/${messageId}/reactions/${emoji}`);
+  const snapshot = await get(reactionsRef);
+  const current: string[] = snapshot.val() || [];
+  if (!current.includes(userId)) {
+    await set(reactionsRef, [...current, userId]);
+  }
+};
+
+export const removeReaction = async (chatId: string, messageId: string, emoji: string, userId: string) => {
+  const reactionsRef = ref(rtdb, `${RealtimeDB.MESSAGES}/${chatId}/${messageId}/reactions/${emoji}`);
+  const snapshot = await get(reactionsRef);
+  const current: string[] = snapshot.val() || [];
+  const updated = current.filter(id => id !== userId);
+  if (updated.length > 0) {
+    await set(reactionsRef, updated);
+  } else {
+    await remove(reactionsRef);
+  }
+};
+
+// ─── REPLY TO MESSAGE ───
+
+export const sendReplyMessage = async (chatId: string, senderId: string, text: string, replyTo: { id: string; text: string; senderId: string }, imageUrl?: string) => {
+  const messagesRef = ref(rtdb, `${RealtimeDB.MESSAGES}/${chatId}`);
+  const newMsgRef = push(messagesRef);
+
+  await set(newMsgRef, {
+    senderId,
+    text,
+    imageUrl: imageUrl || null,
+    timestamp: serverTimestamp(),
+    read: false,
+    replyTo,
+  });
+
+  const chatRef = ref(rtdb, `${RealtimeDB.CHATS}/${chatId}`);
+  await update(chatRef, {
+    lastMessage: text || 'Image',
+    lastMessageTime: serverTimestamp(),
+    lastSenderId: senderId,
+  });
+
+  return newMsgRef.key;
 };
 
 // ─── ONLINE STATUS ───
