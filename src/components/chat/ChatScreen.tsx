@@ -22,7 +22,7 @@ import {
   setTyping, listenToTyping, ChatMessage,
   addReaction, removeReaction,
 } from '@/services/chatService';
-import { sendRateRequest, submitRating, getPendingRateRequest, getCompletedAppointment } from '@/services/ratingService';
+import { sendRateRequest, submitRating, getPendingRateRequest, getCompletedAppointment, hasExistingRateRequest } from '@/services/ratingService';
 import { sendPushNotification } from '@/services/pushService';
 import { startTypingSound, stopTypingSound } from '@/services/soundService';
 
@@ -331,6 +331,9 @@ export default function ChatScreen() {
   // Rate request sending state (technician side)
   const [sendingRateRequest, setSendingRateRequest] = useState(false);
 
+  // Whether a rate request already exists (technician side — hide button if true)
+  const [rateRequestAlreadySent, setRateRequestAlreadySent] = useState(false);
+
   // Reply state
   const [replyTo, setReplyTo] = useState<{ id: string; text: string; senderId: string } | null>(null);
 
@@ -340,6 +343,12 @@ export default function ChatScreen() {
     position: { x: number; y: number };
     message: ChatMessage | null;
   }>({ visible: false, position: { x: 0, y: 0 }, message: null });
+
+  // Profile info modal state
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [otherUserRole, setOtherUserRole] = useState('');
+  const [otherUserEmail, setOtherUserEmail] = useState('');
+  const [otherUserPhone, setOtherUserPhone] = useState('');
 
   useEffect(() => {
     if (!chatId) return;
@@ -366,8 +375,12 @@ export default function ChatScreen() {
       if (otherUserId) {
         try {
           const otherDoc = await firestore().collection(Collections.USERS).doc(otherUserId).get();
-          if (otherDoc.exists && otherDoc.data()?.photoURL) {
-            setOtherPhoto(otherDoc.data()!.photoURL);
+          if (otherDoc.exists) {
+            const data = otherDoc.data()!;
+            if (data.photoURL) setOtherPhoto(data.photoURL);
+            if (data.role) setOtherUserRole(data.role);
+            if (data.email) setOtherUserEmail(data.email);
+            if (data.phone || data.phoneNumber) setOtherUserPhone(data.phone || data.phoneNumber || '');
           }
         } catch (e) {}
       }
@@ -395,6 +408,12 @@ export default function ChatScreen() {
           setPendingRateRequest(pending);
           setShowRatingCard(true);
         }
+      }
+
+      // Check if rate request already exists (technician side — hide button)
+      if (session.role === 'technician' && chatId) {
+        const alreadySent = await hasExistingRateRequest(chatId, session.uid);
+        setRateRequestAlreadySent(alreadySent);
       }
     };
     init();
@@ -528,6 +547,7 @@ export default function ChatScreen() {
         animalPhoto: (appointment as any).animalPhoto || '',
         serviceType: (appointment as any).serviceType || '',
       });
+      setRateRequestAlreadySent(true);
     } catch (e: any) {
       console.error('Rate request error:', e);
     }
@@ -761,11 +781,13 @@ export default function ChatScreen() {
         <TouchableOpacity onPress={handleBack} style={s.backBtn}>
           <Icon name="chevron-right" size={22} color={Colors.white} strokeWidth={2.5} />
         </TouchableOpacity>
-        <Avatar name={otherUserName || 'User'} size={38} imageUrl={otherPhoto || undefined} />
-        <View style={s.headerInfo}>
-          <Text style={s.headerName}>{otherUserName || 'Chat'}</Text>
-          {isOtherTyping ? <Text style={s.typingLabel}>typing...</Text> : <Text style={s.onlineText}>Tap for info</Text>}
-        </View>
+        <TouchableOpacity style={s.headerTappable} onPress={() => setShowProfileModal(true)} activeOpacity={0.7}>
+          <Avatar name={otherUserName || 'User'} size={38} imageUrl={otherPhoto || undefined} />
+          <View style={s.headerInfo}>
+            <Text style={s.headerName}>{otherUserName || 'Chat'}</Text>
+            {isOtherTyping ? <Text style={s.typingLabel}>typing...</Text> : <Text style={s.onlineText}>Tap for info</Text>}
+          </View>
+        </TouchableOpacity>
       </View>
 
       {/* Messages */}
@@ -812,7 +834,7 @@ export default function ChatScreen() {
       )}
 
       {/* Pre-built Message Suggestion (Technician only) */}
-      {userRole === 'technician' && (
+      {userRole === 'technician' && !rateRequestAlreadySent && (
         <View style={s.suggestionsRow}>
           <MessageSuggestion onPress={handleSendRateRequest} />
         </View>
@@ -856,6 +878,58 @@ export default function ChatScreen() {
         onSelect={handleReactionSelect}
         onClose={() => setReactionPopup({ visible: false, position: { x: 0, y: 0 }, message: null })}
       />
+
+      {/* Profile Info Modal */}
+      <Modal
+        visible={showProfileModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowProfileModal(false)}
+      >
+        <Pressable style={s.profileModalOverlay} onPress={() => setShowProfileModal(false)}>
+          <View style={s.profileModalContent} onStartShouldSetResponder={() => true}>
+            {/* Close button */}
+            <TouchableOpacity style={s.profileModalClose} onPress={() => setShowProfileModal(false)}>
+              <Icon name="x" size={22} color={Colors.textSecondary} />
+            </TouchableOpacity>
+
+            {/* Avatar */}
+            <Avatar name={otherUserName || 'User'} size={80} imageUrl={otherPhoto || undefined} />
+
+            {/* Name */}
+            <Text style={s.profileModalName}>{otherUserName || 'User'}</Text>
+
+            {/* Role badge */}
+            {otherUserRole ? (
+              <View style={s.profileRoleBadge}>
+                <Icon name={otherUserRole === 'technician' ? 'stethoscope' : 'leaf'} size={14} color={Colors.primary} />
+                <Text style={s.profileRoleText}>
+                  {otherUserRole === 'technician' ? 'Technician' : otherUserRole === 'farmer' ? 'Farmer' : otherUserRole}
+                </Text>
+              </View>
+            ) : null}
+
+            {/* Info rows */}
+            <View style={s.profileInfoSection}>
+              {otherUserEmail ? (
+                <View style={s.profileInfoRow}>
+                  <Icon name="mail" size={18} color={Colors.textSecondary} />
+                  <Text style={s.profileInfoText}>{otherUserEmail}</Text>
+                </View>
+              ) : null}
+              {otherUserPhone ? (
+                <View style={s.profileInfoRow}>
+                  <Icon name="phone" size={18} color={Colors.textSecondary} />
+                  <Text style={s.profileInfoText}>{otherUserPhone}</Text>
+                </View>
+              ) : null}
+            </View>
+
+            {/* Chat ID (subtle) */}
+            <Text style={s.profileSubtext}>Chat started with {otherUserName || 'this user'}</Text>
+          </View>
+        </Pressable>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -1100,5 +1174,80 @@ const s = StyleSheet.create({
     fontSize: 10,
     color: Colors.textSecondary,
     fontWeight: '600',
+  },
+
+  // ─── Header Tappable Area ───
+  headerTappable: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+
+  // ─── Profile Info Modal ───
+  profileModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileModalContent: {
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.xl,
+    width: '85%',
+    alignItems: 'center',
+    ...Shadow.heavy,
+  },
+  profileModalClose: {
+    position: 'absolute',
+    top: Spacing.md,
+    right: Spacing.md,
+    padding: 4,
+  },
+  profileModalName: {
+    fontSize: FontSize.xl || 20,
+    fontWeight: '700',
+    color: Colors.text,
+    marginTop: Spacing.md,
+  },
+  profileRoleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: Spacing.sm,
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.full,
+  },
+  profileRoleText: {
+    fontSize: FontSize.sm,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  profileInfoSection: {
+    width: '100%',
+    marginTop: Spacing.lg,
+    gap: Spacing.md,
+  },
+  profileInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    backgroundColor: '#F5F5F5',
+    borderRadius: BorderRadius.lg,
+  },
+  profileInfoText: {
+    fontSize: FontSize.md,
+    color: Colors.text,
+    flex: 1,
+  },
+  profileSubtext: {
+    fontSize: FontSize.xs,
+    color: Colors.textLight,
+    marginTop: Spacing.lg,
   },
 });

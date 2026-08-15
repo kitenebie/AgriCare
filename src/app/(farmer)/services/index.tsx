@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Modal, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Modal, FlatList, KeyboardAvoidingView, Platform } from 'react-native'
 import { modalAlert } from '@/components/ui/ModalAlert';
 import Animated from 'react-native-reanimated';
 import { Image } from 'expo-image';
@@ -141,7 +141,7 @@ export default function ServicesScreen() {
   if (loading) return <View style={[s.container, { justifyContent: 'center', alignItems: 'center' }]}><ActivityIndicator size="large" color={Colors.primary} /></View>;
 
   return (
-    <View style={s.container}>
+    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       {/* Header */}
       <View style={s.header}>
         <View style={{ width: 36 }} />
@@ -293,7 +293,7 @@ export default function ServicesScreen() {
       {/* Custom Date Picker Modal */}
       <DatePickerModal visible={dateModal} value={selectedDate} minimumDate={new Date()} onConfirm={(date) => { setSelectedDate(date); setDateModal(false); }} onCancel={() => setDateModal(false)} />
 
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

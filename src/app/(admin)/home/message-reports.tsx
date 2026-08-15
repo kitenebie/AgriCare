@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, TextInput, Modal,
+  ActivityIndicator, TextInput, Modal, Pressable,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { modalAlert } from '@/components/ui/ModalAlert';
 import firestore from '@react-native-firebase/firestore';
@@ -20,6 +22,7 @@ interface ChatReport {
   reporterRole: string;
   reportedUserId: string;
   reportedUserName: string;
+  reportedUserRole?: string;
   chatId: string;
   messageText: string;
   messageTimestamp: number;
@@ -30,18 +33,38 @@ interface ChatReport {
   resolvedAt?: any;
 }
 
-type BanDuration = '1_day' | '3_days' | '1_week' | '2_weeks' | '1_month' | '3_months' | '6_months' | '1_year' | 'permanent';
+// ─── Chat Ban Categories ───
+type ChatBanCategory =
+  | 'farmer_reply_suspension'       // Farmer can't reply to the technician who reported them
+  | 'technician_request_suspension' // Technician can't receive requests from the farmer who reported
+  | 'technician_request_page_suspension'; // Technician can't open the available request page
 
-const BAN_OPTIONS: { value: BanDuration; label: string; days: number }[] = [
-  { value: '1_day', label: '1 Day', days: 1 },
-  { value: '3_days', label: '3 Days', days: 3 },
-  { value: '1_week', label: '1 Week', days: 7 },
-  { value: '2_weeks', label: '2 Weeks', days: 14 },
-  { value: '1_month', label: '1 Month', days: 30 },
-  { value: '3_months', label: '3 Months', days: 90 },
-  { value: '6_months', label: '6 Months', days: 180 },
-  { value: '1_year', label: '1 Year', days: 365 },
-  { value: 'permanent', label: 'Permanent (Deactivate)', days: -1 },
+interface ChatBanOption {
+  value: ChatBanCategory;
+  label: string;
+  description: string;
+  applicableTo: 'farmer' | 'technician';
+}
+
+const CHAT_BAN_CATEGORIES: ChatBanOption[] = [
+  {
+    value: 'farmer_reply_suspension',
+    label: "Can't Reply to Reporter",
+    description: "Farmer will be unable to reply/message the technician who reported them",
+    applicableTo: 'farmer',
+  },
+  {
+    value: 'technician_request_suspension',
+    label: "Can't Receive Requests from Reporter",
+    description: "Technician won't receive request list entries from the farmer who reported them",
+    applicableTo: 'technician',
+  },
+  {
+    value: 'technician_request_page_suspension',
+    label: "Can't Open Available Requests Page",
+    description: "Technician will be blocked from accessing the available request page entirely",
+    applicableTo: 'technician',
+  },
 ];
 
 const STATUS_COLORS: Record<string, { color: string; bg: string }> = {
@@ -57,13 +80,17 @@ export default function MessageReportsPage() {
   const [filter, setFilter] = useState<'all' | 'pending' | 'resolved' | 'dismissed'>('pending');
   const [adminName, setAdminName] = useState('Admin');
 
-  // Modal state
+  // Action Modal state
   const [showActionModal, setShowActionModal] = useState(false);
   const [selectedReport, setSelectedReport] = useState<ChatReport | null>(null);
   const [responseText, setResponseText] = useState('');
-  const [showBanModal, setShowBanModal] = useState(false);
-  const [selectedBanDuration, setSelectedBanDuration] = useState<BanDuration | null>(null);
   const [processing, setProcessing] = useState(false);
+
+  // Ban Modal state
+  const [showBanModal, setShowBanModal] = useState(false);
+  const [selectedBanCategory, setSelectedBanCategory] = useState<ChatBanCategory | null>(null);
+  const [banDays, setBanDays] = useState('');
+  const [reportedUserRole, setReportedUserRole] = useState<'farmer' | 'technician' | ''>('');
 
   useEffect(() => {
     const loadAdmin = async () => {
@@ -145,19 +172,46 @@ export default function MessageReportsPage() {
     }
   };
 
-  // ─── Ban / Deactivate User ───
-  const handleBanUser = async () => {
-    if (!selectedReport || !selectedBanDuration) {
-      modalAlert('Error', 'Please select a ban duration.');
+  // ─── Open Ban Modal (fetch reported user role first) ───
+  const openBanModal = async () => {
+    if (!selectedReport) return;
+
+    try {
+      // Get the reported user's role
+      const userDoc = await firestore().collection(Collections.USERS).doc(selectedReport.reportedUserId).get();
+      const role = userDoc.data()?.role || '';
+      setReportedUserRole(role === 'farmer' ? 'farmer' : role === 'technician' ? 'technician' : '');
+    } catch (e) {
+      // Fallback: try to infer from reportedUserRole field
+      const role = selectedReport.reportedUserRole || '';
+      setReportedUserRole(role === 'farmer' ? 'farmer' : role === 'technician' ? 'technician' : '');
+    }
+
+    setSelectedBanCategory(null);
+    setBanDays('');
+    setShowBanModal(true);
+  };
+
+  // ─── Apply Chat Ban ───
+  const handleApplyBan = async () => {
+    if (!selectedReport || !selectedBanCategory) {
+      modalAlert('Error', 'Please select a ban category.');
       return;
     }
 
-    const banOption = BAN_OPTIONS.find(b => b.value === selectedBanDuration);
-    if (!banOption) return;
+    const days = parseInt(banDays);
+    if (!days || days < 1) {
+      modalAlert('Error', 'Please enter a valid number of days (minimum 1).');
+      return;
+    }
+
+    const category = CHAT_BAN_CATEGORIES.find(c => c.value === selectedBanCategory)!;
+    const durationLabel = `${days} day${days > 1 ? 's' : ''}`;
+    const banUntil = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 
     modalAlert(
-      '⚠️ Confirm Ban',
-      `Are you sure you want to ${banOption.value === 'permanent' ? 'permanently deactivate' : `ban for ${banOption.label}`} the account of ${selectedReport.reportedUserName}?`,
+      '⚠️ Confirm Chat Ban',
+      `Apply "${category.label}" (${durationLabel}) to ${selectedReport.reportedUserName}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -166,58 +220,104 @@ export default function MessageReportsPage() {
           onPress: async () => {
             setProcessing(true);
             try {
-              const isPermanent = banOption.value === 'permanent';
-              const banUntil = isPermanent
-                ? null
-                : new Date(Date.now() + banOption.days * 24 * 60 * 60 * 1000);
-
-              // Update user account
-              await firestore().collection(Collections.USERS).doc(selectedReport!.reportedUserId).update({
-                status: isPermanent ? 'deactivated' : 'banned',
-                banReason: `Reported message: "${selectedReport!.messageText.substring(0, 100)}"`,
+              const banEntry: any = {
+                category: selectedBanCategory,
+                banDays: days,
+                banUntil: firestore.Timestamp.fromDate(banUntil),
                 bannedAt: firestore.FieldValue.serverTimestamp(),
                 bannedBy: adminName,
-                banDuration: banOption.label,
-                banUntil: banUntil ? firestore.Timestamp.fromDate(banUntil) : null,
-              });
+                reason: responseText.trim() || `Chat violation: "${selectedReport!.messageText.substring(0, 80)}"`,
+                reportId: selectedReport!.id,
+                reporterId: selectedReport!.reporterId,
+                chatId: selectedReport!.chatId,
+              };
 
-              // Update the report
+              // Build Firestore update based on ban category
+              if (selectedBanCategory === 'farmer_reply_suspension') {
+                // Farmer can't reply to the specific technician (reporter)
+                banEntry.blockedUserId = selectedReport!.reporterId; // The technician who reported
+                banEntry.targetUserId = selectedReport!.reportedUserId; // The farmer being banned
+
+                // Save to user's chatBans subcollection
+                await firestore()
+                  .collection(Collections.USERS)
+                  .doc(selectedReport!.reportedUserId)
+                  .collection('chatBans')
+                  .add(banEntry);
+
+              } else if (selectedBanCategory === 'technician_request_suspension') {
+                // Technician can't receive requests from the specific farmer (reporter)
+                banEntry.blockedFarmerId = selectedReport!.reporterId; // The farmer who reported
+                banEntry.targetUserId = selectedReport!.reportedUserId; // The technician being banned
+
+                await firestore()
+                  .collection(Collections.USERS)
+                  .doc(selectedReport!.reportedUserId)
+                  .collection('chatBans')
+                  .add(banEntry);
+
+              } else if (selectedBanCategory === 'technician_request_page_suspension') {
+                // Technician can't open the request page at all
+                banEntry.targetUserId = selectedReport!.reportedUserId;
+
+                await firestore()
+                  .collection(Collections.USERS)
+                  .doc(selectedReport!.reportedUserId)
+                  .update({
+                    requestPageBanned: true,
+                    requestPageBanUntil: firestore.Timestamp.fromDate(banUntil),
+                    requestPageBanReason: banEntry.reason,
+                  });
+
+                // Also save to chatBans for record
+                await firestore()
+                  .collection(Collections.USERS)
+                  .doc(selectedReport!.reportedUserId)
+                  .collection('chatBans')
+                  .add(banEntry);
+              }
+
+              // Update the report as resolved
               await firestore().collection('reports').doc(selectedReport!.id).update({
                 status: 'resolved',
-                adminAction: isPermanent ? 'account_deactivated' : `banned_${banOption.value}`,
-                adminResponse: responseText.trim() || `User ${isPermanent ? 'permanently deactivated' : `banned for ${banOption.label}`} due to violation.`,
+                adminAction: `chat_ban_${selectedBanCategory}`,
+                adminResponse: responseText.trim() || `${category.label} applied for ${durationLabel}.`,
                 adminName,
                 resolvedAt: firestore.FieldValue.serverTimestamp(),
               });
 
               // Notify the banned user
+              let notifBody = '';
+              if (selectedBanCategory === 'farmer_reply_suspension') {
+                notifBody = `You have been suspended from replying to ${selectedReport!.reporterName} for ${durationLabel} due to a chat violation.`;
+              } else if (selectedBanCategory === 'technician_request_suspension') {
+                notifBody = `You will not receive service requests from ${selectedReport!.reporterName} for ${durationLabel} due to a chat violation.`;
+              } else {
+                notifBody = `You have been suspended from accessing the available requests page for ${durationLabel} due to a chat violation.`;
+              }
+
               await firestore().collection(Collections.NOTIFICATIONS).add({
                 userId: selectedReport!.reportedUserId,
-                type: 'account_action',
-                title: isPermanent ? '🚫 Account Deactivated' : `⛔ Account Suspended`,
-                body: isPermanent
-                  ? `Your account has been permanently deactivated due to violation of community guidelines. Contact support for appeal.`
-                  : `Your account has been suspended for ${banOption.label} due to violation of community guidelines. You will be able to use the app again after the suspension period.`,
+                type: 'chat_ban',
+                title: '⛔ Chat Restriction Applied',
+                body: notifBody,
                 read: false,
-                data: { action: isPermanent ? 'deactivated' : 'banned', duration: banOption.label },
+                data: { action: selectedBanCategory, duration: durationLabel, reportId: selectedReport!.id },
                 createdAt: firestore.FieldValue.serverTimestamp(),
               });
 
-              // FCM push to banned user
               await sendPushNotification(selectedReport!.reportedUserId, {
-                title: isPermanent ? '🚫 Account Deactivated' : '⛔ Account Suspended',
-                body: isPermanent
-                  ? 'Your account has been deactivated due to policy violation.'
-                  : `Your account has been suspended for ${banOption.label}.`,
-                data: { type: 'account_action' },
+                title: '⛔ Chat Restriction Applied',
+                body: notifBody,
+                data: { type: 'chat_ban', action: selectedBanCategory },
               });
 
-              // Notify the reporter that action was taken
+              // Notify reporter that action was taken
               await firestore().collection(Collections.NOTIFICATIONS).add({
                 userId: selectedReport!.reporterId,
                 type: 'report_response',
                 title: '✅ Action Taken',
-                body: `Action has been taken against ${selectedReport!.reportedUserName} based on your report. Thank you for helping keep the community safe.`,
+                body: `Action has been taken against ${selectedReport!.reportedUserName} based on your report. Thank you for keeping the community safe.`,
                 read: false,
                 data: { reportId: selectedReport!.id },
                 createdAt: firestore.FieldValue.serverTimestamp(),
@@ -232,11 +332,12 @@ export default function MessageReportsPage() {
               setShowBanModal(false);
               setShowActionModal(false);
               setSelectedReport(null);
-              setSelectedBanDuration(null);
+              setSelectedBanCategory(null);
+              setBanDays('');
               setResponseText('');
-              modalAlert('Done', `User ${isPermanent ? 'permanently deactivated' : `banned for ${banOption.label}`}.`);
+              modalAlert('Done', `${category.label} (${durationLabel}) applied to ${selectedReport!.reportedUserName}.`);
             } catch (e: any) {
-              modalAlert('Error', e.message || 'Failed to ban user.');
+              modalAlert('Error', e.message || 'Failed to apply ban.');
             } finally {
               setProcessing(false);
             }
@@ -246,16 +347,21 @@ export default function MessageReportsPage() {
     );
   };
 
+  // Filter ban categories based on reported user role
+  const availableBanCategories = CHAT_BAN_CATEGORIES.filter(
+    c => !reportedUserRole || c.applicableTo === reportedUserRole
+  );
+
   if (loading) return <View style={s.center}><ActivityIndicator size="large" color={Colors.primary} /></View>;
 
   return (
-    <View style={s.container}>
+    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       {/* Header */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
           <Icon name="chevron-right" size={20} color={Colors.white} strokeWidth={2.5} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>Message Reports</Text>
+        <Text style={s.headerTitle}>Chat Reports</Text>
         <Text style={s.headerCount}>{reports.filter(r => r.status === 'pending').length} pending</Text>
       </View>
 
@@ -358,7 +464,7 @@ export default function MessageReportsPage() {
                     <Text style={s.modalMessageText}>"{selectedReport.messageText}"</Text>
                   </View>
                   <Text style={s.modalMeta}>
-                    From: {selectedReport.reportedUserName} • Reported by: {selectedReport.reporterName}
+                    From: {selectedReport.reportedUserName} • Reported by: {selectedReport.reporterName} ({selectedReport.reporterRole})
                   </Text>
                 </View>
 
@@ -398,11 +504,11 @@ export default function MessageReportsPage() {
 
                   <TouchableOpacity
                     style={[s.actionBtn, s.actionBan]}
-                    onPress={() => setShowBanModal(true)}
+                    onPress={openBanModal}
                     disabled={processing}
                   >
                     <Icon name="lock" size={16} color={Colors.white} />
-                    <Text style={s.actionBtnText}>Ban / Deactivate User</Text>
+                    <Text style={s.actionBtnText}>Apply Chat Ban</Text>
                   </TouchableOpacity>
                 </View>
 
@@ -413,61 +519,95 @@ export default function MessageReportsPage() {
         </View>
       </Modal>
 
-      {/* ─── Ban Duration Modal ─── */}
-      <Modal visible={showBanModal} animationType="fade" transparent>
-        <View style={s.modalOverlay}>
-          <View style={s.banModalContent}>
+      {/* ─── Chat Ban Modal ─── */}
+      <Modal visible={showBanModal} animationType="fade" transparent onRequestClose={() => setShowBanModal(false)}>
+        <Pressable style={s.modalOverlay} onPress={() => setShowBanModal(false)}>
+          <View style={s.banModalContent} onStartShouldSetResponder={() => true}>
             <View style={s.modalHeader}>
-              <Text style={s.modalTitle}>Ban Duration</Text>
+              <Text style={s.modalTitle}>Chat Ban</Text>
               <TouchableOpacity onPress={() => setShowBanModal(false)}>
                 <Icon name="close" size={22} color={Colors.text} />
               </TouchableOpacity>
             </View>
 
             <Text style={s.banSubtitle}>
-              Select how long to ban {selectedReport?.reportedUserName}:
+              Applying chat restriction to: <Text style={{ fontWeight: '700', color: '#EF4444' }}>{selectedReport?.reportedUserName}</Text>
+              {reportedUserRole ? (
+                <Text style={{ color: Colors.primary }}> ({reportedUserRole})</Text>
+              ) : null}
             </Text>
 
-            <ScrollView style={{ maxHeight: 320 }}>
-              {BAN_OPTIONS.map(option => (
-                <TouchableOpacity
-                  key={option.value}
-                  style={[s.banOption, selectedBanDuration === option.value && s.banOptionActive]}
-                  onPress={() => setSelectedBanDuration(option.value)}
-                >
-                  <View style={s.banRadio}>
-                    {selectedBanDuration === option.value && <View style={s.banRadioInner} />}
-                  </View>
-                  <Text style={[
-                    s.banOptionText,
-                    option.value === 'permanent' && { color: '#EF4444', fontWeight: '700' },
-                  ]}>
-                    {option.label}
-                  </Text>
-                  {option.value === 'permanent' && (
-                    <Text style={s.banPermanentWarning}>⚠️ Cannot login</Text>
-                  )}
-                </TouchableOpacity>
-              ))}
+            {/* Role detection notice */}
+            {reportedUserRole ? (
+              <View style={s.roleNotice}>
+                <Icon name={reportedUserRole === 'farmer' ? 'leaf' : 'stethoscope'} size={14} color={Colors.primary} />
+                <Text style={s.roleNoticeText}>
+                  Showing ban options for: {reportedUserRole === 'farmer' ? 'Farmer' : 'Technician'}
+                </Text>
+              </View>
+            ) : null}
+
+            {/* Ban Category Selection */}
+            <Text style={s.banSectionLabel}>Ban Category:</Text>
+            <ScrollView style={{ maxHeight: 200 }}>
+              {availableBanCategories.length === 0 ? (
+                <Text style={s.noCategoriesText}>No ban categories available for this user role.</Text>
+              ) : (
+                availableBanCategories.map(cat => (
+                  <TouchableOpacity
+                    key={cat.value}
+                    style={[s.banCategoryOption, selectedBanCategory === cat.value && s.banCategoryActive]}
+                    onPress={() => setSelectedBanCategory(cat.value)}
+                  >
+                    <View style={s.banRadio}>
+                      {selectedBanCategory === cat.value && <View style={s.banRadioInner} />}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.banCategoryLabel}>{cat.label}</Text>
+                      <Text style={s.banCategoryDesc}>{cat.description}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))
+              )}
             </ScrollView>
 
+            {/* Days Input */}
+            {selectedBanCategory && (
+              <View style={s.daysSection}>
+                <Text style={s.banSectionLabel}>Number of Days:</Text>
+                <TextInput
+                  style={s.daysInput}
+                  value={banDays}
+                  onChangeText={(t) => setBanDays(t.replace(/[^0-9]/g, ''))}
+                  keyboardType="numeric"
+                  placeholder="e.g. 7"
+                  placeholderTextColor={Colors.textLight}
+                  maxLength={4}
+                />
+                {banDays ? (
+                  <Text style={s.daysPreview}>
+                    Restriction until: {new Date(Date.now() + parseInt(banDays || '0') * 24 * 60 * 60 * 1000).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </Text>
+                ) : null}
+              </View>
+            )}
+
+            {/* Apply Button */}
             <TouchableOpacity
-              style={[s.banConfirmBtn, !selectedBanDuration && s.banConfirmBtnDisabled]}
-              onPress={handleBanUser}
-              disabled={!selectedBanDuration || processing}
+              style={[s.banConfirmBtn, (!selectedBanCategory || !banDays || processing) && s.banConfirmBtnDisabled]}
+              onPress={handleApplyBan}
+              disabled={!selectedBanCategory || !banDays || processing}
             >
               {processing ? (
                 <ActivityIndicator color={Colors.white} />
               ) : (
-                <Text style={s.banConfirmText}>
-                  {selectedBanDuration === 'permanent' ? '🚫 Deactivate Account' : '⛔ Apply Ban'}
-                </Text>
+                <Text style={s.banConfirmText}>⛔ Apply Chat Ban</Text>
               )}
             </TouchableOpacity>
           </View>
-        </View>
+        </Pressable>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -506,7 +646,7 @@ const s = StyleSheet.create({
   adminResponseLabel: { fontSize: FontSize.xs, fontWeight: '700', color: '#2E7D32', marginBottom: 2 },
   adminResponseText: { fontSize: FontSize.sm, color: '#1B5E20' },
 
-  // Modal
+  // Action Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: Spacing.xl, maxHeight: '85%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg },
@@ -529,15 +669,33 @@ const s = StyleSheet.create({
   actionBtnText: { color: Colors.white, fontWeight: '700', fontSize: FontSize.md },
 
   // Ban Modal
-  banModalContent: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: Spacing.xl, maxHeight: '80%' },
-  banSubtitle: { fontSize: FontSize.sm, color: Colors.textSecondary, marginBottom: Spacing.lg },
-  banOption: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.md, paddingHorizontal: Spacing.md, borderRadius: BorderRadius.md, marginBottom: 4, gap: Spacing.md },
-  banOptionActive: { backgroundColor: '#FFEBEE' },
-  banRadio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: Colors.border, justifyContent: 'center', alignItems: 'center' },
-  banRadioInner: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#EF4444' },
-  banOptionText: { fontSize: FontSize.md, color: Colors.text, flex: 1 },
-  banPermanentWarning: { fontSize: FontSize.xs, color: '#EF4444' },
-  banConfirmBtn: { backgroundColor: '#EF4444', borderRadius: BorderRadius.lg, paddingVertical: Spacing.lg, alignItems: 'center', marginTop: Spacing.lg },
+  banModalContent: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: Spacing.xl, maxHeight: '85%' },
+  banSubtitle: { fontSize: FontSize.md, color: Colors.textSecondary, marginBottom: Spacing.md },
+  roleNotice: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#E8F5E9',
+    paddingHorizontal: Spacing.md, paddingVertical: 8, borderRadius: BorderRadius.lg, marginBottom: Spacing.lg,
+  },
+  roleNoticeText: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: '600' },
+  banSectionLabel: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.text, marginBottom: Spacing.sm, marginTop: Spacing.sm },
+  noCategoriesText: { fontSize: FontSize.sm, color: Colors.textLight, fontStyle: 'italic', padding: Spacing.md },
+  banCategoryOption: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    padding: Spacing.md, borderRadius: BorderRadius.lg, borderWidth: 1.5,
+    borderColor: Colors.border, marginBottom: Spacing.sm, backgroundColor: Colors.white,
+  },
+  banCategoryActive: { borderColor: Colors.primary, backgroundColor: '#E8F5E9' },
+  banRadio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: Colors.textLight, justifyContent: 'center', alignItems: 'center' },
+  banRadioInner: { width: 12, height: 12, borderRadius: 6, backgroundColor: Colors.primary },
+  banCategoryLabel: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
+  banCategoryDesc: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 2 },
+  daysSection: { marginTop: Spacing.md },
+  daysInput: {
+    borderWidth: 1.5, borderColor: Colors.border, borderRadius: BorderRadius.lg,
+    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md,
+    fontSize: FontSize.lg, fontWeight: '700', color: Colors.text, textAlign: 'center',
+  },
+  daysPreview: { fontSize: FontSize.xs, color: Colors.primary, marginTop: 6, textAlign: 'center' },
+  banConfirmBtn: { backgroundColor: '#EF4444', borderRadius: BorderRadius.lg, paddingVertical: Spacing.lg, alignItems: 'center', marginTop: Spacing.xl, marginBottom: Spacing.md },
   banConfirmBtnDisabled: { opacity: 0.5 },
   banConfirmText: { fontSize: FontSize.md, fontWeight: '700', color: Colors.white },
 });

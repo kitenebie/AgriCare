@@ -20,6 +20,8 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 
 export interface AppointmentRecord {
@@ -321,7 +323,7 @@ export default function AdminAppointmentsScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View
         style={[
           styles.header,
@@ -708,7 +710,7 @@ export default function AdminAppointmentsScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

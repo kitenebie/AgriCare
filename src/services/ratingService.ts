@@ -203,3 +203,23 @@ export const getPendingRateRequest = async (chatId: string, farmerId: string) =>
 
   return matches.length > 0 ? matches[0] : null;
 };
+
+/**
+ * Check if a rate request already exists for this chat (technician side)
+ * Returns true if there is any pending or completed rate request,
+ * meaning the technician should NOT be allowed to send another one.
+ */
+export const hasExistingRateRequest = async (chatId: string, technicianId: string): Promise<boolean> => {
+  // Single-field query to avoid composite index requirement
+  const snapshot = await firestore()
+    .collection('rateRequests')
+    .where('chatId', '==', chatId)
+    .get();
+
+  // Filter client-side: any rate request from this technician (pending or completed)
+  const existing = snapshot.docs
+    .map(d => d.data())
+    .filter((r: any) => r.technicianId === technicianId);
+
+  return existing.length > 0;
+};

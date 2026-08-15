@@ -21,6 +21,7 @@ import {
   EyeClosed,
   EyeIcon,
   FlaskConical,
+  Flag,
   Heart,
   HeartHandshake,
   HeartPulse,
@@ -109,6 +110,7 @@ export type IconName =
   | "farmer"
   | "technician"
   | "shield-alert"
+  | "flag"
   | "check-circle"
   | "plus"
   | "check"
@@ -205,6 +207,7 @@ const iconMap: Record<IconName, React.FC<LucideProps> | string> = {
   farmer: UserCheck,
   technician: Wrench,
   "shield-alert": ShieldAlert,
+  flag: Flag,
   "check-circle": CheckCircle2,
   plus: Plus,
   check: Check,

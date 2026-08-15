@@ -1,7 +1,7 @@
 # 🤝 HANDOFF.md — AgriCare
 
-> **Last Updated**: 2026-08-08
-> **Last Tasks**: Rating system, Calendar integration, Ban/Report system, Admin approval flow, Specialization filtering
+> **Last Updated**: 2026-08-15
+> **Last Tasks**: KeyboardAvoidingView on all forms, Custom Modal Alert, Toast Notification
 
 ## Current State
 
@@ -9,7 +9,8 @@
 - **Admin module ~80%** — Dashboard, Users (with approve/reject), Message Reports, Forum, Livestock, Logs
 - **Farmer module ~70%** — Home, Map, Services, Messages (1-on-1 chat), Health Records (view), Profile
 - **Technician module ~85%** — Dashboard, Schedule, Appointments (specialization-filtered), Map, Chat (with rate request + report), Health Records (form), Profile
-- **Shared systems DONE**: Chat, Rating, Calendar, Notifications, FCM Push, Ban/Report, Location Tracking
+- **Shared systems DONE**: Chat, Rating, Calendar, Notifications, FCM Push, Ban/Report, Location Tracking, Knowledge Base, Forum
+- **UX Polish DONE**: Custom Modal Alert (replaced native Alert.alert()), Toast Notifications, KeyboardAvoidingView on all 22 form screens
 
 ### Architecture
 - **Framework**: React Native (Expo SDK 57) + expo-router (file-based routing)
@@ -62,15 +63,20 @@ src/app/(auth)/pending-verification.tsx  — Post-registration waiting screen
 src/app/(admin)/home/message-reports.tsx — Admin moderation page
 ```
 
+## New Files (Aug 14 session)
+
+```
+src/components/ui/ModalAlert.tsx        — Custom animated modal alert (replaces Alert.alert)
+src/components/ui/ToastNotification.tsx — In-app chat toast notification
+```
+
 ## What To Do Next
 
-1. **Farmer livestock CRUD** — add/edit/delete animals with photos
-2. **Farmer appointment booking** — select service + technician + schedule
-3. **Farmer emergency request** — urgent help button
-4. **Cloud Function** — process `pushQueue` collection → send actual FCM via Admin SDK
-5. **OpenRouteService API key** — register at openrouteservice.org, update `src/constants/config.ts`
-6. **Final testing** — all flows end-to-end, edge cases
-7. **Polish** — loading states, error handling, empty states
+1. **Navigation buttons** — Add grid items on farmer home & technician dashboard linking to KB & Forum pages
+2. **OpenRouteService API key** — register at openrouteservice.org, update `src/constants/config.ts`
+3. **Chat image picker** — expo-image-picker → upload to Firebase Storage → display in chat
+4. **Final testing** — all flows end-to-end, edge cases
+5. **Polish** — loading states, error handling, empty states
 
 ## Key Patterns
 
@@ -80,3 +86,5 @@ src/app/(admin)/home/message-reports.tsx — Admin moderation page
 - **Status values**: `pending` | `active` | `banned` | `deactivated` | `rejected`
 - **Tab navigation**: uses `tabPress` listener with `e.preventDefault()` + `router.replace()` to always reset stack
 - **File imports**: use `@/` alias → resolves to `./src/`
+- **Alerts**: use `modalAlert()` from `@/components/ui/ModalAlert` (NOT native `Alert.alert()`)
+- **Forms**: all form screens have `KeyboardAvoidingView` wrapping — iOS uses `padding`, Android uses `height`

@@ -20,6 +20,8 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 
 export interface ConsultationRecord {
@@ -267,7 +269,7 @@ export default function AdminConsultationsScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       {/* Header Bar */}
       <View
         style={[
@@ -656,7 +658,7 @@ export default function AdminConsultationsScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

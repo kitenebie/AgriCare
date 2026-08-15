@@ -1,3 +1,18 @@
+## [5.4.0] - 2026-08-15 (Sat)
+### Fixed
+- **KeyboardAvoidingView on ALL form screens** — When the keyboard opens on mobile, forms now adjust their height so inputs are not hidden behind the keyboard. Applied to 22 screens across all roles:
+  - `(auth)/` — login, register (already had it ✅)
+  - `(admin)/` — profile, livestock/index, livestock/preview, appointments, consultations, livestock-categories, logs, message-reports, reports, reviews, users
+  - `(farmer)/` — profile, services/index, services/custom-service, home/my-animals
+  - `(technician)/` — profile, dashboard/health-records/form
+  - `components/shared/` — AnnouncementsScreen, ForumScreen, KnowledgeBaseScreen
+- Uses `behavior="padding"` on iOS, `behavior="height"` on Android
+- Added `Platform` import where missing
+- Profile screens (ScrollView as root): wrapped with KAV outside
+- Container-based screens (View as root): replaced outer View with KAV
+
+---
+
 ## [5.3.0] - 2026-08-14 (Fri)
 ### Added
 - **Custom Modal Alert Component** (`src/components/ui/ModalAlert.tsx`) — Drop-in replacement for React Native's default `Alert.alert()`. Features: animated spring modal, auto-detects type (success/error/warning/info/confirm) from title, color-coded icon circle, styled buttons (primary/destructive/cancel), backdrop dismiss, Android back button handling.

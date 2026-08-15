@@ -20,6 +20,8 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 
 export interface ReviewRecord {
@@ -256,7 +258,7 @@ export default function AdminRatingsReviewsScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       {/* Top Header */}
       <View
         style={[
@@ -578,7 +580,7 @@ export default function AdminRatingsReviewsScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

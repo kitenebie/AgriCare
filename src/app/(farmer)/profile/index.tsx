@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Switch, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Switch, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native'
 import { modalAlert } from '@/components/ui/ModalAlert';
 import { router } from 'expo-router';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
@@ -129,6 +129,7 @@ export default function FarmerProfileScreen() {
   if (loading) return <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}><ActivityIndicator size="large" color={Colors.primary} /></View>;
 
   return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
         <Avatar name={user?.displayName || 'Farmer'} imageUrl={photoURL} size={80} />
@@ -206,6 +207,7 @@ export default function FarmerProfileScreen() {
         </View></View>
       </Modal>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

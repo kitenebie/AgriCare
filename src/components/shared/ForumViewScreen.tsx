@@ -13,6 +13,7 @@ import { Icon, Avatar } from '@/components/ui';
 import { Collections } from '@/services/firebase';
 import { getCurrentUserProfile } from '@/services/authService';
 import { sendPushNotification } from '@/services/pushService';
+import { reportForumPost, reportForumReply } from '@/services/reportService';
 
 interface Post {
   id: string;
@@ -192,6 +193,34 @@ export default function ForumViewScreen() {
     return currentUser.role === 'admin' || reply.authorId === currentUser.id;
   };
 
+  // Report a post for violation
+  const handleReportPost = () => {
+    if (!post || post.authorId === currentUser.id) return;
+    modalAlert('⚠️ Report Post', `Are you sure you want to report this post for a violation? This will be reviewed by an admin.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Report', style: 'destructive', onPress: async () => {
+        try {
+          await reportForumPost({ reporterId: currentUser.id, reporterName: currentUser.name, reporterRole: currentUser.role, postId: post.id, postTitle: post.title, postContent: post.content, authorId: post.authorId, authorName: post.authorName });
+          modalAlert('Reported', 'Your report has been submitted. An admin will review it.');
+        } catch (e: any) { modalAlert('Error', 'Failed to submit report. Please try again.'); }
+      }},
+    ]);
+  };
+
+  // Report a reply for violation
+  const handleReportReply = (reply: Reply) => {
+    if (reply.authorId === currentUser.id) return;
+    modalAlert('⚠️ Report Reply', `Are you sure you want to report this reply for a violation? This will be reviewed by an admin.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Report', style: 'destructive', onPress: async () => {
+        try {
+          await reportForumReply({ reporterId: currentUser.id, reporterName: currentUser.name, reporterRole: currentUser.role, replyContent: reply.content, replyAuthorId: reply.authorId, replyAuthorName: reply.authorName, postId: id || '', postTitle: post?.title || '' });
+          modalAlert('Reported', 'Your report has been submitted. An admin will review it.');
+        } catch (e: any) { modalAlert('Error', 'Failed to submit report. Please try again.'); }
+      }},
+    ]);
+  };
+
   const getRoleColor = (role: string) => role === 'admin' ? '#1565C0' : role === 'technician' ? '#2E7D32' : '#E65100';
   const formatDate = (ts: any) => {
     if (!ts) return '';
@@ -256,6 +285,12 @@ export default function ForumViewScreen() {
               <Text style={s.statText}>{replies.length} replies</Text>
             </View>
             <Text style={s.statText}>{post.views || 0} views</Text>
+            {/* Report icon — not shown on own posts */}
+            {post.authorId !== currentUser.id && (
+              <TouchableOpacity onPress={handleReportPost} style={s.reportBtn}>
+                <Icon name="flag" size={14} color={Colors.warning} />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -278,6 +313,12 @@ export default function ForumViewScreen() {
                     <Text style={[s.replyRole, { color: getRoleColor(r.authorRole) }]}>{r.authorRole}</Text>
                   </View>
                   {r.createdAt && <Text style={s.replyDate}>{formatDate(r.createdAt)}</Text>}
+                  {/* Report reply icon — not shown on own replies */}
+                  {r.authorId !== currentUser.id && (
+                    <TouchableOpacity onPress={() => handleReportReply(r)} style={s.replyReportBtn}>
+                      <Icon name="flag" size={12} color={Colors.warning} />
+                    </TouchableOpacity>
+                  )}
                   {canDeleteReply(r) && (
                     <TouchableOpacity onPress={() => handleDeleteReply(r.id)} style={s.replyDeleteBtn}>
                       <Icon name="trash" size={14} color={Colors.error} />
@@ -353,6 +394,8 @@ const s = StyleSheet.create({
   replyRole: { fontSize: 9, fontWeight: '700' },
   replyDate: { fontSize: 9, color: Colors.textLight, marginRight: 8 },
   replyDeleteBtn: { padding: 4 },
+  reportBtn: { padding: 4, marginLeft: 'auto' },
+  replyReportBtn: { padding: 4, marginRight: 4 },
   replyContent: { fontSize: FontSize.sm, color: Colors.text, lineHeight: 20, marginLeft: 42 },
   // Reply Input
   replyInputContainer: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, backgroundColor: Colors.white, borderTopWidth: 1, borderTopColor: Colors.border },

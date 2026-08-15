@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { handleNotificationNavigation } from '@/services/notificationNavigator';
 import Animated from 'react-native-reanimated';
 import firestore from '@react-native-firebase/firestore';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
@@ -25,6 +26,7 @@ interface Notification {
   body: string;
   read: boolean;
   type: string;
+  data?: Record<string, string | undefined>;
   createdAt: any;
 }
 
@@ -102,7 +104,10 @@ export default function TechMessagesScreen() {
         .limit(50)
         .onSnapshot(
           (snap) => {
-            setNotifications(snap.docs.map(d => ({ id: d.id, ...d.data() } as Notification)));
+            setNotifications(snap.docs.map(d => {
+              const docData = d.data();
+              return { id: d.id, ...docData, data: docData } as Notification;
+            }));
           },
           (err) => {
             console.warn('Notifications listener error:', err);
@@ -124,6 +129,12 @@ export default function TechMessagesScreen() {
     try {
       await firestore().collection(Collections.NOTIFICATIONS).doc(notifId).update({ read: true });
     } catch (e) {}
+  };
+
+  const handleNotifPress = async (item: Notification) => {
+    if (!item.read) markNotifRead(item.id);
+    // Navigate to the relevant page using notification type + data
+    await handleNotificationNavigation({ type: item.type, ...item.data });
   };
 
   const formatTime = (timestamp: any) => {
@@ -241,7 +252,7 @@ export default function TechMessagesScreen() {
                   <TouchableOpacity
                     style={[styles.notifItem, !item.read && styles.notifUnread]}
                     activeOpacity={0.7}
-                    onPress={() => { if (!item.read) markNotifRead(item.id); }}
+                    onPress={() => handleNotifPress(item)}
                   >
                     <View style={[styles.notifIcon, { backgroundColor: notifStyle.bg }]}>  
                       <Icon name={notifStyle.icon as any} size={20} color={notifStyle.color} />

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, ActivityIndicator, Switch,
+  TextInput, ActivityIndicator, Switch, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { modalAlert } from '@/components/ui/ModalAlert';
 import firestore from '@react-native-firebase/firestore';
@@ -291,7 +291,8 @@ export default function HealthRecordFormScreen() {
         <View style={{ width: 36 }} />
       </View>
 
-      <ScrollView style={s.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
+      <ScrollView style={s.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 40 }}>
         {/* Animal Info Banner */}
         <View style={s.animalBanner}>
           {params.animalPhoto ? (
@@ -500,6 +501,7 @@ export default function HealthRecordFormScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }

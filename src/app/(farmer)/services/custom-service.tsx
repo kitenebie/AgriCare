@@ -18,6 +18,8 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { modalAlert } from '@/components/ui/ModalAlert';
 
@@ -118,7 +120,7 @@ export default function CustomServiceScreen() {
   };
 
   return (
-    <View style={s.container}>
+    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={s.header}>
         <TouchableOpacity
           onPress={() => {
@@ -251,7 +253,7 @@ export default function CustomServiceScreen() {
           <View style={{ height: 80 }} />
         </ScrollView>
       )}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

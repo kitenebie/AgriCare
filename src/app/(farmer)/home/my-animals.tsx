@@ -25,6 +25,8 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { modalAlert } from '@/components/ui/ModalAlert';
 
@@ -327,7 +329,7 @@ export default function MyAnimalsPage() {
     );
 
   return (
-    <View style={s.container}>
+    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
           <Icon
@@ -755,7 +757,7 @@ export default function MyAnimalsPage() {
           </View>
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

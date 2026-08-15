@@ -10,6 +10,8 @@ import {
   Modal,
   Dimensions,
   Image,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import firestore from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
@@ -206,6 +208,7 @@ export default function LogsPage() {
               const isValidUrl = (val: any) => typeof val === 'string' && (val.startsWith('http://') || val.startsWith('https://'));
 
               return (
+                <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
                 <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: Dimensions.get('window').height * 0.55 }}>
                   {/* Basic Info */}
                   <View style={styles.drawerRow}><Text style={styles.drawerLabel}>Action</Text><Text style={styles.drawerValue}>{selectedLog.action}</Text></View>
@@ -266,6 +269,7 @@ export default function LogsPage() {
                     </View>
                   )}
                 </ScrollView>
+                </KeyboardAvoidingView>
               );
             })()}
           </View>

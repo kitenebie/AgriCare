@@ -24,6 +24,8 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { modalAlert } from '@/components/ui/ModalAlert';
 
@@ -315,7 +317,7 @@ export default function LivestockCategoriesScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       {/* Top Header */}
       <View
         style={[
@@ -652,7 +654,7 @@ export default function LivestockCategoriesScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

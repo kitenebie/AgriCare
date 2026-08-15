@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput, Modal, Animated, Dimensions, Pressable, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput, Modal, Animated, Dimensions, Pressable, Linking, KeyboardAvoidingView, Platform } from 'react-native'
 import { modalAlert } from '@/components/ui/ModalAlert';
 import firestore from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
@@ -243,7 +243,7 @@ export default function UsersPage() {
   if (loading) return <View style={s.center}><ActivityIndicator size="large" color={Colors.primary} /><Text style={s.loadText}>Loading users...</Text></View>;
 
   return (
-    <View style={s.container}>
+    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}><Icon name="chevron-right" size={20} color={Colors.white} strokeWidth={2.5} /></TouchableOpacity>
         <Text style={s.headerTitle}>User Management</Text>
@@ -515,7 +515,7 @@ export default function UsersPage() {
           </Animated.View>
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

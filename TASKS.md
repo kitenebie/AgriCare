@@ -1,4 +1,4 @@
-# ✅ TASKS.md — AgriCare (Updated: 2026-08-14)
+# ✅ TASKS.md — AgriCare (Updated: 2026-08-15)
 
 ## Completed
 - [x] Reset Expo template, build hierarchical structure
@@ -76,6 +76,8 @@
 - [x] **Admin Reject Reason Modal** — 20 checkbox reasons + textarea, formatted notification to user
 
 ## Pending
+- [ ] **Audio playback for chat voice messages** — expo-audio integration for sent/received voice clips
+- [ ] **Image picker for chat** — Send photos in chat messages via expo-image-picker
 - [ ] **OpenRouteService API key setup** — Code exists in (technician)/map/index.tsx line 45, user needs free account at openrouteservice.org + add key to env
 - [ ] **Final testing & polish** — Full integration testing, bug fixes, performance optimization before Aug 23 MVP deadline
 - [ ] **Navigation buttons** — Farmer home & Technician dashboard need grid/menu items linking to Knowledge Base & Forum pages (pages exist but no UI button to reach them)
@@ -97,3 +99,13 @@
 - [x] **Farmer Appointment Booking verified** — services/index.tsx full flow to Firestore APPOINTMENTS (was pending, verified ✅)
 - [x] **Farmer Emergency Request verified** — custom-service.tsx saves to customServices (was pending, verified ✅)
 - [x] **Admin Dashboard Live Stats verified** — home/index.tsx has 4 onSnapshot listeners (was pending, verified ✅)
+
+## Completed (Aug 14 — UX Polish)
+- [x] **Custom Modal Alert Component** — `src/components/ui/ModalAlert.tsx` — Animated modal replacement for `Alert.alert()` with type-based icons (success/error/warning/info/confirm), color-coded styling, primary/destructive/cancel buttons
+- [x] **Toast Notification Component** — `src/components/ui/ToastNotification.tsx` — Top-toast for incoming chat messages, auto-dismiss after 5s, tap-to-navigate
+- [x] **`modalAlert()` global function** — Same API as `Alert.alert(title, message, buttons)` for seamless migration
+- [x] **`showChatToast()` global function** — In-app chat toast with sender info
+- [x] **Replaced ALL `Alert.alert()` calls** across 27 files with `modalAlert()` — fully migrated from native Alert to custom animated modal
+
+## Completed (Aug 15 — Keyboard UX)
+- [x] **KeyboardAvoidingView on ALL form screens** — Applied to 22 screens (admin, farmer, technician, shared, auth). Forms now adjust height when keyboard appears so inputs aren't hidden. Uses `behavior="padding"` on iOS, `"height"` on Android.
