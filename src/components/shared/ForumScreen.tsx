@@ -9,7 +9,8 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native'
+import { View, StyleSheet, ScrollView, TouchableOpacity, Modal, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { AppText as Text, AppTextInput as TextInput } from '@/components/ui/FontScale';
 import { modalAlert } from '@/components/ui/ModalAlert';
 import firestore from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
@@ -19,7 +20,6 @@ import { Collections } from '@/services/firebase';
 import { getCurrentUserProfile } from '@/services/authService';
 import { logCrud } from '@/services/logService';
 import { sendPushNotification, sendPushNotificationToMany } from '@/services/pushService';
-import { reportForumPost } from '@/services/reportService';
 
 interface Post {
   id: string;
@@ -212,22 +212,6 @@ export default function ForumScreen() {
     } catch (e) {}
   };
 
-  // Report a post for violation
-  const handleReportPost = (post: Post) => {
-    if (post.authorId === currentUser.id) {
-      modalAlert('Cannot Report', 'You cannot report your own post.');
-      return;
-    }
-    modalAlert('⚠️ Report Post', `Are you sure you want to report "${post.title}" for a violation? This will be reviewed by an admin.`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Report', style: 'destructive', onPress: async () => {
-        try {
-          await reportForumPost({ reporterId: currentUser.id, reporterName: currentUser.name, reporterRole: currentUser.role, postId: post.id, postTitle: post.title, postContent: post.content, authorId: post.authorId, authorName: post.authorName });
-          modalAlert('Reported', 'Your report has been submitted. An admin will review it.');
-        } catch (e: any) { modalAlert('Error', 'Failed to submit report. Please try again.'); }
-      }},
-    ]);
-  };
 
   // View post with replies
   const openPost = (post: Post) => {
@@ -362,12 +346,6 @@ export default function ForumScreen() {
                 <Text style={s.metaText}>{p.replies}</Text>
               </View>
               <Text style={s.metaText}>{p.views} views</Text>
-              {/* Report icon — visible to all except own posts */}
-              {p.authorId !== currentUser.id && (
-                <TouchableOpacity onPress={() => handleReportPost(p)} style={s.reportIconBtn}>
-                  <Icon name="flag" size={14} color={Colors.warning} />
-                </TouchableOpacity>
-              )}
               {canEditDelete(p) && (
                 <View style={s.cardActions}>
                   <TouchableOpacity onPress={() => openEdit(p)}>
@@ -386,6 +364,7 @@ export default function ForumScreen() {
 
       {/* Create/Edit Post Modal */}
       <Modal visible={modal} transparent animationType="slide">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={s.overlay}>
           <View style={s.modal}>
             <View style={s.modalHead}>
@@ -394,7 +373,7 @@ export default function ForumScreen() {
                 <Icon name="close" size={22} color={Colors.text} />
               </TouchableOpacity>
             </View>
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
               <Text style={s.label}>Title</Text>
               <TextInput style={s.input} placeholder="Post title..." placeholderTextColor={Colors.textLight} value={title} onChangeText={setTitle} />
               <Text style={s.label}>Category</Text>
@@ -415,10 +394,12 @@ export default function ForumScreen() {
             </TouchableOpacity>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* View Post + Replies Modal */}
       <Modal visible={replyModal} transparent animationType="slide">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={s.overlay}>
           <View style={[s.modal, { maxHeight: '90%' }]}>
             <View style={s.modalHead}>
@@ -434,7 +415,7 @@ export default function ForumScreen() {
               </View>
             )}
             <Text style={[s.label, { marginTop: Spacing.md }]}>Replies ({replies.length})</Text>
-            <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator={false}>
+            <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
               {loadingReplies ? (
                 <ActivityIndicator color={Colors.primary} style={{ marginVertical: 20 }} />
               ) : replies.length === 0 ? (
@@ -475,6 +456,7 @@ export default function ForumScreen() {
             </View>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </KeyboardAvoidingView>
   );
@@ -513,7 +495,6 @@ const s = StyleSheet.create({
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   metaText: { fontSize: 11, color: Colors.textLight },
   cardActions: { flexDirection: 'row', gap: 10, marginLeft: 'auto' },
-  reportIconBtn: { padding: 4 },
   // Modal
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modal: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: Spacing.xl, paddingBottom: 40, maxHeight: '85%' },

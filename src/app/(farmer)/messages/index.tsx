@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { AppText as Text, AppTextInput as TextInput } from '@/components/ui/FontScale';
 import { router, useLocalSearchParams } from 'expo-router';
 import { handleNotificationNavigation } from '@/services/notificationNavigator';
 import Animated from 'react-native-reanimated';
@@ -11,6 +12,7 @@ import { getSession } from '@/services/sessionService';
 import { getUserChatRooms, ChatRoom } from '@/services/chatService';
 import { listenToTyping } from '@/services/chatService';
 import { Collections } from '@/services/firebase';
+import { Image } from 'expo-image';
 
 type MessageTab = 'chats' | 'notifications';
 
@@ -29,11 +31,16 @@ export default function MessagesScreen() {
   const [activeTab, setActiveTab] = useState<MessageTab>(
     params.tab === 'notifications' ? 'notifications' : 'chats'
   );
+  useEffect(() => {
+    setActiveTab(params.tab === 'notifications' ? 'notifications' : 'chats');
+  }, [params.tab]);
   const [chatRooms, setChatRooms] = useState<(ChatRoom & { otherName: string; otherPhoto?: string })[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState('');
   const [typingMap, setTypingMap] = useState<Record<string, boolean>>({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [unreadOnly, setUnreadOnly] = useState(false);
   const headerAnim = useFadeIn(100);
   const contentAnim = useFadeInUp(200);
 
@@ -97,7 +104,7 @@ export default function MessagesScreen() {
           (snap) => {
             setNotifications(snap.docs.map(d => {
               const docData = d.data();
-              return { id: d.id, ...docData, data: docData } as Notification;
+              return { id: d.id, ...docData, data: docData.data || {} } as Notification;
             }));
           },
           (err) => console.warn('Notifications error:', err)
@@ -140,6 +147,11 @@ export default function MessagesScreen() {
     return date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
   };
 
+  const visibleChatRooms = chatRooms.filter((room) => {
+    const matchesQuery = `${room.otherName} ${room.lastMessage || ''}`.toLowerCase().includes(searchQuery.trim().toLowerCase());
+    return matchesQuery && (!unreadOnly || (room.unreadCount?.[uid] || 0) > 0);
+  });
+
   const getNotifIcon = (type: string) => {
     switch (type) {
       case 'appointment_accepted': return { icon: 'check-circle', color: '#10B981', bg: '#D1FAE5' };
@@ -153,68 +165,84 @@ export default function MessagesScreen() {
     <View style={styles.container}>
       {/* Header */}
       <Animated.View style={[styles.header, headerAnim]}>
-        <Text style={styles.title}>Messages</Text>
+        <Image source={require('../../../../assets/images/technician/Mint Green Chat Bubbles in Nature.png')} style={styles.headerBanner} contentFit="cover" pointerEvents="none" />
+        <View style={styles.headerIdentity}>
+          <Text style={styles.title}>Messages</Text>
+          <View style={styles.headerSubtitleRow}><View style={styles.activeDot} /><Text style={styles.subtitle}>Stay connected with your technicians</Text></View>
+        </View>
+      </Animated.View>
+
+      {/* Content */}
+      <Animated.View style={[styles.content, contentAnim]}>
         <View style={styles.tabs}>
           <TouchableOpacity
             style={[styles.tab, activeTab === 'chats' && styles.tabActive]}
             onPress={() => setActiveTab('chats')}
           >
+            <Icon name="messages" size={20} color={activeTab === 'chats' ? Colors.white : Colors.textSecondary} />
             <Text style={[styles.tabText, activeTab === 'chats' && styles.tabTextActive]}>Chats</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tab, activeTab === 'notifications' && styles.tabActive]}
             onPress={() => setActiveTab('notifications')}
           >
+            <Icon name="bell" size={20} color={activeTab === 'notifications' ? Colors.white : Colors.textSecondary} />
             <Text style={[styles.tabText, activeTab === 'notifications' && styles.tabTextActive]}>
               Notifications{unreadNotifCount > 0 ? ` (${unreadNotifCount})` : ''}
             </Text>
           </TouchableOpacity>
         </View>
-      </Animated.View>
-
-      {/* Content */}
-      <Animated.View style={[styles.content, contentAnim]}>
+        {activeTab === 'chats' && (
+          <View style={styles.searchRow}>
+            <View style={styles.searchBox}>
+              <Icon name="search" size={21} color={Colors.textSecondary} />
+              <TextInput style={styles.searchInput} value={searchQuery} onChangeText={setSearchQuery} placeholder="Search conversations..." placeholderTextColor={Colors.textLight} accessibilityLabel="Search conversations" />
+            </View>
+            <TouchableOpacity style={[styles.filterButton, unreadOnly && styles.filterButtonActive]} onPress={() => setUnreadOnly((value) => !value)} accessibilityRole="button" accessibilityLabel={unreadOnly ? 'Show all conversations' : 'Show unread conversations'}>
+              <Icon name="filter" size={21} color={unreadOnly ? Colors.white : Colors.primary} />
+            </TouchableOpacity>
+          </View>
+        )}
         {loading ? (
           <View style={styles.center}><ActivityIndicator size="large" color={Colors.primary} /></View>
         ) : activeTab === 'chats' ? (
-          chatRooms.length === 0 ? (
+          visibleChatRooms.length === 0 ? (
             <View style={styles.empty}>
               <Icon name="messages" size={56} color={Colors.textLight} />
-              <Text style={styles.emptyText}>No conversations yet</Text>
-              <Text style={styles.emptySubtext}>When a technician accepts your request,{'\n'}a chat will appear here</Text>
+              <Text style={styles.emptyText}>{searchQuery || unreadOnly ? 'No matching conversations' : 'No conversations yet'}</Text>
+              {!searchQuery && !unreadOnly && <Text style={styles.emptySubtext}>When a technician accepts your request,{'\n'}a chat will appear here</Text>}
             </View>
           ) : (
             <FlatList
-              data={chatRooms}
+              data={visibleChatRooms}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => {
                 const unread = item.unreadCount?.[uid] || 0;
                 return (
-                  <TouchableOpacity style={styles.chatItem} activeOpacity={0.7} onPress={() => {
+                  <TouchableOpacity style={[styles.chatItem, unread > 0 && styles.chatUnread]} activeOpacity={0.7} onPress={() => {
                     const otherUid = item.participants.find(p => p !== uid) || '';
                     router.push({ pathname: '/(farmer)/messages/chat', params: { chatId: item.id, otherUserId: otherUid, otherUserName: item.otherName, otherPhoto: item.otherPhoto || '' } });
                   }}>
                     <Avatar name={item.otherName} imageUrl={item.otherPhoto} size={50} />
                     <View style={styles.chatContent}>
-                      <View style={styles.chatHeader}>
-                        <Text style={[styles.chatName, unread > 0 && styles.chatNameBold]}>{item.otherName}</Text>
-                        <Text style={styles.chatTime}>{formatTime(item.lastMessageTime)}</Text>
-                      </View>
+                      <Text style={[styles.chatName, unread > 0 && styles.chatNameBold]} numberOfLines={1}>{item.otherName}</Text>
                       {typingMap[item.id] ? (
                         <Text style={[styles.chatMessage, { color: Colors.primary, fontStyle: 'italic' }]} numberOfLines={1}>
                           typing...
                         </Text>
                       ) : (
-                        <Text style={[styles.chatMessage, unread > 0 && styles.chatMessageBold]} numberOfLines={1}>
+                        <Text style={[styles.chatMessage, unread > 0 && styles.chatMessageBold]} numberOfLines={2}>
                           {item.lastSenderId === uid ? 'You: ' : ''}{item.lastMessage || 'Start a conversation'}
                         </Text>
                       )}
                     </View>
-                    {unread > 0 && (
-                      <View style={styles.unreadBadge}>
-                        <Text style={styles.unreadText}>{unread > 9 ? '9+' : unread}</Text>
+                    <View style={styles.chatMeta}>
+                      <Text style={styles.chatTime}>{formatTime(item.lastMessageTime)}</Text>
+                      <View style={styles.chatMetaBottom}>
+                        {unread > 0 && <View style={styles.unreadBadge}><Text style={styles.unreadText}>{unread > 9 ? '9+' : unread}</Text></View>}
+                        <Icon name="chevron-right" size={20} color={Colors.textLight} />
                       </View>
-                    )}
+                    </View>
                   </TouchableOpacity>
                 );
               }}
@@ -264,21 +292,33 @@ export default function MessagesScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { backgroundColor: Colors.primary, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.lg, paddingBottom: Spacing.xl, borderBottomLeftRadius: BorderRadius.xl, borderBottomRightRadius: BorderRadius.xl },
-  title: { fontSize: FontSize.xxl, fontWeight: '800', color: Colors.white, marginBottom: Spacing.md },
-  tabs: { flexDirection: 'row', gap: Spacing.xl },
-  tab: { paddingBottom: Spacing.sm },
-  tabActive: { borderBottomWidth: 2, borderBottomColor: Colors.white },
-  tabText: { fontSize: FontSize.lg, color: Colors.accent },
+  header: { position: 'relative', overflow: 'hidden', backgroundColor: '#B4E6B8', width: '100%', borderBottomLeftRadius: BorderRadius.xl, borderBottomRightRadius: BorderRadius.xl },
+  headerBanner: { position: 'absolute', top: 0, left: 0, height: '100%', width: '100%' },
+  headerIdentity: { marginTop: Spacing.sm, paddingHorizontal: Spacing.lg, paddingBottom: Spacing.md },
+  title: { fontSize: FontSize.xxl, fontWeight: '800', color: Colors.white, textShadowColor: '#000', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 2 },
+  headerSubtitleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginTop: 3 },
+  activeDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: '#6FE08E' },
+  subtitle: { fontSize: FontSize.md, color: '#D6F4DE', paddingBottom: Spacing.xxxl, textShadowColor: '#000', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 2 },
+  tabs: { flexDirection: 'row', marginHorizontal: Spacing.lg, marginTop: Spacing.lg, padding: 5, borderRadius: BorderRadius.xl, backgroundColor: '#F1F5F3' },
+  tab: { flex: 1, minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, borderRadius: BorderRadius.lg },
+  tabActive: { backgroundColor: '#08752D', ...Shadow.light },
+  tabText: { fontSize: FontSize.md, color: Colors.textSecondary },
   tabTextActive: { color: Colors.white, fontWeight: '700' },
   content: { flex: 1 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginHorizontal: Spacing.lg, marginTop: Spacing.lg, marginBottom: Spacing.xs },
+  searchBox: { flex: 1, height: 52, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingHorizontal: Spacing.md, borderRadius: BorderRadius.xl, backgroundColor: Colors.white, borderWidth: 1, borderColor: '#E8ECE8', ...Shadow.light },
+  searchInput: { flex: 1, height: '100%', padding: 0, color: Colors.text, fontSize: FontSize.md },
+  filterButton: { width: 52, height: 52, alignItems: 'center', justifyContent: 'center', borderRadius: BorderRadius.xl, backgroundColor: '#E8F8EE', borderWidth: 1, borderColor: '#D3F0DC' },
+  filterButtonActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingBottom: 80 },
   emptyText: { fontSize: FontSize.lg, fontWeight: '600', color: Colors.textSecondary, marginTop: Spacing.lg },
   emptySubtext: { fontSize: FontSize.sm, color: Colors.textLight, marginTop: 4, textAlign: 'center', lineHeight: 20 },
   // Chat items
-  chatItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.lg, paddingHorizontal: Spacing.lg, borderBottomWidth: 0.5, borderBottomColor: Colors.border },
+  chatItem: { flexDirection: 'row', alignItems: 'center', marginHorizontal: Spacing.md, marginTop: Spacing.sm, padding: Spacing.md, borderRadius: BorderRadius.xl, backgroundColor: Colors.white, ...Shadow.light },
+  chatUnread: { backgroundColor: '#EFF8F2' },
   chatContent: { flex: 1, marginLeft: Spacing.md },
-  chatHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  chatMeta: { alignItems: 'flex-end', justifyContent: 'space-between', alignSelf: 'stretch', marginLeft: Spacing.xs },
+  chatMetaBottom: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   chatName: { fontSize: FontSize.md, fontWeight: '500', color: Colors.text },
   chatNameBold: { fontWeight: '700' },
   chatTime: { fontSize: FontSize.xs, color: Colors.textLight },

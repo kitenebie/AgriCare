@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Modal, ScrollView } from 'react-native';
+import { AppText as Text } from '@/components/ui/FontScale';
 import { Colors, FontSize, BorderRadius, Spacing } from '@/constants/theme';
 
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 1);

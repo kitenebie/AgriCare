@@ -1,28 +1,14 @@
 import { Icon, Avatar } from "@/components/ui";
 import {
-  BorderRadius,
-  Colors,
-  FontSize,
-  Shadow,
-  Spacing,
-} from "@/constants/theme";
+  BorderRadius, Colors, FontSize, Shadow, Spacing, } from "@/constants/theme";
 import { Collections } from "@/services/firebase";
 import firestore from "@react-native-firebase/firestore";
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  ActivityIndicator,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-  KeyboardAvoidingView,
-  Platform,
-} from "react-native";
+  ActivityIndicator, Modal, ScrollView, StyleSheet, TouchableOpacity, View, KeyboardAvoidingView, Platform } from "react-native";
+import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/FontScale';
 
 export interface AppointmentRecord {
   id: string;
@@ -327,7 +313,7 @@ export default function AdminAppointmentsScreen() {
       <View
         style={[
           styles.header,
-          { paddingTop: Math.max(insets.top + 8, 40) },
+          { paddingTop: 8 },
         ]}
       >
         <View style={styles.headerTop}>

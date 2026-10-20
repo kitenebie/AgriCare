@@ -46,12 +46,38 @@ export const acceptAppointment = async (params: AcceptParams) => {
     location,
   } = params;
 
-  // 1. Update appointment status
-  await firestore().collection(Collections.APPOINTMENTS).doc(appointmentId).update({
-    status: 'confirmed',
-    technicianId,
-    technicianName,
+  // Claim only an open request or one assigned to this technician.
+  const appointmentRef = firestore().collection(Collections.APPOINTMENTS).doc(appointmentId);
+  const { expiredForSelectedTechnician, previousTechnicianId } = await firestore().runTransaction(async transaction => {
+    const snapshot = await transaction.get(appointmentRef);
+    if (!snapshot.exists) throw new Error('This request no longer exists.');
+    const appointment = snapshot.data()!;
+    if (appointment.status !== 'pending') throw new Error('This request is no longer pending.');
+    const previousTechnicianId = appointment.technicianId || '';
+    const deadline = appointment.responseDeadlineAt?.toMillis?.();
+    const expired = typeof deadline === 'number' && deadline <= Date.now();
+
+    if (previousTechnicianId && previousTechnicianId !== technicianId && !expired) {
+      throw new Error('This request is reserved for another technician.');
+    }
+    if (previousTechnicianId === technicianId && expired) {
+      transaction.update(appointmentRef, {
+        technicianId: '',
+        technicianName: 'Unassigned',
+        responseDeadlineAt: firestore.FieldValue.delete(),
+        publishedAt: firestore.FieldValue.serverTimestamp(),
+      });
+      return { expiredForSelectedTechnician: true, previousTechnicianId };
+    }
+    transaction.update(appointmentRef, {
+      status: 'confirmed',
+      technicianId,
+      technicianName,
+      responseDeadlineAt: firestore.FieldValue.delete(),
+    });
+    return { expiredForSelectedTechnician: false, previousTechnicianId };
   });
+  if (expiredForSelectedTechnician) throw new Error('The response window expired. This request is now available to all technicians.');
 
   // 2. Create/get chat room between technician and farmer
   const chatId = await getOrCreateChatRoom(technicianId, farmerId);
@@ -121,7 +147,7 @@ export const acceptAppointment = async (params: AcceptParams) => {
 
   // 6. Log activity
   await logCrud('Appointment Accepted', `${serviceType} for ${farmerName} — ${animalName}`, 'appointments', appointmentId, {
-    old: { status: 'pending', technicianId: '' },
+    old: { status: 'pending', technicianId: previousTechnicianId },
     new: { status: 'confirmed', technicianId, technicianName, calendarEventId },
   });
 

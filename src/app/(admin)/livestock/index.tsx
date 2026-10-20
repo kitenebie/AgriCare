@@ -1,11 +1,6 @@
 import { Icon } from "@/components/ui";
 import {
-  BorderRadius,
-  Colors,
-  FontSize,
-  Shadow,
-  Spacing,
-} from "@/constants/theme";
+  BorderRadius, Colors, FontSize, Shadow, Spacing, } from "@/constants/theme";
 import { Collections } from "@/services/firebase";
 import firestore from "@react-native-firebase/firestore";
 import { uploadImageToSupabase } from "@/services/storage";
@@ -15,18 +10,8 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  ActivityIndicator,
-  Image,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-  KeyboardAvoidingView,
-  Platform,
-} from "react-native";
+  ActivityIndicator, Image, Modal, ScrollView, StyleSheet, TouchableOpacity, View, KeyboardAvoidingView, Platform } from "react-native";
+import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/FontScale';
 import { modalAlert } from '@/components/ui/ModalAlert';
 
 export interface LivestockCategory {
@@ -322,7 +307,7 @@ export default function LivestockCategoriesScreen() {
       <View
         style={[
           styles.header,
-          { paddingTop: Math.max(insets.top + 8, 40) },
+          { paddingTop: 8 },
         ]}
       >
         <Text style={styles.headerTitle}>Cattle & Swine Breeds</Text>
@@ -493,6 +478,7 @@ export default function LivestockCategoriesScreen() {
 
       {/* ─── ADD / EDIT CATEGORY MODAL FORM ─── */}
       <Modal visible={modalVisible} transparent animationType="slide">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.overlay}>
           <View
             style={[
@@ -517,6 +503,8 @@ export default function LivestockCategoriesScreen() {
             <ScrollView
               style={styles.formScroll}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              automaticallyAdjustKeyboardInsets
             >
               {/* Category Name */}
               <Text style={styles.label}>Category Name *</Text>
@@ -653,6 +641,7 @@ export default function LivestockCategoriesScreen() {
             </TouchableOpacity>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </KeyboardAvoidingView>
   );

@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { AppText as Text } from '@/components/ui/FontScale';
 import { modalAlert } from '@/components/ui/ModalAlert';
 import Animated from 'react-native-reanimated';
+import { router } from 'expo-router';
 import firestore from '@react-native-firebase/firestore';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
 import { Icon } from '@/components/ui';
@@ -164,8 +166,13 @@ export default function TechAppointmentsScreen() {
     <View style={s.container}>
       {/* Header */}
       <Animated.View style={[s.header, headerAnim]}>
-        <Text style={s.headerTitle}>Available Requests</Text>
-        <Text style={s.headerSubtitle}>{appointments.length} request{appointments.length !== 1 ? 's' : ''} matching your specialization</Text>
+        <TouchableOpacity style={s.backButton} onPress={() => router.canGoBack() ? router.back() : router.replace('/(technician)/dashboard')} accessibilityLabel="Go back">
+          <Icon name="chevron-left" size={20} color={Colors.white} strokeWidth={2.5} />
+        </TouchableOpacity>
+        <View style={s.headerText}>
+          <Text style={s.headerTitle}>Available Requests</Text>
+          <Text style={s.headerSubtitle}>{appointments.length} request{appointments.length !== 1 ? 's' : ''} matching your specialization</Text>
+        </View>
       </Animated.View>
       {/* List */}
       <Animated.View style={[{ flex: 1 }, contentAnim]}>
@@ -241,7 +248,9 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.surface },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   // Header
-  header: { backgroundColor: Colors.primary, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.lg, paddingBottom: Spacing.xl, borderBottomLeftRadius: BorderRadius.xl, borderBottomRightRadius: BorderRadius.xl },
+  header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, backgroundColor: Colors.primary, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.lg, paddingBottom: Spacing.xl, borderBottomLeftRadius: BorderRadius.xl, borderBottomRightRadius: BorderRadius.xl },
+  backButton: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center' },
+  headerText: { flex: 1 },
   headerTitle: { fontSize: FontSize.xxl, fontWeight: '800', color: Colors.white },
   headerSubtitle: { fontSize: FontSize.md, color: Colors.accent, marginTop: 4 },
   // List

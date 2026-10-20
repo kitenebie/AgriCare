@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { AppText as Text } from '@/components/ui/FontScale';
 import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming, withDelay, Easing } from 'react-native-reanimated';
 import { router } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, FontSize, BorderRadius } from '@/constants/theme';
 import { Icon } from '@/components/ui';
 import { clearSession } from '@/services/sessionService';
@@ -10,7 +10,6 @@ import auth from '@react-native-firebase/auth';
 import { useEffect } from 'react';
 
 export default function ApplicationReviewScreen() {
-  const insets = useSafeAreaInsets();
   const scale = useSharedValue(1);
   const opacity = useSharedValue(0);
 
@@ -31,7 +30,7 @@ export default function ApplicationReviewScreen() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       {/* Background Decoration */}
       <View style={styles.bgCircle1} />
       <View style={styles.bgCircle2} />

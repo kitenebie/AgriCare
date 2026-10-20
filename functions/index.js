@@ -7,9 +7,10 @@
  */
 
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { initializeApp } = require("firebase-admin/app");
 const { getMessaging } = require("firebase-admin/messaging");
-const { getFirestore } = require("firebase-admin/firestore");
+const { FieldValue, Timestamp, getFirestore } = require("firebase-admin/firestore");
 
 initializeApp();
 
@@ -93,6 +94,30 @@ exports.processPushQueue = onDocumentCreated("pushQueue/{docId}", async (event) 
       status: "failed",
       error: error.message,
       attempts: (data.attempts || 0) + 1,
+    });
+  }
+});
+
+exports.publishExpiredAppointmentRequests = onSchedule("every 1 minutes", async () => {
+  const db = getFirestore();
+  const now = Timestamp.now();
+  const expiredRequests = await db.collection("appointments")
+    .where("responseDeadlineAt", "<=", now)
+    .get();
+
+  for (const request of expiredRequests.docs) {
+    await db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(request.ref);
+      const appointment = snapshot.data();
+      if (!snapshot.exists || appointment?.status !== "pending" || !appointment.technicianId ||
+          !appointment.responseDeadlineAt || appointment.responseDeadlineAt.toMillis() > Date.now()) return;
+
+      transaction.update(request.ref, {
+        technicianId: "",
+        technicianName: "Unassigned",
+        responseDeadlineAt: FieldValue.delete(),
+        publishedAt: FieldValue.serverTimestamp(),
+      });
     });
   }
 });

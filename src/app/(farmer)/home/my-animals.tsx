@@ -1,11 +1,6 @@
 import { Icon } from "@/components/ui";
 import {
-  BorderRadius,
-  Colors,
-  FontSize,
-  Shadow,
-  Spacing,
-} from "@/constants/theme";
+  BorderRadius, Colors, FontSize, Shadow, Spacing, } from "@/constants/theme";
 import { Collections } from "@/services/firebase";
 import { logCrud } from "@/services/logService";
 import { getSession } from "@/services/sessionService";
@@ -15,19 +10,8 @@ import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Dimensions,
-  Image,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-  KeyboardAvoidingView,
-  Platform,
-} from "react-native";
+  ActivityIndicator, Dimensions, Image, Modal, ScrollView, StyleSheet, TouchableOpacity, View, KeyboardAvoidingView, Platform } from "react-native";
+import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/FontScale';
 import { modalAlert } from '@/components/ui/ModalAlert';
 
 interface Animal {
@@ -182,11 +166,25 @@ export default function MyAnimalsPage() {
     }
   };
 
-  const handleSave = async () => {
-    if (!formName.trim()) {
-      modalAlert("Error", "Animal name is required.");
-      return;
+  const validateAnimalForm = () => {
+    if (!/^\d+$/.test(formCount) || Number(formCount) < 1) {
+      modalAlert("Invalid Quantity", "Enter a whole number greater than zero.");
+      return false;
     }
+    if (formAge && !/^\d+$/.test(formAge)) {
+      modalAlert("Invalid Age", "Enter age using numbers only.");
+      return false;
+    }
+    if (formWeight && (!/^\d+(\.\d+)?$/.test(formWeight) || Number(formWeight) <= 0)) {
+      modalAlert("Invalid Weight", "Enter a valid weight using numbers only.");
+      return false;
+    }
+    return true;
+  };
+
+  const handleSave = async () => {
+    if (!validateAnimalForm()) return;
+    const animalName = selectedBreed || selectedCat?.name || "Animal";
     setSaving(true);
 
     let imageUrl = "";
@@ -201,7 +199,7 @@ export default function MyAnimalsPage() {
       const docRef = await firestore()
         .collection("animals")
         .add({
-          name: formName.trim(),
+          name: animalName,
           type: selectedCat?.focusType || selectedCat?.name || "",
           breed: selectedBreed || "Unknown",
           count: parseInt(formCount) || 1,
@@ -219,13 +217,13 @@ export default function MyAnimalsPage() {
         });
       await logCrud(
         "Animal Registered",
-        `Added: ${formName.trim()} (${selectedBreed || selectedCat?.name})`,
+        `Added: ${animalName} (${selectedBreed || selectedCat?.name})`,
         "animals",
         docRef.id,
         {
           old: {},
           new: {
-            name: formName.trim(),
+            name: animalName,
             type: selectedCat?.focusType || "",
             breed: selectedBreed,
             count: parseInt(formCount) || 1,
@@ -269,6 +267,11 @@ export default function MyAnimalsPage() {
       modalAlert('Error', 'Animal name is required.');
       return;
     }
+    if (!/^[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ .'-]*$/.test(formName.trim())) {
+      modalAlert('Invalid Name', 'Use letters only, with spaces, apostrophes, or hyphens.');
+      return;
+    }
+    if (!validateAnimalForm()) return;
     setSaving(true);
 
     let imageUrl = editingAnimal.imageUrl || '';
@@ -432,6 +435,7 @@ export default function MyAnimalsPage() {
         animationType="slide"
         onRequestClose={() => setModal(false)}
       >
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={s.overlay}>
           <View style={s.modal}>
             {/* Header */}
@@ -549,6 +553,7 @@ export default function MyAnimalsPage() {
                 <ScrollView
                   showsVerticalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
+                  automaticallyAdjustKeyboardInsets
                 >
                   <Text style={s.stepDesc}>
                     Fill in your animal's information
@@ -595,22 +600,25 @@ export default function MyAnimalsPage() {
                     )}
                   </TouchableOpacity>
 
-                  {/* Name */}
-                  <Text style={s.label}>Name</Text>
-                  <TextInput
-                    style={s.input}
-                    value={formName}
-                    onChangeText={setFormName}
-                    placeholder="e.g. Manny"
-                    placeholderTextColor={Colors.textLight}
-                  />
+                  {editingAnimal && (
+                    <>
+                      <Text style={s.label}>Name</Text>
+                      <TextInput
+                        style={s.input}
+                        value={formName}
+                        onChangeText={(value) => setFormName(value.replace(/[^A-Za-zÀ-ÖØ-öø-ÿ .'-]/g, ''))}
+                        placeholder="e.g. Manny"
+                        placeholderTextColor={Colors.textLight}
+                      />
+                    </>
+                  )}
 
                   {/* Quantity */}
                   <Text style={s.label}>Quantity</Text>
                   <TextInput
                     style={s.input}
                     value={formCount}
-                    onChangeText={setFormCount}
+                    onChangeText={(value) => setFormCount(value.replace(/\D/g, ''))}
                     placeholder="1"
                     keyboardType="numeric"
                     placeholderTextColor={Colors.textLight}
@@ -645,7 +653,7 @@ export default function MyAnimalsPage() {
                     <TextInput
                       style={[s.input, { flex: 1 }]}
                       value={formAge}
-                      onChangeText={setFormAge}
+                      onChangeText={(value) => setFormAge(value.replace(/\D/g, ''))}
                       placeholder="e.g. 7"
                       keyboardType="numeric"
                       placeholderTextColor={Colors.textLight}
@@ -655,6 +663,8 @@ export default function MyAnimalsPage() {
                         (unit) => (
                           <TouchableOpacity
                             key={unit}
+                            accessibilityRole="radio"
+                            accessibilityState={{ selected: formAgeUnit === unit }}
                             style={[
                               s.unitBtn,
                               formAgeUnit === unit && s.unitBtnActive,
@@ -679,8 +689,9 @@ export default function MyAnimalsPage() {
                   <TextInput
                     style={s.input}
                     value={formWeight}
-                    onChangeText={setFormWeight}
+                    onChangeText={(value) => setFormWeight(value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1'))}
                     placeholder="Leave blank if unknown"
+                    keyboardType="decimal-pad"
                     placeholderTextColor={Colors.textLight}
                   />
 
@@ -756,6 +767,7 @@ export default function MyAnimalsPage() {
             )}
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </KeyboardAvoidingView>
   );
@@ -988,6 +1000,19 @@ const s = StyleSheet.create({
   },
   imgPlaceholderText: { fontSize: 12, color: Colors.textLight, marginTop: 4 },
   genderRow: { flexDirection: "row", gap: Spacing.sm },
+  unitBtn: {
+    flex: 1,
+    minHeight: 44,
+    paddingHorizontal: 2,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  unitBtnActive: { borderColor: Colors.primary, backgroundColor: Colors.primary + "10" },
+  unitText: { fontSize: FontSize.xs, color: Colors.textSecondary },
+  unitTextActive: { color: Colors.primary, fontWeight: "700" },
   genderBtn: {
     flex: 1,
     paddingVertical: Spacing.md,

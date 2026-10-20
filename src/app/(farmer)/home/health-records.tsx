@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { AppText as Text } from '@/components/ui/FontScale';
 import Animated from 'react-native-reanimated';
 import firestore from '@react-native-firebase/firestore';
 import { router } from 'expo-router';

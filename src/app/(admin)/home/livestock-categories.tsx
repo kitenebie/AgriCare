@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native'
+import { View, StyleSheet, ScrollView, TouchableOpacity, Modal, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { AppText as Text, AppTextInput as TextInput } from '@/components/ui/FontScale';
 import { modalAlert } from '@/components/ui/ModalAlert';
 import firestore from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
@@ -7,6 +8,7 @@ import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/the
 import { Icon } from '@/components/ui';
 import { Collections } from '@/services/firebase';
 import { logCrud } from '@/services/logService';
+import { sendPushNotificationToMany } from '@/services/pushService';
 
 interface Category { id: string; name: string; type: string; breeds: string[]; count: number; }
 
@@ -43,6 +45,7 @@ export default function LivestockCategoriesPage() {
     const breedList = breeds.split(',').map(b => b.trim()).filter(b => b);
     setSaving(true);
     try {
+      const isUpdate = Boolean(editId);
       console.log('[DEBUG] Attempting Firestore write...');
       if (editId) {
         await firestore().collection(Collections.LIVESTOCK_CATEGORIES).doc(editId).update({ name: name.trim(), type, breeds: breedList, updatedAt: firestore.FieldValue.serverTimestamp() });
@@ -53,6 +56,14 @@ export default function LivestockCategoriesPage() {
         await logCrud('Category Created', `Added: ${name.trim()}`, 'livestockCategories');
         console.log('[DEBUG] ✅ Add success');
       }
+      try {
+        const usersSnap = await firestore().collection(Collections.USERS).where('status', '==', 'active').get();
+        await sendPushNotificationToMany(usersSnap.docs.map(doc => doc.id), {
+          title: `🐄 Livestock Category ${isUpdate ? 'Updated' : 'Added'}`,
+          body: name.trim(),
+          data: { type: 'livestock_category' },
+        });
+      } catch (pushErr) { console.warn('Livestock category push failed:', pushErr); }
       setModal(false); reset();
     } catch (e: any) {
       console.error('[DEBUG] ❌ Write failed:', e.code, e.message);
@@ -67,6 +78,14 @@ export default function LivestockCategoriesPage() {
         try {
           await firestore().collection(Collections.LIVESTOCK_CATEGORIES).doc(id).delete();
           await logCrud('Category Deleted', `Deleted: ${catName}`, 'livestockCategories', id);
+          try {
+            const usersSnap = await firestore().collection(Collections.USERS).where('status', '==', 'active').get();
+            await sendPushNotificationToMany(usersSnap.docs.map(doc => doc.id), {
+              title: '🐄 Livestock Category Removed',
+              body: catName,
+              data: { type: 'livestock_category' },
+            });
+          } catch (pushErr) { console.warn('Livestock category push failed:', pushErr); }
         } catch (e: any) { modalAlert('Error', e.message || 'Failed'); }
       }},
     ]);
@@ -111,9 +130,11 @@ export default function LivestockCategoriesPage() {
       </ScrollView>
 
       <Modal visible={modal} transparent animationType="slide">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={s.overlay}>
           <View style={s.modal}>
             <View style={s.modalHead}><Text style={s.modalTitle}>{editId ? 'Edit' : 'Add'} Category</Text><TouchableOpacity onPress={() => { setModal(false); reset(); }}><Icon name="close" size={22} color={Colors.text} /></TouchableOpacity></View>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} automaticallyAdjustKeyboardInsets>
             <Text style={s.label}>Category Name</Text>
             <TextInput style={s.input} placeholder="e.g. Cow, Goat..." placeholderTextColor={Colors.textLight} value={name} onChangeText={setName} />
             <Text style={s.label}>Animal Type</Text>
@@ -125,8 +146,10 @@ export default function LivestockCategoriesPage() {
             <TouchableOpacity style={[s.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving}>
               {saving ? <ActivityIndicator color={Colors.white} /> : <Text style={s.saveBtnText}>{editId ? 'Update' : 'Add'} Category</Text>}
             </TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </KeyboardAvoidingView>
   );

@@ -1,5 +1,6 @@
 import React, { useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Dimensions, Platform } from 'react-native';
+import { AppText as Text } from '@/components/ui/FontScale';
 import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, withSpring,
   runOnJS, withDelay, Easing,

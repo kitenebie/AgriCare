@@ -1,6 +1,7 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
+import { AppText as Text } from '@/components/ui/FontScale';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, FontSize } from '@/constants/theme';
 import { Icon, IconName } from '@/components/ui';
@@ -16,8 +17,6 @@ const TabIcon: React.FC<TabIconProps> = ({ iconName, label, focused }) => (
     <Icon name={iconName} size={22} color={focused ? Colors.primary : Colors.tabInactive} />
     <Text
       numberOfLines={1}
-      adjustsFontSizeToFit
-      minimumFontScale={0.8}
       style={[styles.tabLabel, focused && styles.tabLabelActive]}
     >
       {label}

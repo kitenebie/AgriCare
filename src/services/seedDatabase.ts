@@ -9,7 +9,7 @@
  * 
  * Shared collections:
  * appointments, consultations, knowledgeBase, communityForum,
- * livestockCategories, reviews, reports, notifications,
+ * livestockCategories, reviews, notifications,
  * announcements, emergencyRequests
  * 
  * Realtime DB:
@@ -80,7 +80,7 @@ const mockAdmins = [
   {
     id: 'admin_001',
     userId: 'admin_001',
-    permissions: ['user_management', 'verify_technicians', 'manage_content', 'view_reports', 'manage_forum', 'manage_categories', 'view_appointments', 'manage_reviews', 'manage_announcements'],
+    permissions: ['user_management', 'verify_technicians', 'manage_content', 'manage_forum', 'manage_categories', 'view_appointments', 'manage_reviews', 'manage_announcements'],
     managedCategories: ['cattle', 'goat', 'chicken', 'pig', 'horse', 'duck', 'carabao'],
     dashboardAccess: true,
     superAdmin: true,
@@ -355,15 +355,6 @@ const mockReviews = [
 ];
 
 // ═══════════════════════════════════════════════
-// REPORTS (FK: reporterId, targetId → users.id)
-// ═══════════════════════════════════════════════
-
-const mockReports = [
-  { id: 'report_001', reporterId: 'farmer_001', reporterName: 'Juan Dela Cruz', reporterRole: 'farmer', targetId: 'tech_003', targetName: 'Mark Dela Cruz', type: 'late_arrival', description: 'Technician arrived 1 hour late for the appointment.', status: 'pending' },
-  { id: 'report_002', reporterId: 'farmer_002', reporterName: 'Maria Garcia', reporterRole: 'farmer', targetId: null, targetName: null, type: 'app_bug', description: 'Cannot upload photo of my goat. App crashes.', status: 'resolved', resolvedAt: '2026-07-19' },
-];
-
-// ═══════════════════════════════════════════════
 // NOTIFICATIONS (FK: userId → users.id)
 // ═══════════════════════════════════════════════
 
@@ -520,5 +511,4 @@ export const seedEmergencyRequests = () => seedCollection(Collections.EMERGENCY_
 export const seedKnowledgeBase = () => seedCollection(Collections.KNOWLEDGE_BASE, mockKnowledgeBase);
 export const seedForumPosts = () => seedCollection(Collections.COMMUNITY_FORUM, mockForumPosts);
 export const seedReviews = () => seedCollection(Collections.REVIEWS, mockReviews);
-export const seedReports = () => seedCollection(Collections.REPORTS, mockReports);
 export const seedNotifications = () => seedCollection(Collections.NOTIFICATIONS, mockNotifications);

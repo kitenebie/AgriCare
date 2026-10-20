@@ -1,16 +1,8 @@
 import React, { useEffect, useCallback } from 'react';
 
 
-import {
-
-
-  View, Text, StyleSheet, TouchableOpacity, Modal, Pressable,
-
-
-  Dimensions, BackHandler,
-
-
-} from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Modal, Pressable, Dimensions, BackHandler } from 'react-native';
+import { AppText as Text } from '@/components/ui/FontScale';
 
 
 import Animated, {

@@ -5,16 +5,8 @@
  */
 
 import React, { useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  Image,
-  ActivityIndicator,
-  ScrollView,
-} from "react-native";
+import { View, StyleSheet, TouchableOpacity, Image, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform } from "react-native";
+import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/FontScale';
 import { modalAlert } from '@/components/ui/ModalAlert';
 import { Colors, Spacing, FontSize, BorderRadius } from "@/constants/theme";
 import { pickImage, uploadAnimalWithImage } from "@/services/storage";
@@ -67,7 +59,8 @@ export default function AddAnimalExample() {
   };
 
   return (
-    <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <ScrollView style={s.container} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Text style={s.title}>Add Animal</Text>
 
       {/* Image Picker */}
@@ -99,6 +92,7 @@ export default function AddAnimalExample() {
       {loading && <Text style={s.loadingText}>Uploading image to Supabase...</Text>}
       <View style={{ height: 40 }} />
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

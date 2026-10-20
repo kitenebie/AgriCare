@@ -4,7 +4,8 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, PermissionsAndroid } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Platform, PermissionsAndroid } from 'react-native';
+import { useFontScale, AppText as Text } from '@/components/ui/FontScale';
 import { WebView } from 'react-native-webview';
 import { Colors, BorderRadius, Shadow } from '@/constants/theme';
 import { Technician } from '@/types';
@@ -20,6 +21,7 @@ export const MapViewComponent: React.FC<MapViewProps> = ({
   onMarkerPress,
   userLocation = { latitude: 14.8527, longitude: 120.8120 },
 }) => {
+  const { scale } = useFontScale();
   // Build Leaflet HTML map with markers
   const markers = technicians.map(t => `
     L.marker([${t.latitude}, ${t.longitude}])
@@ -48,7 +50,7 @@ export const MapViewComponent: React.FC<MapViewProps> = ({
       justify-content: center;
       color: white;
       font-weight: bold;
-      font-size: 14px;
+      font-size: ${14 * scale}px;
       box-shadow: 0 2px 6px rgba(0,0,0,0.3);
     }
   </style>

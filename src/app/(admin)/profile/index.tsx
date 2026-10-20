@@ -1,17 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Switch, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native'
+import { View, StyleSheet, ScrollView, TouchableOpacity, Modal, Switch, ActivityIndicator, KeyboardAvoidingView, Platform, ImageBackground } from 'react-native';
+import { AppText as Text, AppTextInput as TextInput } from '@/components/ui/FontScale';
 import { modalAlert } from '@/components/ui/ModalAlert';
 import { router } from 'expo-router';
-import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
+import { Colors, Spacing, FontSize, BorderRadius } from '@/constants/theme';
 import { Icon, Avatar } from '@/components/ui';
 import { clearSession, getSession, saveSession, UserSession } from '@/services/sessionService';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
+import { FONT_SIZE_CHOICES, useFontScale } from '@/components/ui/FontScale';
 
 const BIOMETRICS_KEY = '@agricare_biometrics_enabled';
-const NOTIFICATIONS_KEY = '@agricare_notifications_enabled';
 
 export default function AdminProfileScreen() {
   const [user, setUser] = useState<UserSession | null>(null);
@@ -30,7 +31,8 @@ export default function AdminProfileScreen() {
 
   // Notifications
   const [notifModal, setNotifModal] = useState(false);
-  const [notifsEnabled, setNotifsEnabled] = useState(true);
+  const [fontSizeModal, setFontSizeModal] = useState(false);
+  const { choice: fontSizeChoice, setChoice: setFontSizeChoice } = useFontScale();
 
   useEffect(() => {
     const load = async () => {
@@ -51,8 +53,6 @@ export default function AdminProfileScreen() {
       }
       const bio = await AsyncStorage.getItem(BIOMETRICS_KEY);
       setBiometrics(bio === 'true');
-      const notif = await AsyncStorage.getItem(NOTIFICATIONS_KEY);
-      setNotifsEnabled(notif !== 'false');
       setLoading(false);
     };
     load();
@@ -116,50 +116,53 @@ export default function AdminProfileScreen() {
     }
   };
 
-  // ─── Notifications ───
-  const handleNotifsToggle = async (val: boolean) => {
-    setNotifsEnabled(val);
-    await AsyncStorage.setItem(NOTIFICATIONS_KEY, val ? 'true' : 'false');
-  };
-
   if (loading) return <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}><ActivityIndicator size="large" color={Colors.primary} /></View>;
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      <View style={styles.header}>
-        <Avatar name={user?.displayName || 'Admin'} imageUrl={photoURL} size={80} />
+      <ImageBackground source={require('../../../../assets/images/technician/Lush Green Botanical Wave Background.png')} style={styles.header} resizeMode="cover">
+        <View style={styles.avatarRing}>
+          <Avatar name={user?.displayName || 'Admin'} imageUrl={photoURL} size={120} />
+        </View>
         <Text style={styles.name}>{user?.displayName || 'Admin'}</Text>
         <Text style={styles.role}>{user?.role || 'admin'}</Text>
-      </View>
+        <View style={styles.statusPill}><View style={styles.statusDot} /><Text style={styles.statusText}>Online</Text></View>
+      </ImageBackground>
       <View style={styles.menu}>
         <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => setAccountModal(true)}>
-          <View style={styles.menuIcon}><Icon name="profile" size={18} color={Colors.primary} /></View>
-          <Text style={styles.menuLabel}>Account Settings</Text>
+          <View style={[styles.menuIcon, styles.accountIcon]}><Icon name="profile" size={30} color="#34B866" /></View>
+          <View style={styles.menuCopy}><Text style={styles.menuLabel}>Account Settings</Text><Text style={styles.menuDescription}>Manage your personal information</Text></View>
           <Icon name="chevron-right" size={18} color={Colors.textLight} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => setNotifModal(true)}>
-          <View style={styles.menuIcon}><Icon name="bell" size={18} color={Colors.primary} /></View>
-          <Text style={styles.menuLabel}>Notification Settings</Text>
+          <View style={[styles.menuIcon, styles.notificationIcon]}><Icon name="bell" size={30} color="#EF4056" /></View>
+          <View style={styles.menuCopy}><Text style={styles.menuLabel}>Notification Settings</Text><Text style={styles.menuDescription}>Manage alerts and notifications</Text></View>
+          <Icon name="chevron-right" size={18} color={Colors.textLight} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => setFontSizeModal(true)}>
+          <View style={[styles.fontSizeIcon, styles.accountIcon]}><Text style={styles.fontSizeIconText}>Aa</Text></View>
+          <View style={styles.menuCopy}><Text style={styles.menuLabel}>Font Size</Text><Text style={styles.menuDescription}>Adjust the app text size</Text></View>
           <Icon name="chevron-right" size={18} color={Colors.textLight} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => setSecurityModal(true)}>
-          <View style={styles.menuIcon}><Icon name="lock" size={18} color={Colors.primary} /></View>
-          <Text style={styles.menuLabel}>Security</Text>
+          <View style={[styles.menuIcon, styles.securityIcon]}><Icon name="lock" size={30} color="#6941FF" /></View>
+          <View style={styles.menuCopy}><Text style={styles.menuLabel}>Security</Text><Text style={styles.menuDescription}>Change password and security options</Text></View>
           <Icon name="chevron-right" size={18} color={Colors.textLight} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
-          <View style={[styles.menuIcon, { backgroundColor: '#FFEBEE' }]}><Icon name="logout" size={18} color={Colors.error} /></View>
-          <Text style={[styles.menuLabel, { color: Colors.error }]}>Log Out</Text>
+          <View style={[styles.menuIcon, styles.notificationIcon]}><Icon name="logout" size={30} color="#EF4056" /></View>
+          <View style={styles.menuCopy}><Text style={[styles.menuLabel, { color: Colors.error }]}>Log Out</Text><Text style={styles.menuDescription}>Sign out from your account</Text></View>
           <Icon name="chevron-right" size={18} color={Colors.textLight} />
         </TouchableOpacity>
       </View>
       <View style={{ height: 30 }} />
-
       {/* Account Settings Modal */}
       <Modal visible={accountModal} transparent animationType="slide">
-        <View style={styles.overlay}><View style={styles.modal}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View style={styles.overlay}><View style={[styles.modal, { maxHeight: '85%' }]}>
           <View style={styles.modalHead}><Text style={styles.modalTitle}>Account Settings</Text><TouchableOpacity onPress={() => setAccountModal(false)}><Icon name="close" size={22} color={Colors.text} /></TouchableOpacity></View>
+          <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
           <Text style={styles.label}>Display Name</Text>
           <TextInput style={styles.input} value={editName} onChangeText={setEditName} placeholder="Your name" placeholderTextColor={Colors.textLight} />
           <Text style={styles.label}>Email</Text>
@@ -168,7 +171,9 @@ export default function AdminProfileScreen() {
           <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSaveAccount} disabled={saving}>
             {saving ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.saveBtnText}>Save Changes</Text>}
           </TouchableOpacity>
+          </ScrollView>
         </View></View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Security Modal */}
@@ -192,10 +197,23 @@ export default function AdminProfileScreen() {
           <View style={styles.settingRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.settingLabel}>Push Notifications</Text>
-              <Text style={styles.settingDesc}>Receive alerts for updates and messages</Text>
+              <Text style={styles.settingDesc}>Notifications are always on</Text>
             </View>
-            <Switch value={notifsEnabled} onValueChange={handleNotifsToggle} trackColor={{ false: '#E2E8F0', true: Colors.primary + '80' }} thumbColor={notifsEnabled ? Colors.primary : '#f4f4f4'} />
+            <Icon name="check-circle" size={24} color={Colors.primary} />
           </View>
+        </View></View>
+      </Modal>
+
+      <Modal visible={fontSizeModal} transparent animationType="slide">
+        <View style={styles.overlay}><View style={styles.modal}>
+          <View style={styles.modalHead}><Text style={styles.modalTitle}>Font Size</Text><TouchableOpacity onPress={() => setFontSizeModal(false)}><Icon name="close" size={22} color={Colors.text} /></TouchableOpacity></View>
+          <Text style={styles.settingDesc}>Adjust text size across the app</Text>
+          {FONT_SIZE_CHOICES.map(option => (
+            <TouchableOpacity key={option.value} style={styles.settingRow} accessibilityRole="button" onPress={() => { void setFontSizeChoice(option.value); setFontSizeModal(false); }}>
+              <Text style={styles.settingLabel}>{option.label}</Text>
+              {fontSizeChoice === option.value && <Icon name="check-circle" size={22} color={Colors.primary} />}
+            </TouchableOpacity>
+          ))}
         </View></View>
       </Modal>
     </ScrollView>
@@ -205,13 +223,24 @@ export default function AdminProfileScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.surface },
-  header: { alignItems: 'center', paddingVertical: Spacing.xxxl, backgroundColor: Colors.primary, borderBottomLeftRadius: BorderRadius.xl * 2, borderBottomRightRadius: BorderRadius.xl * 2 },
-  name: { fontSize: FontSize.xxl, fontWeight: '800', color: Colors.white, marginTop: Spacing.md },
-  role: { fontSize: FontSize.md, color: Colors.accent, marginTop: 2, textTransform: 'capitalize' },
-  menu: { marginHorizontal: Spacing.lg, marginTop: Spacing.xl, backgroundColor: Colors.white, borderRadius: BorderRadius.xl, ...Shadow.light },
-  menuItem: { flexDirection: 'row', alignItems: 'center', padding: Spacing.lg, borderBottomWidth: 0.5, borderBottomColor: Colors.border },
-  menuIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.surface, justifyContent: 'center', alignItems: 'center', marginRight: Spacing.md },
-  menuLabel: { flex: 1, fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
+  header: { position: 'relative', overflow: 'hidden', alignItems: 'center', paddingTop: 40, paddingBottom: 32, backgroundColor: Colors.primary },
+  avatarRing: { width: 132, height: 132, borderRadius: 66, borderWidth: 3, borderColor: Colors.white, alignItems: 'center', justifyContent: 'center' },
+  name: { fontSize: FontSize.xxl, fontWeight: '800', color: Colors.white, marginTop: Spacing.md, textAlign: 'center' },
+  role: { fontSize: FontSize.md, color: '#D6F4DE', marginTop: 2, textTransform: 'capitalize' },
+  statusPill: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginTop: Spacing.md, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: BorderRadius.full, backgroundColor: 'rgba(255,255,255,0.35)' },
+  statusDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: '#22C55E' },
+  statusText: { fontSize: FontSize.md, fontWeight: '600', color: '#075B2B' },
+  menu: { marginTop: -Spacing.xl, zIndex: 1, backgroundColor: Colors.surface, borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: BorderRadius.xl, paddingTop: Spacing.lg, paddingBottom: Spacing.xxl, paddingHorizontal: Spacing.lg },
+  menuItem: { minHeight: 78, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderColor: '#E4E2E2' },
+  menuIcon: { width: 50, height: 50, marginRight: Spacing.lg, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  accountIcon: { backgroundColor: '#E5F6E9' },
+  notificationIcon: { backgroundColor: '#FDE8EA' },
+  securityIcon: { backgroundColor: '#EEE9FF' },
+  menuCopy: { flex: 1, gap: Spacing.xs },
+  menuDescription: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
+  fontSizeIcon: { width: 50, height: 50, marginRight: Spacing.lg, borderRadius: 20, backgroundColor: Colors.surface, justifyContent: 'center', alignItems: 'center' },
+  fontSizeIconText: { fontSize: FontSize.md, fontWeight: '700', color: Colors.primary },
+  menuLabel: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   // Modals
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modal: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: Spacing.xl, paddingBottom: 40 },

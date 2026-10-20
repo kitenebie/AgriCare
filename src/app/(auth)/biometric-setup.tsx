@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { AppText as Text } from '@/components/ui/FontScale';
 import { modalAlert } from '@/components/ui/ModalAlert';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -70,7 +71,7 @@ export default function BiometricSetupScreen() {
   };
 
   return (
-    <View style={[s.container, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 20 }]}>
+    <View style={[s.container, { paddingTop: 20, paddingBottom: insets.bottom + 20 }]}>
       {/* Icon */}
       <View style={s.iconContainer}>
         <Image

@@ -9,13 +9,13 @@ import VersionGuard from "@/components/VersionGuard";
 import { ModalAlertProvider } from "@/components/ui/ModalAlert";
 import { ToastNotificationProvider, showChatToast } from "@/components/ui/ToastNotification";
 import { playNewChatSound, playNotificationSound } from "@/services/soundService";
-import { modalAlert } from "@/components/ui/ModalAlert";
 import { handleNotificationNavigation } from "@/services/notificationNavigator";
+import { FontScaleProvider } from "@/components/ui/FontScale";
 
 export default function RootLayout() {
 
   useEffect(() => {
-    // ─── Foreground notification listener — play sound + show toast/modal ───
+    // ─── Foreground notification listener — play sound + show clickable toast ───
     const unsubscribe = messaging().onMessage(async (remoteMessage) => {
       console.log("[FCM] Foreground message:", remoteMessage.notification?.title);
       const messageType = remoteMessage.data?.type as string || '';
@@ -39,12 +39,11 @@ export default function RootLayout() {
         });
       } else {
         await playNotificationSound();
-
-        // Show modal alert for non-chat notifications
-        modalAlert(
-          remoteMessage.notification?.title || "AgriCare",
-          remoteMessage.notification?.body || "",
-        );
+        showChatToast({
+          senderName: remoteMessage.notification?.title || "AgriCare",
+          message: remoteMessage.notification?.body || "You have a new notification.",
+          onPress: () => handleNotificationNavigation(remoteMessage.data as Record<string, string>),
+        });
       }
     });
 
@@ -86,10 +85,11 @@ export default function RootLayout() {
       >
         <GestureHandlerRootView style={styles.container}>
           <StatusBar
-            backgroundColor={Colors.primary}
+            // backgroundColor={Colors.primary}
             barStyle="light-content"
             translucent={false}
           />
+          <FontScaleProvider>
           <ModalAlertProvider>
             <ToastNotificationProvider>
               <Stack
@@ -107,6 +107,7 @@ export default function RootLayout() {
               </Stack>
             </ToastNotificationProvider>
           </ModalAlertProvider>
+          </FontScaleProvider>
         </GestureHandlerRootView>
       </SafeAreaView>
     </SafeAreaProvider>

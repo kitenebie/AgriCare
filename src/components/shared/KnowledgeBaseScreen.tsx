@@ -9,7 +9,8 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native'
+import { View, StyleSheet, ScrollView, TouchableOpacity, Modal, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { AppText as Text, AppTextInput as TextInput } from '@/components/ui/FontScale';
 import { modalAlert } from '@/components/ui/ModalAlert';
 import firestore from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
@@ -92,6 +93,7 @@ export default function KnowledgeBaseScreen() {
     if (!title.trim() || !content.trim()) { modalAlert('Error', 'Title and content required.'); return; }
     setSaving(true);
     try {
+      const isUpdate = Boolean(editId);
       if (editId) {
         await firestore().collection(Collections.KNOWLEDGE_BASE).doc(editId).update({
           title: title.trim(),
@@ -112,20 +114,17 @@ export default function KnowledgeBaseScreen() {
           createdAt: firestore.FieldValue.serverTimestamp()
         });
         await logCrud('Article Created', `Added: ${title.trim()}`, 'knowledgeBase');
-
-        // Send FCM push to all active users (except author)
-        try {
-          const usersSnap = await firestore().collection(Collections.USERS).where('status', '==', 'active').get();
-          const pushPromises = usersSnap.docs
-            .filter(doc => doc.id !== currentUser.id)
-            .map(doc => sendPushNotification(doc.id, {
-              title: `📚 New Knowledge Base Article`,
-              body: `${currentUser.name} published: ${title.trim()}`,
-              data: { type: 'knowledge_base', category }
-            }));
-          await Promise.all(pushPromises);
-        } catch (pushErr) { console.warn('KB push failed:', pushErr); }
       }
+
+      // Notify active users on both article creation and edit.
+      try {
+        const usersSnap = await firestore().collection(Collections.USERS).where('status', '==', 'active').get();
+        await Promise.all(usersSnap.docs.map(doc => sendPushNotification(doc.id, {
+            title: `📚 Knowledge Base ${isUpdate ? 'Updated' : 'New Article'}`,
+            body: `${currentUser.name} ${isUpdate ? 'updated' : 'published'}: ${title.trim()}`,
+            data: { type: 'knowledge_base', category }
+          })));
+      } catch (pushErr) { console.warn('KB push failed:', pushErr); }
       setModal(false);
       reset();
     } catch (e: any) { modalAlert('Error', e.message); }
@@ -139,6 +138,14 @@ export default function KnowledgeBaseScreen() {
         try {
           await firestore().collection(Collections.KNOWLEDGE_BASE).doc(id).delete();
           await logCrud('Article Deleted', `Deleted: ${name}`, 'knowledgeBase', id);
+          try {
+            const usersSnap = await firestore().collection(Collections.USERS).where('status', '==', 'active').get();
+            await Promise.all(usersSnap.docs.map(doc => sendPushNotification(doc.id, {
+              title: '📚 Knowledge Base Article Removed',
+              body: name,
+              data: { type: 'knowledge_base' }
+            })));
+          } catch (pushErr) { console.warn('KB push failed:', pushErr); }
         } catch (e: any) { modalAlert('Error', e.message); }
       }},
     ]);
@@ -250,6 +257,7 @@ export default function KnowledgeBaseScreen() {
 
       {/* Add/Edit Modal */}
       <Modal visible={modal} transparent animationType="slide">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={s.overlay}>
           <View style={s.modal}>
             <View style={s.modalHead}>
@@ -258,7 +266,7 @@ export default function KnowledgeBaseScreen() {
                 <Icon name="close" size={22} color={Colors.text} />
               </TouchableOpacity>
             </View>
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
               <Text style={s.label}>Title</Text>
               <TextInput style={s.input} placeholder="Article title..." placeholderTextColor={Colors.textLight} value={title} onChangeText={setTitle} />
               <Text style={s.label}>Category</Text>
@@ -279,6 +287,7 @@ export default function KnowledgeBaseScreen() {
             </TouchableOpacity>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </KeyboardAvoidingView>
   );

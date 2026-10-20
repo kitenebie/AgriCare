@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { AppText as Text } from '@/components/ui/FontScale';
 import Animated from 'react-native-reanimated';
 import { Colors, Spacing, FontSize, BorderRadius } from '@/constants/theme';
 import { Avatar, Badge } from '@/components/ui';

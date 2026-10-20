@@ -5,7 +5,8 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Linking, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Modal, TouchableOpacity, Linking, ActivityIndicator } from 'react-native';
+import { AppText as Text } from '@/components/ui/FontScale';
 import firestore from '@react-native-firebase/firestore';
 import { Colors, Spacing, FontSize, BorderRadius } from '@/constants/theme';
 import { Icon } from '@/components/ui';

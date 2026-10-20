@@ -1,26 +1,13 @@
 import { Icon, IconName } from "@/components/ui";
 import {
-  BorderRadius,
-  Colors,
-  FontSize,
-  Shadow,
-  Spacing,
-} from "@/constants/theme";
+  BorderRadius, Colors, FontSize, Shadow, Spacing, } from "@/constants/theme";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import firestore from "@react-native-firebase/firestore";
 import { getSession } from "@/services/sessionService";
 import {
-  Dimensions,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-  KeyboardAvoidingView,
-  Platform,
-} from "react-native";
+  Dimensions, ScrollView, StyleSheet, TouchableOpacity, View, KeyboardAvoidingView, Platform } from "react-native";
+import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/FontScale';
 import { modalAlert } from '@/components/ui/ModalAlert';
 
 const SCREEN_W = Dimensions.get("window").width;
@@ -130,7 +117,7 @@ export default function CustomServiceScreen() {
           style={s.backBtn}
         >
           <Icon
-            name="chevron-right"
+            name="chevron-left"
             size={20}
             color={Colors.white}
             strokeWidth={2.5}

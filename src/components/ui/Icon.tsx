@@ -11,9 +11,10 @@ import {
   Camera,
   Check,
   CheckCircle2,
+  ChevronLeft,
+  CornerUpLeft,
   ChevronDown,
   ChevronRight,
-  ChevronsLeftIcon,
   ClipboardList,
   Clock,
   Dna,
@@ -32,13 +33,18 @@ import {
   Lock,
   LogOut,
   Logs,
+  Mail,
   Map,
   MapPin,
+  Maximize2,
+  Megaphone,
   MessageCircle,
   MessageSquareText,
   Microscope,
+  Minimize2,
   PawPrint,
   Pencil,
+  Phone,
   PiggyBank,
   Pill,
   Pipette,
@@ -73,6 +79,8 @@ import { Image } from "react-native";
 export type IconName =
   | "home"
   | "map"
+  | "expand"
+  | "minimize"
   | "alert-circle"
   | "alert-triangle"
   | "info"
@@ -81,6 +89,7 @@ export type IconName =
   | "messages"
   | "profile"
   | "bell"
+  | "megaphone"
   | "hen"
   | "cow"
   | "clipboard"
@@ -98,6 +107,9 @@ export type IconName =
   | "filter"
   | "close"
   | "clock"
+  | "corner-up-left"
+  | "mail"
+  | "phone"
   | "chevron-right"
   | "chevron-down"
   | "star"
@@ -170,10 +182,13 @@ interface IconProps {
 const iconMap: Record<IconName, React.FC<LucideProps> | string> = {
   home: Home,
   map: Map,
+  expand: Maximize2,
+  minimize: Minimize2,
   services: Settings,
   messages: MessageCircle,
   profile: User,
   bell: Bell,
+  megaphone: Megaphone,
   hen: PiggyBank,
   cow: PiggyBank,
   clipboard: ClipboardList,
@@ -195,6 +210,9 @@ const iconMap: Record<IconName, React.FC<LucideProps> | string> = {
   filter: SlidersHorizontal,
   close: X,
   clock: Clock,
+  "corner-up-left": CornerUpLeft,
+  mail: Mail,
+  phone: Phone,
   "chevron-right": ChevronRight,
   "chevron-down": ChevronDown,
   star: Star,
@@ -251,7 +269,7 @@ const iconMap: Record<IconName, React.FC<LucideProps> | string> = {
   "med-test-tube": TestTube,
   "med-pipette": Pipette,
   "med-piggy-bank": PiggyBank,
-  "chevron-left": ChevronsLeftIcon,
+  "chevron-left": ChevronLeft,
   "eye": EyeIcon,
   "close-eye": EyeClosed,
   "med-cow":

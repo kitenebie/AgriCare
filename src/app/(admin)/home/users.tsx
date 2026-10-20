@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput, Modal, Animated, Dimensions, Pressable, Linking, KeyboardAvoidingView, Platform } from 'react-native'
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, Animated, Dimensions, Pressable, Linking, KeyboardAvoidingView, Platform } from 'react-native';
+import { AppText as Text, AppTextInput as TextInput } from '@/components/ui/FontScale';
 import { modalAlert } from '@/components/ui/ModalAlert';
 import firestore from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
@@ -347,6 +348,7 @@ export default function UsersPage() {
 
       {/* ─── REJECT REASON MODAL ─── */}
       <Modal visible={rejectModalVisible} transparent animationType="fade" onRequestClose={() => setRejectModalVisible(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Pressable style={s.rejectModalOverlay} onPress={() => setRejectModalVisible(false)}>
           <Pressable style={s.rejectModalContainer} onPress={() => {}}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -355,7 +357,7 @@ export default function UsersPage() {
             </View>
             <Text style={s.rejectModalSubtitle}>Select the reason(s) for rejection:</Text>
 
-            <ScrollView style={s.rejectModalScroll} showsVerticalScrollIndicator={false}>
+            <ScrollView style={s.rejectModalScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
               {REJECT_REASON_OPTIONS.map((option) => {
                 const selected = rejectReasons.includes(option.id);
                 return (
@@ -397,6 +399,7 @@ export default function UsersPage() {
             </View>
           </Pressable>
         </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={drawerVisible} transparent animationType="none" onRequestClose={closeDrawer}>

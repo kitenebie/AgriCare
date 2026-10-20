@@ -1,33 +1,17 @@
+import { Avatar, Icon, IconName, LeafDecor, ModernQuickAccessIcon } from "@/components/ui";
 import {
-  Avatar,
-  HeaderLeafPattern,
-  Icon,
-  IconName,
-  LeafDecor,
-} from "@/components/ui";
-import {
-  BorderRadius,
-  Colors,
-  FontSize,
-  Shadow,
-  Spacing,
-} from "@/constants/theme";
+  BorderRadius, Colors, FontSize, Shadow, Spacing, } from "@/constants/theme";
 import { useFadeIn, useFadeInUp } from "@/hooks/useAnimatedEntry";
 import { getCurrentUser, getCurrentUserProfile } from "@/services/authService";
 import { Collections } from "@/services/firebase";
 import { getSession } from "@/services/sessionService";
 import firestore from "@react-native-firebase/firestore";
 import { router } from "expo-router";
+import { Image } from "expo-image";
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Dimensions,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+  ActivityIndicator, Dimensions, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { AppText as Text } from '@/components/ui/FontScale';
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -64,7 +48,7 @@ const quickAccess: QuickAccessItem[] = [
     bgColor: "#D9EBFB",
   },
   {
-    icon: "bell",
+    icon: "megaphone",
     label: "Announcements\n& Bulletins",
     route: "/(admin)/home/announcements",
     color: "#D97706",
@@ -85,20 +69,6 @@ const quickAccess: QuickAccessItem[] = [
     bgColor: "#E0F7FA",
   },
   {
-    icon: "shield-alert",
-    label: "Reports &\nComplaints",
-    route: "/(admin)/home/reports",
-    color: "#E53935",
-    bgColor: "#FFEBEE",
-  },
-  {
-    icon: "alert",
-    label: "Message\nReports",
-    route: "/(admin)/home/message-reports",
-    color: "#D84315",
-    bgColor: "#FBE9E7",
-  },
-  {
     icon: "star",
     label: "Ratings &\nReviews",
     route: "/(admin)/home/reviews",
@@ -113,6 +83,18 @@ const quickAccess: QuickAccessItem[] = [
     bgColor: "#ECEFF1",
   },
 ];
+
+const adminCardBackgrounds = [
+  require("../../../../assets/images/admin/1.png"),
+  require("../../../../assets/images/admin/2.png"),
+  require("../../../../assets/images/admin/3.png"),
+  require("../../../../assets/images/admin/4.png"),
+  require("../../../../assets/images/admin/5.png"),
+  require("../../../../assets/images/admin/6.png"),
+  require("../../../../assets/images/admin/7.png"),
+  require("../../../../assets/images/admin/8.png"),
+  require("../../../../assets/images/admin/9.png"),
+] as const;
 
 interface ActivityItem {
   id: string;
@@ -228,7 +210,6 @@ export default function AdminHome() {
 
     let usersList: any[] = [];
     let apptsList: any[] = [];
-    let reportsList: any[] = [];
     let consultsList: any[] = [];
 
     const updateStatsAndActivities = () => {
@@ -241,18 +222,15 @@ export default function AdminHome() {
       // Calculate Total Appointments
       setAppointmentsCount(apptsList.length);
 
-      // Calculate Pending (Pending Tech Approvals + Pending Appointments + Pending Reports)
+      // Calculate Pending (Pending Tech Approvals + Pending Appointments)
       const pendingTechs = techs.filter(
         (t) => t.status === "pending" || t.status === "inactive",
       ).length;
       const pendingAppts = apptsList.filter(
         (a) => a.status === "pending",
       ).length;
-      const pendingReports = reportsList.filter(
-        (r) => r.status === "pending",
-      ).length;
 
-      setPendingCount(pendingTechs + pendingAppts + pendingReports);
+      setPendingCount(pendingTechs + pendingAppts);
       setStatsLoading(false);
 
       // Badge counts for Quick Access grid
@@ -263,8 +241,6 @@ export default function AdminHome() {
         "/(admin)/home/announcements": 0, // loaded separately
         "/(admin)/home/appointments": apptsList.length,
         "/(admin)/home/users": usersList.length,
-        "/(admin)/home/reports": reportsList.length,
-        "/(admin)/home/message-reports": 0, // loaded separately
         "/(admin)/home/reviews": 0, // loaded separately
         "/(admin)/home/logs": 0, // loaded separately
       });
@@ -295,20 +271,6 @@ export default function AdminHome() {
       );
       unsubs.push(unsubAppts);
 
-      // 3. Subscribe to REPORTS
-      const unsubReports = firestore().collection(Collections.REPORTS).onSnapshot(
-        (snap) => {
-          if (snap) {
-            reportsList = snap.docs.map((doc) => ({
-              id: doc.id,
-              ...doc.data(),
-            }));
-            updateStatsAndActivities();
-          }
-        },
-        (err) => console.warn("Reports listen error:", err.message),
-      );
-      unsubs.push(unsubReports);
 
       // 4. Subscribe to CONSULTATIONS
       const unsubConsults = firestore().collection(Collections.CONSULTATIONS).onSnapshot(
@@ -337,14 +299,13 @@ export default function AdminHome() {
   useEffect(() => {
     const loadBadges = async () => {
       try {
-        const [livestockSnap, forumSnap, kbSnap, announcementsSnap, reviewsSnap, logsSnap, msgReportsSnap] = await Promise.all([
+        const [livestockSnap, forumSnap, kbSnap, announcementsSnap, reviewsSnap, logsSnap] = await Promise.all([
           firestore().collection(Collections.LIVESTOCK_CATEGORIES).get(),
           firestore().collection(Collections.COMMUNITY_FORUM).get(),
           firestore().collection(Collections.KNOWLEDGE_BASE).get(),
           firestore().collection(Collections.ANNOUNCEMENTS).get(),
           firestore().collection(Collections.REVIEWS).get(),
           firestore().collection('logs').get(),
-          firestore().collection('messageReports').get(),
         ]);
         setBadgeCounts(prev => ({
           ...prev,
@@ -354,7 +315,6 @@ export default function AdminHome() {
           "/(admin)/home/announcements": announcementsSnap.size,
           "/(admin)/home/reviews": reviewsSnap.size,
           "/(admin)/home/logs": logsSnap.size,
-          "/(admin)/home/message-reports": msgReportsSnap.size,
         }));
       } catch (e) {
         console.warn('Admin badge counts error:', e);
@@ -435,7 +395,7 @@ export default function AdminHome() {
       icon: "clock" as IconName,
       value: pendingCount.toString(),
       label: "Pending",
-      route: "/(admin)/home/reports",
+      route: "/(admin)/home/appointments",
       bgColor: "#FFF9F0",
       iconColor: "#B87B28",
       valueColor: "#B87B28",
@@ -456,13 +416,11 @@ export default function AdminHome() {
       <Animated.View
         style={[
           styles.header,
-          { paddingTop: Math.max(insets.top + 12, 44) },
+          { paddingTop: 12 },
           headerAnim,
         ]}
       >
-        <View style={styles.headerDecorRight}>
-          <HeaderLeafPattern width={340} height={280} />
-        </View>
+        <Image source={require("../../../../assets/images/technician/Home/header_banner.png")} style={styles.headerBanner} contentFit="fill" pointerEvents="none" />
 
         <View style={styles.headerContent}>
           <View style={styles.headerLeft}>
@@ -475,7 +433,7 @@ export default function AdminHome() {
             </View>
           </View>
           <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-            <Icon name="bell" size={22} color={Colors.white} />
+            <Icon name="bell" size={22} color={Colors.primary} />
           </TouchableOpacity>
         </View>
 
@@ -494,36 +452,33 @@ export default function AdminHome() {
               onPress={() => router.push(stat.route as any)}
               activeOpacity={0.8}
             >
-              <Icon
-                name={stat.icon}
-                size={20}
-                color={stat.iconColor}
-                strokeWidth={2}
-              />
-              {statsLoading ? (
-                <ActivityIndicator
-                  size="small"
-                  color={stat.valueColor}
-                  style={{ marginTop: 2 }}
-                />
-              ) : (
-                <Text style={[styles.statValue, { color: stat.valueColor }]}>
-                  {stat.value}
+              <Image source={adminCardBackgrounds[i]} style={[StyleSheet.absoluteFillObject, { zIndex: 0 }]} contentFit="fill" pointerEvents="none" />
+              <View style={{ alignItems: "center", zIndex: 1 }}>
+                <ModernQuickAccessIcon name={stat.icon} size={38} />
+                {statsLoading ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={stat.valueColor}
+                    style={{ marginTop: 2 }}
+                  />
+                ) : (
+                  <Text style={[styles.statValue, { color: stat.valueColor }]}>
+                    {stat.value}
+                  </Text>
+                )}
+                <Text
+                  style={[
+                    styles.statLabel,
+                    stat.labelColor ? { color: stat.labelColor } : null,
+                  ]}
+                >
+                  {stat.label}
                 </Text>
-              )}
-              <Text
-                style={[
-                  styles.statLabel,
-                  stat.labelColor ? { color: stat.labelColor } : null,
-                ]}
-              >
-                {stat.label}
-              </Text>
+              </View>
             </TouchableOpacity>
           ))}
         </Animated.View>
       </Animated.View>
-
       {/* Main Content Area with Curved Top */}
       <View style={styles.mainContentArea}>
         {/* Quick Access Action Grid Container */}
@@ -539,27 +494,20 @@ export default function AdminHome() {
                 onPress={() => router.push(item.route as any)}
                 activeOpacity={0.7}
               >
-                <View
-                  style={[
-                    styles.quickIconContainer,
-                    { backgroundColor: item.bgColor },
-                  ]}
-                >
-                  <Icon
-                    name={item.icon}
-                    size={26}
-                    color={item.color}
-                    strokeWidth={1.8}
-                  />
-                  {(badgeCounts[item.route] || 0) > 0 && (
-                    <View style={styles.quickBadge}>
-                      <Text style={styles.quickBadgeText}>
-                        {(badgeCounts[item.route] || 0) > 99 ? '99+' : badgeCounts[item.route]}
-                      </Text>
-                    </View>
-                  )}
+                <Image source={adminCardBackgrounds[index]} style={[StyleSheet.absoluteFillObject, { zIndex: 0 }]} contentFit="fill" pointerEvents="none" />
+                <View style={{ alignItems: "center", zIndex: 1 }}>
+                  <View style={styles.quickIconContainer}>
+                    <ModernQuickAccessIcon name={item.icon} size={52} />
+                    {(badgeCounts[item.route] || 0) > 0 && (
+                      <View style={styles.quickBadge}>
+                        <Text style={styles.quickBadgeText}>
+                          {(badgeCounts[item.route] || 0) > 99 ? '99+' : badgeCounts[item.route]}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.quickLabel}>{item.label}</Text>
                 </View>
-                <Text style={styles.quickLabel}>{item.label}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -570,21 +518,6 @@ export default function AdminHome() {
           <View style={styles.activityDecorBottomRight}>
             <LeafDecor width={160} height={160} color="#2E7D32" opacity={0.1} />
           </View>
-
-          <TouchableOpacity
-            style={styles.activityHeader}
-            onPress={() => router.push("/(admin)/home/logs")}
-            activeOpacity={0.7}
-          >
-            <View style={styles.activityHeaderLeft}>
-              <Icon name="clock" size={20} color={Colors.textSecondary} />
-              <Text style={styles.activityTitle}>Recent Activity Logs</Text>
-            </View>
-            <Icon name="chevron-right" size={20} color={Colors.textSecondary} />
-          </TouchableOpacity>
-
-          <View style={styles.activityDivider} />
-
           {activitiesLoading ? (
             <View style={{ paddingVertical: 20, alignItems: "center" }}>
               <ActivityIndicator size="small" color="#1B5E20" />
@@ -630,18 +563,15 @@ const styles = StyleSheet.create({
   },
   // ─── Header ───
   header: {
-    backgroundColor: "#1B5E20",
+    backgroundColor: Colors.mintLight,
+    minHeight: 170,
+    borderRadius: 0,
     paddingTop: Spacing.xxl + 16,
     paddingBottom: Spacing.xl + 8,
     position: "relative",
     overflow: "hidden",
   },
-  headerDecorRight: {
-    position: "absolute",
-    top: 0,
-    right: -40,
-    zIndex: 0,
-  },
+  headerBanner: { position: "absolute", top: 0, left: 0, width: "100%", height: 170 },
   headerContent: {
     flexDirection: "row",
     alignItems: "center",
@@ -661,20 +591,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerName: {
-    fontSize: FontSize.lg,
+    fontSize: FontSize.xxl,
     fontWeight: "700",
-    color: Colors.white,
+    color: Colors.text,
   },
   headerRole: {
-    fontSize: FontSize.xs,
-    color: "rgba(255, 255, 255, 0.8)",
+    fontSize: FontSize.md,
+    color: Colors.primaryDark,
     marginTop: 2,
   },
   bellBtn: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    backgroundColor: "rgba(255, 255, 255, 0.8)",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -741,13 +671,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: Spacing.sm,
     marginBottom: Spacing.xs,
+    position: "relative",
   },
   quickIconContainer: {
     width: 52,
     height: 52,
-    borderRadius: BorderRadius.lg,
-    justifyContent: "center",
-    alignItems: "center",
     marginBottom: 6,
   },
   quickLabel: {

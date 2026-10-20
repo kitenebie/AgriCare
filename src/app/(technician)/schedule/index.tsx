@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { AppText as Text } from '@/components/ui/FontScale';
 import Animated from 'react-native-reanimated';
 import firestore from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
@@ -121,8 +122,13 @@ export default function TechScheduleScreen() {
     <View style={s.container}>
       {/* Header */}
       <Animated.View style={[s.header, headerAnim]}>
-        <Text style={s.headerTitle}>My Schedule</Text>
-        <Text style={s.headerSubtitle}>{appointments.length} accepted appointment{appointments.length !== 1 ? 's' : ''}</Text>
+        <TouchableOpacity style={s.backButton} onPress={() => router.canGoBack() ? router.back() : router.replace('/(technician)/dashboard')} accessibilityLabel="Go back">
+          <Icon name="chevron-left" size={20} color={Colors.white} strokeWidth={2.5} />
+        </TouchableOpacity>
+        <View style={s.headerText}>
+          <Text style={s.headerTitle}>My Schedule</Text>
+          <Text style={s.headerSubtitle}>{appointments.length} accepted appointment{appointments.length !== 1 ? 's' : ''}</Text>
+        </View>
       </Animated.View>
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Calendar */}
@@ -294,7 +300,9 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.surface },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   // Header
-  header: { backgroundColor: Colors.primary, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.lg, paddingBottom: Spacing.xl, borderBottomLeftRadius: BorderRadius.xl, borderBottomRightRadius: BorderRadius.xl },
+  header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, backgroundColor: Colors.primary, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.lg, paddingBottom: Spacing.xl, borderBottomLeftRadius: BorderRadius.xl, borderBottomRightRadius: BorderRadius.xl },
+  backButton: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center' },
+  headerText: { flex: 1 },
   headerTitle: { fontSize: FontSize.xxl, fontWeight: '800', color: Colors.white },
   headerSubtitle: { fontSize: FontSize.md, color: Colors.accent, marginTop: 4 },
   // Calendar

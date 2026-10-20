@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui";
-import { Colors, FontSize, Spacing } from "@/constants/theme";
+import { BorderRadius, Colors, Spacing } from "@/constants/theme";
 import { getRouteForRole, getSession, isBiometricsEnabled, authenticateWithBiometrics } from "@/services/sessionService";
 import { requestAllPermissions } from "@/services/permissionService";
 import { registerDeviceToken } from "@/services/notificationService";
@@ -9,12 +9,9 @@ import { Image } from "expo-image";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Dimensions,
-  StyleSheet,
-  Text,
-  View
+  ActivityIndicator, Dimensions, Pressable, StyleSheet, View
 } from "react-native";
+import { AppText as Text } from '@/components/ui/FontScale';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -33,10 +30,6 @@ export default function LoginScreen() {
   // Image fade in
   const imageOpacity = useSharedValue(0);
   const imageScale = useSharedValue(1.05);
-
-  // Title fade in up
-  const titleOpacity = useSharedValue(0);
-  const titleTranslateY = useSharedValue(20);
 
   // Buttons fade in up
   const buttonsOpacity = useSharedValue(0);
@@ -101,13 +94,6 @@ export default function LoginScreen() {
       easing: Easing.out(Easing.cubic),
     });
 
-    // Title fades in after image
-    titleOpacity.value = withDelay(400, withTiming(1, { duration: 600 }));
-    titleTranslateY.value = withDelay(
-      400,
-      withTiming(0, { duration: 600, easing: Easing.out(Easing.cubic) }),
-    );
-
     // Buttons fade in last
     buttonsOpacity.value = withDelay(700, withTiming(1, { duration: 600 }));
     buttonsTranslateY.value = withDelay(
@@ -119,11 +105,6 @@ export default function LoginScreen() {
   const imageAnimatedStyle = useAnimatedStyle(() => ({
     opacity: imageOpacity.value,
     transform: [{ scale: imageScale.value }],
-  }));
-
-  const titleAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: titleOpacity.value,
-    transform: [{ translateY: titleTranslateY.value }],
   }));
 
   const buttonsAnimatedStyle = useAnimatedStyle(() => ({
@@ -142,39 +123,33 @@ export default function LoginScreen() {
         />
       </Animated.View>
 
-      {/* Title */}
-      <Animated.View style={[styles.titleContainer, titleAnimatedStyle]}>
-        <Text style={styles.title}>
-          Livestock Support{"\n"}& Service Management
-        </Text>
-        <Text style={styles.subtitle}>For Farmer – Technician</Text>
-      </Animated.View>
-
       {/* Buttons */}
       <Animated.View
         style={[
           styles.bottomSection,
           buttonsAnimatedStyle,
-          { paddingBottom: insets.bottom + 40 },
+          { paddingBottom: insets.bottom + 90 },
         ]}
       >
         {checkingSession ? (
           <ActivityIndicator size="large" color={Colors.primary} style={{ marginVertical: 24 }} />
         ) : (
           <>
-            <Button
-              title="Log In"
+            <Pressable
               onPress={() => router.push("/(auth)/login")}
-              variant="primary"
-              size="lg"
+              accessibilityRole="button"
+              accessibilityLabel="Log In"
               style={styles.loginButton}
-            />
+            >
+              <Image source={require("../../assets/images/login/login.png")} style={styles.loginButtonImage} contentFit="contain" />
+            </Pressable>
             <Button
               title="Create Account"
               onPress={() => router.push("/(auth)/register")}
-              variant="outline"
+              variant="secondary"
               size="lg"
               style={styles.createButton}
+              textStyle={styles.createButtonText}
             />
           </>
         )}
@@ -186,7 +161,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.mintLight,
     width: "100%",
   },
   imageContainer: {
@@ -199,23 +174,6 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  titleContainer: {
-    alignItems: "center",
-    paddingHorizontal: Spacing.xxl,
-    marginTop: Spacing.xl,
-  },
-  title: {
-    fontSize: FontSize.xxl,
-    fontWeight: "800",
-    color: Colors.primary,
-    textAlign: "center",
-    lineHeight: 30,
-  },
-  subtitle: {
-    fontSize: FontSize.lg,
-    color: Colors.textSecondary,
-    marginTop: Spacing.sm,
-  },
   bottomSection: {
     paddingHorizontal: Spacing.xxxl,
     paddingTop: Spacing.xxl,
@@ -224,10 +182,24 @@ const styles = StyleSheet.create({
   },
   loginButton: {
     width: "100%",
-    marginBottom: Spacing.md,
+    aspectRatio: 516 / 91,
+    marginBottom: Spacing.lg,
+  },
+  loginButtonImage: {
+    width: "100%",
+    height: "100%",
   },
   createButton: {
     width: "100%",
     marginBottom: Spacing.lg,
+    height: 58,
+    borderRadius: BorderRadius.full,
+    borderColor: Colors.mint,
+    borderWidth: 1.5,
+    backgroundColor: Colors.white,
+  },
+  createButtonText: {
+    fontWeight: "700",
+    letterSpacing: 0.2,
   },
 });

@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { AppText as Text } from '@/components/ui/FontScale';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, FontSize, BorderRadius } from '@/constants/theme';
@@ -15,7 +16,7 @@ export default function PendingVerificationScreen() {
   };
 
   return (
-    <View style={[s.container, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 20 }]}>
+    <View style={[s.container, { paddingTop: 20, paddingBottom: insets.bottom + 20 }]}>
       {/* Illustration */}
       <View style={s.iconContainer}>
         <View style={s.iconCircle}>

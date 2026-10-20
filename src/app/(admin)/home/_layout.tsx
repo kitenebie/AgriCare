@@ -8,8 +8,6 @@ export default function AdminHomeLayout() {
       <Stack.Screen name="knowledge-base-view" />
       <Stack.Screen name="appointments" />
       <Stack.Screen name="users" />
-      <Stack.Screen name="reports" />
-      <Stack.Screen name="message-reports" />
       <Stack.Screen name="reviews" />
       <Stack.Screen name="logs" />
       <Stack.Screen name="announcements" />

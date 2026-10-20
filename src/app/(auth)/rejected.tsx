@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { AppText as Text } from '@/components/ui/FontScale';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import firestore from '@react-native-firebase/firestore';
@@ -49,7 +50,7 @@ export default function RejectedScreen() {
   const reasonLines = reason.split('\n').filter(Boolean);
 
   return (
-    <View style={[s.container, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 20 }]}>
+    <View style={[s.container, { paddingTop: 20, paddingBottom: insets.bottom + 20 }]}>
       <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Icon */}
         <View style={s.iconContainer}>

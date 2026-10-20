@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { AppText as Text } from '@/components/ui/FontScale';
 import { modalAlert } from '@/components/ui/ModalAlert';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -74,7 +75,7 @@ export default function CaptureIdScreen() {
   // Preview captured image
   if (capturedUri) {
     return (
-      <View style={[s.container, { paddingTop: insets.top }]}>
+      <View style={s.container}>
         <View style={s.previewHeader}>
           <Text style={s.previewTitle}>Review Your ID</Text>
           <Text style={s.previewSubtitle}>Make sure all details are clearly visible</Text>
@@ -98,7 +99,7 @@ export default function CaptureIdScreen() {
 
   // Camera view
   return (
-    <View style={[s.container, { paddingTop: insets.top }]}>
+    <View style={s.container}>
       {/* Camera */}
       <View style={s.cameraContainer}>
         <CameraView ref={cameraRef} style={s.camera} facing={facing}>
@@ -142,7 +143,7 @@ export default function CaptureIdScreen() {
       </View>
 
       {/* Back */}
-      <TouchableOpacity style={[s.backBtn, { top: insets.top + 12 }]} onPress={() => router.back()}>
+      <TouchableOpacity style={[s.backBtn, { top: 12 }]} onPress={() => router.back()}>
         <Icon name="close" size={22} color={Colors.white} />
       </TouchableOpacity>
     </View>

@@ -1,25 +1,18 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform, Dimensions } from 'react-native';
+import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/FontScale';
 import { modalAlert } from '@/components/ui/ModalAlert';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
 import { Icon } from '@/components/ui';
-import { signIn, getUser } from '@/services/authService';
+import { signIn, getUser, sendResetEmail } from '@/services/authService';
 import { saveSession, getRouteForRole, hasBiometricsBeenAsked } from '@/services/sessionService';
 import { requestAllPermissions } from '@/services/permissionService';
 import { registerDeviceToken } from '@/services/notificationService';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
@@ -27,6 +20,30 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
+
+  const handleForgotPassword = async () => {
+    const normalizedEmail = email.trim();
+    if (!normalizedEmail) {
+      modalAlert('Email Required', 'Enter your email address to reset your password.');
+      return;
+    }
+
+    setResettingPassword(true);
+    try {
+      await sendResetEmail(normalizedEmail);
+      modalAlert('Check Your Email', 'If an account exists for this email, you will receive a password reset link.');
+    } catch (error: any) {
+      const message = error.code === 'auth/invalid-email'
+        ? 'Enter a valid email address.'
+        : error.code === 'auth/too-many-requests'
+          ? 'Too many attempts. Please try again later.'
+          : 'Unable to send a reset link. Please try again.';
+      modalAlert('Password Reset Failed', message);
+    } finally {
+      setResettingPassword(false);
+    }
+  };
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -124,32 +141,28 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      <Image
+        source={require('../../../assets/images/login/background image.png')}
+        style={styles.backgroundImage}
+        contentFit="cover"
+        pointerEvents="none"
+      />
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }]}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Spacing.lg }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
       >
-        {/* Logo */}
-        <View style={styles.logoContainer}>
-          <Image
-            source={require('../../../assets/images/agri-care-logo.png')}
-            style={styles.logo}
-            contentFit="contain"
-          />
-          <Text style={styles.appName}>AgriCare</Text>
-          <Text style={styles.tagline}>Livestock Support & Service Management</Text>
-        </View>
+        <View style={{ height: SCREEN_HEIGHT * 0.29 }} />
 
-        {/* Form */}
-        <View style={styles.form}>
+        <View style={styles.formCard}>
           <Text style={styles.formTitle}>Welcome Back</Text>
           <Text style={styles.formSubtitle}>Sign in to your account</Text>
 
-          {/* Email */}
           <View style={styles.inputContainer}>
-            <Icon name="profile" size={20} color={Colors.textSecondary} />
+            <Icon name="profile" size={22} color={Colors.primaryDark} />
             <TextInput
               style={styles.input}
               placeholder="Email address"
@@ -162,9 +175,8 @@ export default function LoginScreen() {
             />
           </View>
 
-          {/* Password */}
           <View style={styles.inputContainer}>
-            <Icon name="lock" size={20} color={Colors.textSecondary} />
+            <Icon name="lock" size={22} color={Colors.primaryDark} />
             <TextInput
               style={styles.input}
               placeholder="Password"
@@ -173,37 +185,49 @@ export default function LoginScreen() {
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
             />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-              <Icon name={showPassword ? 'close-eye' : 'eye'} size={20} color={Colors.textSecondary} />
+            <TouchableOpacity
+              onPress={() => setShowPassword(!showPassword)}
+              accessibilityRole="button"
+              accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+            >
+              <Icon name={showPassword ? 'close-eye' : 'eye'} size={22} color={Colors.primaryDark} />
             </TouchableOpacity>
           </View>
 
-          {/* Forgot Password */}
-          <TouchableOpacity style={styles.forgotButton}>
-            <Text style={styles.forgotText}>Forgot Password?</Text>
+          <TouchableOpacity style={styles.forgotButton} onPress={handleForgotPassword} disabled={resettingPassword}>
+            {resettingPassword ? <ActivityIndicator size="small" color={Colors.primary} /> : (
+              <Text style={styles.forgotText}>Forgot Password?</Text>
+            )}
           </TouchableOpacity>
 
-          {/* Login Button */}
           <TouchableOpacity
             style={[styles.loginButton, loading && styles.loginButtonDisabled]}
             onPress={handleLogin}
             disabled={loading}
-            activeOpacity={0.8}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Log In"
           >
             {loading ? (
               <ActivityIndicator color={Colors.white} />
             ) : (
-              <Text style={styles.loginButtonText}>Log In</Text>
+              <Image
+                source={require('../../../assets/images/login/login.png')}
+                style={styles.loginButtonImage}
+                contentFit="fill"
+              />
             )}
           </TouchableOpacity>
-        </View>
 
-        {/* Register Link */}
-        <View style={styles.registerContainer}>
-          <Text style={styles.registerText}>Don't have an account? </Text>
-          <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
-            <Text style={styles.registerLink}>Create Account</Text>
+          <TouchableOpacity
+            style={styles.createAccountButton}
+            onPress={() => router.push("/(auth)/register")}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+          >
+            <Text style={styles.createAccountButtonText}>Create New Account</Text>
           </TouchableOpacity>
+
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -213,63 +237,51 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.primaryDark,
   },
   content: {
     flexGrow: 1,
-    paddingHorizontal: Spacing.xxl,
   },
-  logoContainer: {
-    alignItems: 'center',
-    marginBottom: Spacing.xxxl,
+  backgroundImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
   },
-  logo: {
-    width: 100,
-    height: 100,
-  },
-  appName: {
-    fontSize: FontSize.xxxl,
-    fontWeight: '800',
-    color: Colors.primary,
-    marginTop: Spacing.md,
-  },
-  tagline: {
-    fontSize: FontSize.sm,
-    color: Colors.textSecondary,
-    marginTop: Spacing.xs,
-  },
-  form: {
-    marginBottom: Spacing.xxl,
+  formCard: {
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.lg,
+    padding: Spacing.lg,
+    borderRadius: 30,
+    backgroundColor: Colors.white,
+    ...Shadow.medium,
   },
   formTitle: {
     fontSize: FontSize.xxl,
     fontWeight: '800',
-    color: Colors.primary,
-    marginBottom: Spacing.sm,
+    color: Colors.primaryDark,
     textAlign: 'center',
   },
   formSubtitle: {
     fontSize: FontSize.md,
     color: Colors.textSecondary,
+    marginTop: Spacing.xs,
     marginBottom: Spacing.lg,
     textAlign: 'center',
   },
-  inputLabel: {
-    fontSize: FontSize.sm,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: Spacing.sm,
-  },
   inputContainer: {
+    minHeight: 58,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.lg,
+    backgroundColor: '#F7FCF9',
+    borderRadius: 18,
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md + 2,
-    marginBottom: Spacing.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    marginBottom: Spacing.md,
+    borderWidth: 1.5,
+    borderColor: '#D8EEE0',
     gap: Spacing.md,
   },
   input: {
@@ -279,39 +291,48 @@ const styles = StyleSheet.create({
   },
   forgotButton: {
     alignSelf: 'flex-end',
-    marginBottom: Spacing.lg,
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.md,
   },
   forgotText: {
     fontSize: FontSize.sm,
     color: Colors.primary,
-  },
-  loginButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.md,
-    paddingVertical: Spacing.md,
-    alignItems: 'center',
-    marginBottom: Spacing.lg,
-  },
-  loginButtonDisabled: {
-    backgroundColor: Colors.primaryLight,
-  },
-  loginButtonText: {
-    fontSize: FontSize.md,
-    color: Colors.white,
     fontWeight: '600',
   },
-  registerContainer: {
-    flexDirection: 'row', 
-    justifyContent: 'center',
+  loginButton: {
+    height: 58,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: Colors.primary,
+    marginBottom: Spacing.lg,
+    elevation: 4,
+    shadowColor: Colors.primaryDark,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  registerText: {
-    fontSize: FontSize.sm,
-    color: Colors.textSecondary,
+  loginButtonImage: {
+    width: '100%',
+    height: '100%',
   },
-  registerLink: {
-    fontSize: FontSize.sm,
-    color: Colors.primary,
+  loginButtonDisabled: {
+    opacity: 0.65,
+  },
+  createAccountButton: {
+    minHeight: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    borderRadius: 18,
+    backgroundColor: Colors.white,
+    marginBottom: Spacing.lg,
+  },
+  createAccountButtonText: {
+    color: Colors.primaryDark,
+    fontSize: FontSize.md,
     fontWeight: '600',
   },
 });

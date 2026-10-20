@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native'
+import { View, StyleSheet, ScrollView, TouchableOpacity, Modal, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { AppText as Text, AppTextInput as TextInput } from '@/components/ui/FontScale';
 import { modalAlert } from '@/components/ui/ModalAlert';
 import firestore from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
@@ -70,37 +71,49 @@ export default function AnnouncementsScreen({ role }: Props) {
     if (!title.trim() || !content.trim()) { modalAlert('Error', 'Title and content required.'); return; }
     setSaving(true);
     try {
+      const isUpdate = Boolean(editId);
       if (editId) {
         await firestore().collection(Collections.ANNOUNCEMENTS).doc(editId).update({ title: title.trim(), content: content.trim(), audience, priority, updatedAt: firestore.FieldValue.serverTimestamp() });
         await logCrud('Announcement Updated', `Updated: ${title.trim()}`, 'announcements', editId);
       } else {
         await firestore().collection(Collections.ANNOUNCEMENTS).add({ title: title.trim(), content: content.trim(), audience, priority, createdBy: 'admin_001', createdAt: firestore.FieldValue.serverTimestamp() });
         await logCrud('Announcement Created', `Added: ${title.trim()}`, 'announcements');
-
-        // Send FCM push to target audience
-        try {
-          let query = firestore().collection(Collections.USERS).where('status', '==', 'active');
-          if (audience === 'farmers') query = query.where('role', '==', 'farmer');
-          else if (audience === 'technicians') query = query.where('role', '==', 'technician');
-          const usersSnap = await query.get();
-          const pushPromises = usersSnap.docs.map(doc =>
-            sendPushNotification(doc.id, {
-              title: `📢 ${title.trim()}`,
-              body: content.trim().substring(0, 120),
-              data: { type: 'announcement', priority }
-            })
-          );
-          await Promise.all(pushPromises);
-        } catch (pushErr) { console.warn('Push notification failed:', pushErr); }
       }
+
+      // Notify active users selected by the announcement audience on create and edit.
+      try {
+        let query = firestore().collection(Collections.USERS).where('status', '==', 'active');
+        if (audience === 'farmers') query = query.where('role', '==', 'farmer');
+        else if (audience === 'technicians') query = query.where('role', '==', 'technician');
+        const usersSnap = await query.get();
+        await Promise.all(usersSnap.docs.map(doc =>
+          sendPushNotification(doc.id, {
+            title: `📢 ${isUpdate ? 'Announcement Updated' : title.trim()}`,
+            body: content.trim().substring(0, 120),
+            data: { type: 'announcement', priority }
+          })
+        ));
+      } catch (pushErr) { console.warn('Push notification failed:', pushErr); }
       setModal(false); reset();
     } catch (e: any) { modalAlert('Error', e.message); }
     finally { setSaving(false); }
   };
 
-  const handleDelete = (id: string, name: string) => {
+  const handleDelete = (id: string, name: string, targetAudience: string) => {
     modalAlert('Delete', `Delete "${name}"?`, [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: async () => {
-      try { await firestore().collection(Collections.ANNOUNCEMENTS).doc(id).delete(); await logCrud('Announcement Deleted', `Deleted: ${name}`, 'announcements', id); } catch (e: any) { modalAlert('Error', e.message); }
+      try {
+        await firestore().collection(Collections.ANNOUNCEMENTS).doc(id).delete();
+        await logCrud('Announcement Deleted', `Deleted: ${name}`, 'announcements', id);
+        try {
+          let query = firestore().collection(Collections.USERS).where('status', '==', 'active');
+          if (targetAudience === 'farmers') query = query.where('role', '==', 'farmer');
+          else if (targetAudience === 'technicians') query = query.where('role', '==', 'technician');
+          const usersSnap = await query.get();
+          await Promise.all(usersSnap.docs.map(doc => sendPushNotification(doc.id, {
+            title: '📢 Announcement Removed', body: name, data: { type: 'announcement' }
+          })));
+        } catch (pushErr) { console.warn('Announcement push failed:', pushErr); }
+      } catch (e: any) { modalAlert('Error', e.message); }
     }}]);
   };
 
@@ -160,7 +173,7 @@ export default function AnnouncementsScreen({ role }: Props) {
               </View>
               <View style={s.actions}>
                 <TouchableOpacity style={s.editBtn} onPress={() => openEdit(a)}><Icon name="edit" size={14} color={Colors.primary} /></TouchableOpacity>
-                <TouchableOpacity style={s.delBtn} onPress={() => handleDelete(a.id, a.title)}><Icon name="close" size={14} color={Colors.error} /></TouchableOpacity>
+                <TouchableOpacity style={s.delBtn} onPress={() => handleDelete(a.id, a.title, a.audience)}><Icon name="close" size={14} color={Colors.error} /></TouchableOpacity>
               </View>
             </View>
             <Text style={s.adminCardContent} numberOfLines={2}>{a.content}</Text>
@@ -211,11 +224,13 @@ export default function AnnouncementsScreen({ role }: Props) {
       {/* Admin Create/Edit Modal */}
       {isAdmin && (
         <Modal visible={modal} transparent animationType="slide">
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={s.overlay}><View style={s.modal}>
             <View style={s.modalHead}>
               <Text style={s.modalTitle}>{editId ? 'Edit' : 'New'} Announcement</Text>
               <TouchableOpacity onPress={() => { setModal(false); reset(); }}><Icon name="close" size={22} color={Colors.text} /></TouchableOpacity>
             </View>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} automaticallyAdjustKeyboardInsets>
             <Text style={s.label}>Title</Text>
             <TextInput style={s.input} placeholder="Announcement title..." placeholderTextColor={Colors.textLight} value={title} onChangeText={setTitle} />
             <Text style={s.label}>Content</Text>
@@ -227,7 +242,9 @@ export default function AnnouncementsScreen({ role }: Props) {
             <TouchableOpacity style={[s.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving}>
               {saving ? <ActivityIndicator color={Colors.white} /> : <Text style={s.saveBtnText}>{editId ? 'Update' : 'Post'} Announcement</Text>}
             </TouchableOpacity>
+            </ScrollView>
           </View></View>
+          </KeyboardAvoidingView>
         </Modal>
       )}
     </KeyboardAvoidingView>

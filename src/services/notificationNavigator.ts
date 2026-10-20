@@ -14,8 +14,6 @@
  * - health_record        → health records screen
  * - rate_request         → chat (rating happens inside chat)
  * - rating_received      → chat
- * - report_message       → (admin) message reports
- * - report_response      → notifications tab
  * - account_approved     → login (re-auth)
  * - account_rejected     → login
  * - account_action       → login
@@ -42,7 +40,7 @@ const getPrefix = (role: string): string => {
  * Called when user taps a notification from the status bar (background/quit state).
  */
 export const handleNotificationNavigation = async (data: NotificationData): Promise<void> => {
-  if (!data?.type) return;
+
 
   const session = await getSession();
   if (!session) {
@@ -52,7 +50,10 @@ export const handleNotificationNavigation = async (data: NotificationData): Prom
   }
 
   const { role } = session;
-  const prefix = getPrefix(role);
+  const prefix = getPrefix(role);
+  if (!data?.type) {
+    if (role === 'admin') router.push('/(admin)/home' as any);    else if (role === 'technician') router.push('/(technician)/messages?tab=notifications' as any);    else router.push('/(farmer)/messages?tab=notifications' as any);    return;
+  }
 
   switch (data.type) {
     // ─── Chat message → open the 1-on-1 conversation ───
@@ -77,7 +78,10 @@ export const handleNotificationNavigation = async (data: NotificationData): Prom
 
     // ─── Appointment notifications → appointments screen ───
     case 'appointment_accepted':
-    case 'appointment_declined': {
+    case 'appointment_declined':
+    case 'appointment_confirmed':
+    case 'new_appointment':
+    case 'new_request': {
       if (role === 'technician') {
         router.push('/(technician)/appointments' as any);
       } else {
@@ -88,7 +92,8 @@ export const handleNotificationNavigation = async (data: NotificationData): Prom
 
     // ─── Forum react/reply → forum post view ───
     case 'forum_react':
-    case 'forum_reply': {
+    case 'forum_reply':
+    case 'forum_post': {
       const postId = data.postId || '';
       if (postId) {
         if (role === 'admin') {
@@ -101,7 +106,7 @@ export const handleNotificationNavigation = async (data: NotificationData): Prom
       } else {
         // No postId — go to forum list
         if (role === 'admin') {
-          router.push('/(admin)/home/forum' as any);
+          router.push('/(admin)/forum' as any);
         } else if (role === 'technician') {
           router.push('/(technician)/dashboard/forum' as any);
         } else {
@@ -132,7 +137,9 @@ export const handleNotificationNavigation = async (data: NotificationData): Prom
     }
 
     // ─── Health record → health records screen ───
-    case 'health_record': {
+    case 'health_record':
+    case 'health_record_created':
+    case 'vaccination_reminder': {
       if (role === 'technician') {
         router.push('/(technician)/dashboard/health-records' as any);
       } else {
@@ -170,23 +177,30 @@ export const handleNotificationNavigation = async (data: NotificationData): Prom
       break;
     }
 
-    // ─── Report-related (admin) ───
-    case 'report_message': {
-      router.push('/(admin)/home/message-reports' as any);
-      break;
-    }
-
-    // ─── Report response → notifications tab ───
-    case 'report_response': {
-      if (role === 'technician') {
-        router.push('/(technician)/messages?tab=notifications' as any);
-      } else {
-        router.push('/(farmer)/messages?tab=notifications' as any);
-      }
-      break;
-    }
 
     // ─── Account actions → re-login ───
+    case 'message': {
+      if (role === 'technician') router.push('/(technician)/messages' as any);
+      else if (role === 'farmer') router.push('/(farmer)/messages' as any);
+      else router.push('/(admin)/home' as any);
+      break;
+    }
+    case 'emergency': {
+      if (role === 'technician') router.push('/(technician)/map' as any);
+      else if (role === 'farmer') router.push('/(farmer)/map' as any);
+      else router.push('/(admin)/home' as any);
+      break;
+    }
+    case 'verification_request': {
+      router.push(role === 'admin' ? '/(admin)/home/users' as any : `${prefix}/home` as any);
+      break;
+    }
+    case 'livestock_category': {
+      if (role === 'admin') router.push('/(admin)/home/livestock-categories' as any);
+      else if (role === 'farmer') router.push('/(farmer)/home/my-animals' as any);
+      else router.push('/(technician)/dashboard' as any);
+      break;
+    }
     case 'account_approved':
     case 'account_rejected':
     case 'account_action': {
@@ -199,9 +213,9 @@ export const handleNotificationNavigation = async (data: NotificationData): Prom
       if (role === 'admin') {
         router.replace('/(admin)/home' as any);
       } else if (role === 'technician') {
-        router.replace('/(technician)/dashboard' as any);
+        router.push('/(technician)/messages?tab=notifications' as any);
       } else {
-        router.replace('/(farmer)/home' as any);
+        router.push('/(farmer)/messages?tab=notifications' as any);
       }
       break;
     }

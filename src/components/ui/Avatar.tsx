@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { AppText as Text } from '@/components/ui/FontScale';
 import { Image } from 'expo-image';
 import { Colors, BorderRadius } from '@/constants/theme';
 import { getInitials, getAvatarColor } from '@/utils/helpers';

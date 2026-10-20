@@ -1,34 +1,290 @@
-/**
-
- * App Configuration Constants
-
- * 
-
- * OpenRouteService:
-
- *   1. Go to https://openrouteservice.org/dev/#/signup
-
- *   2. Create free account
-
- *   3. Generate API key (free tier: 2000 requests/day)
-
- *   4. Replace the key below
-
- */
-
-export const Config = {
-  // OpenRouteService API key for road routing
-
-  // Get free key at: https://openrouteservice.org/dev/#/signup
-
-  ORS_API_KEY:
-    "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImZkYWU1M2QxZGMzYzRjMmZhYTk0NjFhN2Y5NzZhNDdlIiwiaCI6Im11cm11cjY0In0=",
-
-  // Map defaults (Bulacan, Philippines)
-
-  DEFAULT_LATITUDE: 14.8527,
-
-  DEFAULT_LONGITUDE: 120.812,
-
-  DEFAULT_ZOOM: 13,
-};
+/**
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ * App Configuration Constants
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ * 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ * OpenRouteService:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ *   1. Go to https://openrouteservice.org/dev/#/signup
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ *   2. Create free account
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ *   3. Generate API key (free tier: 2000 requests/day)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ *   4. Replace the key below
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ */
+
+export const Config = {
+  // OpenRouteService API key for road routing
+
+  // Get free key at: https://openrouteservice.org/dev/#/signup
+
+  ORS_API_KEY:
+    "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImZkYWU1M2QxZGMzYzRjMmZhYTk0NjFhN2Y5NzZhNDdlIiwiaCI6Im11cm11cjY0In0=",
+
+  // Map defaults (Bulacan, Philippines)
+
+  DEFAULT_LATITUDE: 14.8527,
+
+  DEFAULT_LONGITUDE: 120.812,
+
+  DEFAULT_ZOOM: 13,
+};
