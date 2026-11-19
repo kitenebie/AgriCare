@@ -228,9 +228,9 @@
     "semantic_hash": ""
   },
   "src/app/(auth)/register.tsx": {
-    "mtime": 1795067337.9908655,
-    "seen": 1795067411.7464557,
-    "ast_hash": "cc369927effe8af8b7109d715e8bef59",
+    "mtime": 1795068095.7659078,
+    "seen": 1795068160.9140747,
+    "ast_hash": "5aa6a6ce6cf058c6ca7f82298c026ee6",
     "semantic_hash": ""
   },
   "src/app/(auth)/rejected.tsx": {

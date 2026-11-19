@@ -1,7 +1,7 @@
 # Graph Report - AgriCare  (2026-11-19)
 
 ## Corpus Check
-- 325 files · ~4,086,949 words
+- 325 files · ~4,086,893 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 265 file(s) not represented in the graph (top: (none) 204, .csv 53, .xml 3)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `96b1ca26`
+- Built from commit: `a29bad43`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 

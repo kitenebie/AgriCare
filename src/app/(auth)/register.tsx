@@ -1,4 +1,4 @@
-              import React, { useState, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
               import { FlatList, Modal, View, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/FontScale';
               import { modalAlert } from '@/components/ui/ModalAlert';
@@ -1016,13 +1016,6 @@ import { fetch as expoFetch } from 'expo/fetch';
 
                       </View>
 
-                      {/* Login Link */}
-                      {registrationStep === 0 && <View style={styles.loginContainer}>
-                        <Text style={styles.loginText}>Already have an account? </Text>
-                        <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
-                          <Text style={styles.loginLink}>Log In</Text>
-                        </TouchableOpacity>
-                      </View>}
                     </ScrollView>
                     <View style={[styles.wizardFooter, { paddingBottom: Math.max(insets.bottom, 12) }]}>
                       {registrationStep > 0 && <TouchableOpacity style={styles.wizardBack} onPress={() => setRegistrationStep((step) => step - 1)} disabled={loading}>
@@ -1141,7 +1134,6 @@ import { fetch as expoFetch } from 'expo/fetch';
                   backgroundColor: Colors.surface,
                   justifyContent: 'center',
                   alignItems: 'center',
-                  transform: [{ rotate: '180deg' }],
                 },
                 headerTitle: {
                   fontSize: FontSize.xl,
@@ -1406,21 +1398,6 @@ import { fetch as expoFetch } from 'expo/fetch';
                 registerButtonText: {
                   color: Colors.white,
                   fontSize: FontSize.md,
-                  fontWeight: '700',
-                },
-                loginContainer: {
-                  flexDirection: 'row',
-                  justifyContent: 'center',
-                  marginTop: Spacing.lg,
-                  marginBottom: Spacing.md,
-                },
-                loginText: {
-                  fontSize: FontSize.md,
-                  color: Colors.textSecondary,
-                },
-                loginLink: {
-                  fontSize: FontSize.md,
-                  color: Colors.primary,
                   fontWeight: '700',
                 },
               });
