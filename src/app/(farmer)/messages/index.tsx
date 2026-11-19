@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { AppText as Text, AppTextInput as TextInput } from '@/components/ui/FontScale';
 import { router, useLocalSearchParams } from 'expo-router';
 import { handleNotificationNavigation } from '@/services/notificationNavigator';
@@ -12,6 +12,7 @@ import { getSession } from '@/services/sessionService';
 import { getUserChatRooms, ChatRoom } from '@/services/chatService';
 import { listenToTyping } from '@/services/chatService';
 import { Collections } from '@/services/firebase';
+import { listenToHeartbeatsByRole } from '@/services/heartbeat';
 import { Image } from 'expo-image';
 
 type MessageTab = 'chats' | 'notifications';
@@ -38,11 +39,14 @@ export default function MessagesScreen() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState('');
+  const [onlineTechnicians, setOnlineTechnicians] = useState<Set<string>>(new Set());
   const [typingMap, setTypingMap] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [unreadOnly, setUnreadOnly] = useState(false);
   const headerAnim = useFadeIn(100);
   const contentAnim = useFadeInUp(200);
+
+  useEffect(() => listenToHeartbeatsByRole('technician', users => setOnlineTechnicians(new Set(Object.keys(users)))), []);
 
   useEffect(() => {
     let unsubChats: (() => void) | null = null;
@@ -162,7 +166,7 @@ export default function MessagesScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       {/* Header */}
       <Animated.View style={[styles.header, headerAnim]}>
         <Image source={require('../../../../assets/images/technician/Mint Green Chat Bubbles in Nature.png')} style={styles.headerBanner} contentFit="cover" pointerEvents="none" />
@@ -223,7 +227,10 @@ export default function MessagesScreen() {
                     const otherUid = item.participants.find(p => p !== uid) || '';
                     router.push({ pathname: '/(farmer)/messages/chat', params: { chatId: item.id, otherUserId: otherUid, otherUserName: item.otherName, otherPhoto: item.otherPhoto || '' } });
                   }}>
-                    <Avatar name={item.otherName} imageUrl={item.otherPhoto} size={50} />
+                    <View style={styles.chatAvatar}>
+                      <Avatar name={item.otherName} imageUrl={item.otherPhoto} size={50} />
+                      <View style={[styles.chatPresenceDot, { backgroundColor: onlineTechnicians.has(item.participants.find(p => p !== uid) || '') ? Colors.success : '#9CA3AF' }]} />
+                    </View>
                     <View style={styles.chatContent}>
                       <Text style={[styles.chatName, unread > 0 && styles.chatNameBold]} numberOfLines={1}>{item.otherName}</Text>
                       {typingMap[item.id] ? (
@@ -285,7 +292,7 @@ export default function MessagesScreen() {
           )
         )}
       </Animated.View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -315,6 +322,8 @@ const styles = StyleSheet.create({
   emptySubtext: { fontSize: FontSize.sm, color: Colors.textLight, marginTop: 4, textAlign: 'center', lineHeight: 20 },
   // Chat items
   chatItem: { flexDirection: 'row', alignItems: 'center', marginHorizontal: Spacing.md, marginTop: Spacing.sm, padding: Spacing.md, borderRadius: BorderRadius.xl, backgroundColor: Colors.white, ...Shadow.light },
+  chatAvatar: { position: 'relative' },
+  chatPresenceDot: { position: 'absolute', top: 1, right: 1, width: 13, height: 13, borderRadius: 7, borderWidth: 2, borderColor: Colors.white },
   chatUnread: { backgroundColor: '#EFF8F2' },
   chatContent: { flex: 1, marginLeft: Spacing.md },
   chatMeta: { alignItems: 'flex-end', justifyContent: 'space-between', alignSelf: 'stretch', marginLeft: Spacing.xs },

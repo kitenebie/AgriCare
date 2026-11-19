@@ -6,7 +6,6 @@
 import firestore from '@react-native-firebase/firestore';
 import { Collections } from './firebase';
 import { getOrCreateChatRoom, sendMessage } from './chatService';
-import { sendPushNotification } from './pushService';
 
 /**
  * Check if technician has a completed/confirmed appointment with this farmer
@@ -84,12 +83,6 @@ export const sendRateRequest = async (params: {
     createdAt: firestore.FieldValue.serverTimestamp(),
   });
 
-  // 3. Send FCM push notification
-  await sendPushNotification(farmerId, {
-    title: 'Rate Your Experience ⭐',
-    body: `${technicianName} is asking you to rate their service${serviceInfo}.`,
-    data: { type: 'rate_request', chatId, technicianId },
-  });
 
   return rateRequestRef.id;
 };
@@ -174,12 +167,6 @@ export const submitRating = async (params: {
     createdAt: firestore.FieldValue.serverTimestamp(),
   });
 
-  // 5. Send FCM push notification
-  await sendPushNotification(technicianId, {
-    title: `New Rating: ${'⭐'.repeat(rating)}`,
-    body: `${farmerName} rated you ${rating}/5 stars!`,
-    data: { type: 'rating_received', chatId, farmerId, rating: String(rating) },
-  });
 
   return { reviewId: reviewRef.id, newRating, newCount };
 };

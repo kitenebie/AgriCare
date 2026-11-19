@@ -10,7 +10,6 @@ import { Icon } from '@/components/ui';
 import { signIn, getUser, sendResetEmail } from '@/services/authService';
 import { saveSession, getRouteForRole, hasBiometricsBeenAsked } from '@/services/sessionService';
 import { requestAllPermissions } from '@/services/permissionService';
-import { registerDeviceToken } from '@/services/notificationService';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -106,9 +105,8 @@ export default function LoginScreen() {
       const role = profile?.role || 'farmer';
       console.log('🔐 Role detected:', role);
 
-      // Request permissions (Calendar, Notifications) + register FCM token
+      // Request app permissions; signIn has already refreshed the FCM token.
       await requestAllPermissions();
-      await registerDeviceToken(user.uid);
 
       // Check if biometrics setup has been shown
       const biometricsAsked = await hasBiometricsBeenAsked();

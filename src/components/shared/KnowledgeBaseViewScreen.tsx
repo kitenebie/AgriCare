@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { AppText as Text } from '@/components/ui/FontScale';
 import firestore from '@react-native-firebase/firestore';
+import { markCurrentContentViewed } from '@/services/contentViewService';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Colors, Spacing, FontSize, BorderRadius } from '@/constants/theme';
 import { Icon, Avatar } from '@/components/ui';
@@ -36,6 +37,7 @@ export default function KnowledgeBaseViewScreen() {
         const doc = await firestore().collection(Collections.KNOWLEDGE_BASE).doc(id).get();
         if (doc.exists) {
           setArticle({ id: doc.id, ...doc.data() } as Article);
+          await markCurrentContentViewed('knowledgeBase', doc.id);
           // Increment views
           await firestore().collection(Collections.KNOWLEDGE_BASE).doc(id).update({
             views: firestore.FieldValue.increment(1),

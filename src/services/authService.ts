@@ -8,6 +8,7 @@ import { authInstance, Collections } from './firebase';
 import { requestNotificationPermission, registerDeviceToken, unregisterDeviceToken } from './notificationService';
 import { saveSession, clearSession } from './sessionService';
 import { logAuth, logError } from './logService';
+import { completeRegistrationEmailVerification } from './emailVerificationService';
 
 export type AuthUser = any;
 
@@ -49,6 +50,7 @@ export const signUp = async (
   pass: string,
   displayName: string,
   role: 'farmer' | 'technician',
+  verificationTicket: string,
   extraData?: {
     expertise?: string[];
     proofImageUrl?: string;
@@ -59,8 +61,16 @@ export const signUp = async (
   }
 ) => {
   console.log('signUp called:', email);
+  console.info('[Registration] signUp ticket metadata', { length: verificationTicket?.length || 0 });
   const credential = await authInstance.createUserWithEmailAndPassword(email, pass);
   const user = credential.user;
+  try {
+    await completeRegistrationEmailVerification(email, await user.getIdToken(), verificationTicket);
+    await user.reload();
+  } catch (error) {
+    try { await user.delete(); } catch (cleanupError) { console.warn('Failed to remove unverified account:', cleanupError); }
+    throw error;
+  }
   await user.updateProfile({ displayName });
 
   const specializationStr = extraData?.expertise && extraData.expertise.length > 0

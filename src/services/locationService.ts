@@ -9,6 +9,7 @@
  *     speed: number,
  *     accuracy: number,
  *     timestamp: number,
+ *     heartbeatTimestamp: number,
  *     role: 'farmer' | 'technician',
  *     displayName: string,
  *     isActive: boolean
@@ -33,6 +34,12 @@ export interface UserLocation {
 }
 
 const LOCATIONS_PATH = 'locations';
+export const LOCATION_ONLINE_TIMEOUT_MS = 60_000;
+export const isLocationFresh = (location: { timestamp?: number }, now = Date.now(), timeout = LOCATION_ONLINE_TIMEOUT_MS) => {
+  const timestamp = location.timestamp;
+  const age = now - (timestamp ?? NaN);
+  return typeof timestamp === 'number' && Number.isFinite(timestamp) && age >= -5_000 && age < timeout;
+};
 
 /**
  * Update the current user's location in Realtime Database
@@ -47,7 +54,8 @@ export const updateLocation = async (
     accuracy?: number;
   },
   role: string,
-  displayName: string
+  displayName: string,
+  updateProfile = true
 ) => {
   const locationRef = ref(rtdb, `${LOCATIONS_PATH}/${userId}`);
   await set(locationRef, {
@@ -56,21 +64,24 @@ export const updateLocation = async (
     heading: location.heading || 0,
     speed: location.speed || 0,
     accuracy: location.accuracy || 0,
-    timestamp: Date.now(),
+    timestamp: serverTimestamp(),
+    heartbeatTimestamp: serverTimestamp(),
     role,
     displayName,
     isActive: true,
   });
 
   // Also update Firestore user document with latest coordinates
-  try {
-    await firestore().collection(Collections.USERS).doc(userId).update({
-      latitude: location.latitude,
-      longitude: location.longitude,
-      lastLocationUpdate: firestore.FieldValue.serverTimestamp(),
-    });
-  } catch (e) {
-    // Silently fail — Firestore update is secondary
+  if (updateProfile) {
+    try {
+      await firestore().collection(Collections.USERS).doc(userId).update({
+        latitude: location.latitude,
+        longitude: location.longitude,
+        lastLocationUpdate: firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      // Silently fail — Firestore update is secondary
+    }
   }
 };
 
@@ -94,24 +105,38 @@ export const listenToUserLocation = (
 /**
  * Listen to all active locations by role (e.g., all active technicians or farmers)
  */
-export const listenToLocationsByRole = (
-  role: string,
+const listenToLocations = (
+  include: (userId: string, location: UserLocation) => boolean,
   callback: (locations: Record<string, UserLocation>) => void
 ) => {
   const locationsRef = ref(rtdb, LOCATIONS_PATH);
-  return onValue(locationsRef, (snapshot) => {
-    const allLocations: Record<string, UserLocation> = {};
+  let locations: Record<string, UserLocation> = {};
+  let expiryTimer: ReturnType<typeof setTimeout> | undefined;
+  const publishFreshLocations = () => {
+    if (expiryTimer) clearTimeout(expiryTimer);
+    const now = Date.now();
+    const activeLocations = Object.fromEntries(
+      Object.entries(locations).filter(([, location]) => location.isActive && isLocationFresh(location, now))
+    );
+    callback(activeLocations);
+    const nextExpiry = Math.min(...Object.values(activeLocations).map(location => location.timestamp + LOCATION_ONLINE_TIMEOUT_MS));
+    if (Number.isFinite(nextExpiry)) expiryTimer = setTimeout(publishFreshLocations, Math.max(1, nextExpiry - now + 1));
+  };
+  const unsubscribe = onValue(locationsRef, (snapshot) => {
+    locations = {};
     if (snapshot.exists()) {
       snapshot.forEach((child) => {
         const data = child.val() as UserLocation;
-        if (data.role === role && data.isActive) {
-          allLocations[child.key!] = data;
-        }
+        if (include(child.key!, data)) locations[child.key!] = data;
         return undefined;
       });
     }
-    callback(allLocations);
-  });
+    publishFreshLocations();
+  }, error => console.warn('Live location listener failed:', error.message));
+  return () => {
+    unsubscribe();
+    if (expiryTimer) clearTimeout(expiryTimer);
+  };
 };
 
 /**
@@ -120,21 +145,7 @@ export const listenToLocationsByRole = (
 export const listenToUsersLocations = (
   userIds: string[],
   callback: (locations: Record<string, UserLocation>) => void
-) => {
-  const locationsRef = ref(rtdb, LOCATIONS_PATH);
-  return onValue(locationsRef, (snapshot) => {
-    const locations: Record<string, UserLocation> = {};
-    if (snapshot.exists()) {
-      snapshot.forEach((child) => {
-        if (userIds.includes(child.key!) && child.val().isActive) {
-          locations[child.key!] = child.val() as UserLocation;
-        }
-        return undefined;
-      });
-    }
-    callback(locations);
-  });
-};
+) => listenToLocations(userId => userIds.includes(userId), callback);
 
 /**
  * Mark user as inactive (stop sharing location)

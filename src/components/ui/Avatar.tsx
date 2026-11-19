@@ -20,6 +20,7 @@ export const Avatar: React.FC<AvatarProps> = ({ name, imageUrl, size = 48, type 
     return (
       <Image
         source={{ uri: imageUrl }}
+        recyclingKey={imageUrl}
         style={[styles.image, { width: size, height: size, borderRadius: size / 2 }]}
         contentFit="cover"
         transition={200}

@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import { AppText as Text, AppTextInput as TextInput } from '@/components/ui/FontScale';
 import Animated from 'react-native-reanimated';
 import firestore from '@react-native-firebase/firestore';
 import { router, useFocusEffect } from 'expo-router';
 import { Camera, CircleLayer, LineLayer, MapView, MarkerView, RasterLayer, RasterSource, ShapeSource } from '@maplibre/maplibre-react-native';
+import { PHILIPPINES_MAP_BOUNDS } from '@/constants/map';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
 import { Icon, Avatar } from '@/components/ui';
+import MapServiceRequestDetailsDrawer from '@/components/map/MapServiceRequestDetailsDrawer';
 import { useFadeInUp, useFadeIn } from '@/hooks/useAnimatedEntry';
 import { getSession } from '@/services/sessionService';
 import { Collections } from '@/services/firebase';
@@ -21,6 +23,10 @@ interface FarmerClient {
   farmerName: string;
   serviceType: string;
   animalName: string;
+  animalType?: string;
+  animalBreed?: string;
+  animalQuantity?: number | string;
+  description?: string;
   date: string;
   time: string;
   status: string;
@@ -29,7 +35,6 @@ interface FarmerClient {
   location: string;
   photoURL: string;
 }
-
 // Technician default location (Bulacan area)
 const TECH_LOCATION = { latitude: 14.8527, longitude: 120.8120 };
 
@@ -44,6 +49,9 @@ const OSM_FALLBACK: MapTileSource = {
 const hasValidCoordinates = (latitude: unknown, longitude: unknown) =>
   typeof latitude === 'number' && Number.isFinite(latitude) && latitude >= -90 && latitude <= 90 &&
   typeof longitude === 'number' && Number.isFinite(longitude) && longitude >= -180 && longitude <= 180;
+const getAppointmentStatus = (client: FarmerClient, today: string) => client.date && client.date < today
+  ? { label: 'Overdue', color: '#DC2626', background: '#FEE2E2' }
+  : { label: 'Accepted', color: '#16A34A', background: '#DCFCE7' };
 
 export default function TechMapScreen() {
   const [clients, setClients] = useState<FarmerClient[]>([]);
@@ -56,6 +64,7 @@ export default function TechMapScreen() {
   const [mapErrorMessage, setMapErrorMessage] = useState('');
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<FarmerClient | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [appointmentFilter, setAppointmentFilter] = useState<'All' | 'Upcoming' | 'Overdue'>('All');
   const [drivingRoute, setDrivingRoute] = useState<DrivingRoute | null>(null);
@@ -65,6 +74,7 @@ export default function TechMapScreen() {
 
   useEffect(() => {
     let unsub: () => void = () => {};
+    let latestSnapshot = 0;
     const load = async () => {
       const session = await getSession();
       if (!session) { setLoading(false); return; }
@@ -87,6 +97,7 @@ export default function TechMapScreen() {
         .where('status', '==', 'confirmed')
         .onSnapshot(
           async (snap) => {
+            const snapshotVersion = ++latestSnapshot;
             const appointments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
             // The appointment coordinates are captured when the booking is made.
@@ -115,7 +126,7 @@ export default function TechMapScreen() {
                     const farmerDoc = await firestore().collection(Collections.USERS).doc(appt.farmerId).get();
                     if (farmerDoc.exists) {
                       const fd = farmerDoc.data();
-                      if (!location && fd?.location) location = fd.location;
+                      if (typeof fd?.location === 'string' && fd.location.trim()) location = fd.location.trim();
                       if (fd?.photoURL) photoURL = fd.photoURL;
                     }
                   } catch (e) {}
@@ -127,6 +138,10 @@ export default function TechMapScreen() {
                   farmerName: appt.farmerName || 'Farmer',
                   serviceType: appt.serviceType || '',
                   animalName: appt.animalName || '',
+                  animalType: appt.animalType || '',
+                  animalBreed: appt.animalBreed || '',
+                  animalQuantity: appt.animalQuantity,
+                  description: appt.description || '',
                   date: appt.date || '',
                   time: appt.time || '',
                   status: appt.status || '',
@@ -138,6 +153,7 @@ export default function TechMapScreen() {
               })
             );
 
+            if (snapshotVersion !== latestSnapshot) return;
             clientsData.sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
             setClients(clientsData);
             setLoading(false);
@@ -176,6 +192,7 @@ export default function TechMapScreen() {
   const visibleClients = selectedAppointmentId
     ? filteredClients.filter((client) => client.id === selectedAppointmentId)
     : filteredClients;
+  const selectedRequestStatus = selectedRequest ? getAppointmentStatus(selectedRequest, today) : null;
   const routeDestination = visibleClients.find((client) =>
     hasValidCoordinates(client.appointmentLatitude, client.appointmentLongitude)
   );
@@ -230,11 +247,11 @@ export default function TechMapScreen() {
     }, [])
   );
 
-  const handleMessage = async (farmerId: string, farmerName: string) => {
+  const handleMessage = async (farmerId: string, farmerName: string, photoURL = '') => {
     if (!farmerId || !uid) return;
     try {
       const chatId = await getOrCreateChatRoom(uid, farmerId);
-      router.push({ pathname: '/(technician)/messages/chat', params: { chatId, otherUserId: farmerId, otherUserName: farmerName, otherPhoto: '' } });
+      router.push({ pathname: '/(technician)/messages/chat', params: { chatId, otherUserId: farmerId, otherUserName: farmerName, otherPhoto: photoURL } });
     } catch (e) {
       console.warn('Failed to open chat:', e);
     }
@@ -284,10 +301,10 @@ export default function TechMapScreen() {
   if (loading) return <View style={s.center}><ActivityIndicator size="large" color={Colors.primary} /></View>;
 
   return (
-    <View style={s.container}>
+    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       {/* Header */}
       <Animated.View style={[s.header, headerAnim]}>
-        <Image source={require("../../../../assets/images/technician/Green Map Pin Landscape.png")} style={s.headerArt} resizeMode="fit" pointerEvents="none" />
+        <View pointerEvents="none" style={s.headerArt}><Image source={require("../../../../assets/images/technician/Green Map Pin Landscape.png")} style={StyleSheet.absoluteFill} resizeMode="cover" /></View>
         <View style={s.headerIdentity}>
           <Text style={s.headerTitle}>Client Locations</Text>
           <View style={s.headerSubtitleRow}>
@@ -319,6 +336,8 @@ export default function TechMapScreen() {
               centerCoordinate: [mapCenter.longitude, mapCenter.latitude],
               zoomLevel: clients.length > 0 ? 11 : 13,
             }}
+            minZoomLevel={5}
+            maxBounds={PHILIPPINES_MAP_BOUNDS}
           />
           <RasterSource
             id={`tiles-${activeTileSource.id}`}
@@ -350,7 +369,7 @@ export default function TechMapScreen() {
               id="map-points-layer"
               style={{
                 circleRadius: 8,
-                circleColor: ['match', ['get', 'role'], 'appointment', '#DC2626', 'responder', '#16A34A', '#2196F3'],
+                circleColor: ['match', ['get', 'role'], 'appointment', '#DC2626', 'responder', '#16A34A', 'farmer', '#2563EB', '#2196F3'],
                 circleStrokeColor: '#FFFFFF',
                 circleStrokeWidth: 3,
               }}
@@ -367,18 +386,29 @@ export default function TechMapScreen() {
               </View>
             </MarkerView>
           ) : null}
-          {visibleClients.filter((client) => hasValidCoordinates(client.appointmentLatitude, client.appointmentLongitude)).map((client) => (
-            <MarkerView
-              key={`farmer-${client.id}`}
-              coordinate={[client.appointmentLongitude!, client.appointmentLatitude!]}
-              anchor={{ x: 0.5, y: 0.5 }}
-              allowOverlap
-            >
-              <View style={s.mapAvatarMarker}>
-                <Avatar name={client.farmerName} imageUrl={client.photoURL} size={40} />
-              </View>
-            </MarkerView>
-          ))}
+          {visibleClients.filter((client) => hasValidCoordinates(client.appointmentLatitude, client.appointmentLongitude)).map((client) => {
+            const markerStatus = getAppointmentStatus(client, today);
+            return (
+              <MarkerView
+                key={`farmer-${client.id}`}
+                coordinate={[client.appointmentLongitude!, client.appointmentLatitude!]}
+                anchor={{ x: 0.5, y: 0.5 }}
+                allowOverlap
+                onTouchEnd={() => setSelectedRequest(client)}
+              >
+                <TouchableOpacity
+                  style={s.mapAvatarMarker}
+                  onPress={() => setSelectedRequest(client)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`View ${markerStatus.label.toLowerCase()} ${client.serviceType} request from ${client.farmerName}`}
+                >
+                  <Avatar name={client.farmerName} imageUrl={client.photoURL} size={40} />
+                  <View style={[s.requestStatusBadge, { backgroundColor: markerStatus.color }]} />
+                </TouchableOpacity>
+              </MarkerView>
+            );
+          })}
         </MapView>
         {routeDestination ? (
           <View pointerEvents="none" style={s.routeSummary}>
@@ -402,12 +432,12 @@ export default function TechMapScreen() {
         </TouchableOpacity>
         <View pointerEvents="none" style={s.mapLegend}>
           <View style={s.legendItem}>
-            <View style={[s.legendDot, { backgroundColor: '#DC2626' }]} />
-            <Text style={s.legendText}>Appointment</Text>
+            <View style={[s.legendDot, { backgroundColor: '#2563EB' }]} />
+            <Text style={s.legendText}>Farmer</Text>
           </View>
           <View style={s.legendItem}>
             <View style={[s.legendDot, { backgroundColor: '#16A34A' }]} />
-            <Text style={s.legendText}>Your live location</Text>
+            <Text style={s.legendText}>Your location</Text>
           </View>
         </View>
         {mapErrorMessage ? (
@@ -424,7 +454,7 @@ export default function TechMapScreen() {
         </View>
       ) : null}
 
-      {/* Client List */}
+      {/* Client appointments */}
       <View style={s.searchBox}>
         <Icon name="search" size={20} color={Colors.textLight} />
         <TextInput
@@ -442,12 +472,8 @@ export default function TechMapScreen() {
         <View style={s.appointmentsHeading}>
           <Text style={s.listTitle}>Appointments</Text>
           <View style={s.filterTabs}>
-            {(['All', 'Upcoming', 'Overdue'] as const).map((filter) => (
-              <TouchableOpacity
-                key={filter}
-                style={[s.filterTab, appointmentFilter === filter && s.filterTabActive]}
-                onPress={() => setAppointmentFilter(filter)}
-              >
+            {(['All', 'Upcoming', 'Overdue'] as const).map(filter => (
+              <TouchableOpacity key={filter} style={[s.filterTab, appointmentFilter === filter && s.filterTabActive]} onPress={() => setAppointmentFilter(filter)}>
                 <Text style={[s.filterTabText, appointmentFilter === filter && s.filterTabTextActive]}>{filter}</Text>
               </TouchableOpacity>
             ))}
@@ -461,7 +487,10 @@ export default function TechMapScreen() {
               key={client.id}
               activeOpacity={0.85}
               style={[s.card, selectedAppointmentId === client.id && s.cardSelected]}
-              onPress={() => setSelectedAppointmentId((selectedId) => selectedId === client.id ? null : client.id)}
+              onPress={() => {
+                setSelectedAppointmentId(client.id);
+                setSelectedRequest(client);
+              }}
             >
               <View style={s.cardLeft}>
                 <Avatar name={client.farmerName} imageUrl={client.photoURL} size={40} />
@@ -472,18 +501,10 @@ export default function TechMapScreen() {
                   <Text style={[s.cardDateBadge, { color: getDateColor(client.date), backgroundColor: getDateLabel(client.date) === 'Overdue' ? '#FEE2E2' : getDateLabel(client.date) === 'Today' ? '#FEF3C7' : '#DCFCE7' }]}>{getDateLabel(client.date)}</Text>
                 </View>
                 <Text style={s.cardService}>{client.serviceType} — {client.animalName}</Text>
-                <View style={s.cardRow}>
-                  <Icon name="clock" size={12} color={Colors.textSecondary} />
-                  <Text style={s.cardDetail}>{client.date} {client.time}</Text>
-                </View>
-                {client.location ? (
-                  <View style={s.cardRow}>
-                    <Icon name="location" size={12} color={Colors.textSecondary} />
-                    <Text style={s.cardDetail}>{client.location}</Text>
-                  </View>
-                ) : null}
+                <View style={s.cardRow}><Icon name="clock" size={12} color={Colors.textSecondary} /><Text style={s.cardDetail}>{client.date} {client.time}</Text></View>
+                {client.location ? <View style={s.cardRow}><Icon name="location" size={12} color={Colors.textSecondary} /><Text style={s.cardDetail}>{client.location}</Text></View> : null}
               </View>
-              <TouchableOpacity style={s.msgBtn} onPress={() => handleMessage(client.farmerId, client.farmerName)}>
+              <TouchableOpacity style={s.msgBtn} onPress={() => handleMessage(client.farmerId, client.farmerName, client.photoURL)} accessibilityRole="button" accessibilityLabel={`Message ${client.farmerName}`}>
                 <Icon name="messages" size={18} color={Colors.primary} />
               </TouchableOpacity>
             </TouchableOpacity>
@@ -491,7 +512,30 @@ export default function TechMapScreen() {
           <View style={{ height: 80 }} />
         </ScrollView>
       </Animated.View>
-    </View>
+      <MapServiceRequestDetailsDrawer
+        request={selectedRequest && selectedRequestStatus ? {
+          id: selectedRequest.id,
+          serviceType: selectedRequest.serviceType,
+          statusLabel: selectedRequestStatus.label,
+          statusColor: selectedRequestStatus.color,
+          statusBackground: selectedRequestStatus.background,
+          animalName: selectedRequest.animalName,
+          animalType: selectedRequest.animalType,
+          animalBreed: selectedRequest.animalBreed,
+          animalQuantity: selectedRequest.animalQuantity,
+          farmerName: selectedRequest.farmerName,
+          technicianName: 'You',
+          date: selectedRequest.date,
+          time: selectedRequest.time,
+          location: selectedRequest.location,
+          description: selectedRequest.description,
+        } : null}
+        onClose={() => {
+          setSelectedRequest(null);
+          setSelectedAppointmentId(null);
+        }}
+      />
+    </KeyboardAvoidingView>
   );
 }
 
@@ -511,6 +555,7 @@ const s = StyleSheet.create({
   mapContainerExpanded: { position: 'absolute', zIndex: 20, elevation: 20, top: 0, right: 0, bottom: 0, left: 0, height: '100%', marginHorizontal: 0, marginTop: 0, borderRadius: 0 },
   map: { flex: 1 },
   mapAvatarMarker: { width: 48, height: 48, borderRadius: 24, borderWidth: 3, borderColor: Colors.white, backgroundColor: Colors.white, alignItems: 'center', justifyContent: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4 },
+  requestStatusBadge: { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: Colors.white, elevation: 6 },
   routeSummary: { position: 'absolute', top: 8, left: 8, right: 52, paddingHorizontal: Spacing.sm, paddingVertical: 7, borderRadius: BorderRadius.md, backgroundColor: 'rgba(255,255,255,0.95)' },
   routeTitle: { fontSize: FontSize.xs, color: Colors.text, fontWeight: '700' },
   routeDetails: { fontSize: FontSize.xs, color: '#1565C0', marginTop: 2, fontWeight: '600' },
@@ -546,8 +591,8 @@ const s = StyleSheet.create({
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardName: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   cardDateBadge: { fontSize: FontSize.xs, fontWeight: '700', paddingHorizontal: Spacing.sm, paddingVertical: 4, borderRadius: BorderRadius.full, overflow: 'hidden' },
+  msgBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center', marginLeft: Spacing.sm },
   cardService: { fontSize: FontSize.sm, color: Colors.primary, marginTop: 2 },
   cardRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
   cardDetail: { fontSize: FontSize.xs, color: Colors.textSecondary },
-  msgBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center' },
 });

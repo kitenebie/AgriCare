@@ -12,7 +12,7 @@ import { Collections } from '@/services/firebase';
 interface AppointmentAnimal {
   appointmentId: string;
   animalId: string;
-  animalName: string;
+  animalType: string;
   farmerId: string;
   farmerName: string;
   farmerPhoto: string;
@@ -25,10 +25,11 @@ interface AppointmentAnimal {
 
 interface HealthRecord {
   id: string;
-  animalName: string;
+  animalType?: string;
   recordType: string;
   diagnosis: string;
   date: any;
+  createdAt?: any;
   status: string;
   animalId: string;
 }
@@ -87,7 +88,7 @@ export default function HealthRecordsListScreen() {
             return {
               appointmentId: doc.id,
               animalId: data.animalId || '',
-              animalName: data.animalName || 'Unknown Animal',
+              animalType: data.animalType || '',
               farmerId: data.farmerId || '',
               farmerName: data.farmerName || 'Unknown Farmer',
               farmerPhoto,
@@ -106,11 +107,11 @@ export default function HealthRecordsListScreen() {
         const recordsSnap = await firestore()
           .collection('healthRecords')
           .where('technicianId', '==', session.uid)
-          .orderBy('createdAt', 'desc')
-          .limit(10)
           .get();
-
-        setRecentRecords(recordsSnap.docs.map(d => ({ id: d.id, ...d.data() } as HealthRecord)));
+        const recentRecords = recordsSnap.docs.map(d => ({ id: d.id, ...d.data() } as HealthRecord));
+        const timestamp = (value: any) => value?.toMillis?.() ?? new Date(value || 0).getTime();
+        recentRecords.sort((a, b) => timestamp(b.createdAt || b.date) - timestamp(a.createdAt || a.date));
+        setRecentRecords(recentRecords.slice(0, 10));
       } catch (e: any) {
         console.warn('Health records load error:', e);
       }
@@ -167,8 +168,9 @@ export default function HealthRecordsListScreen() {
                 onPress={() => router.push({
                   pathname: '/(technician)/dashboard/health-records/form',
                   params: {
+                    appointmentId: animal.appointmentId,
                     animalId: animal.animalId,
-                    animalName: animal.animalName,
+                    animalType: animal.animalType,
                     farmerId: animal.farmerId,
                     farmerName: animal.farmerName,
                     serviceType: animal.serviceType,
@@ -178,10 +180,10 @@ export default function HealthRecordsListScreen() {
               >
                 <View style={s.dualAvatar}>
                   <Avatar name={animal.farmerName} imageUrl={animal.farmerPhoto} size={38} />
-                  <Avatar name={animal.animalName} imageUrl={animal.animalPhoto || undefined} size={38} type="animal" />
+                  <Avatar name={animal.animalType || 'Animal'} imageUrl={animal.animalPhoto || undefined} size={38} type="animal" />
                 </View>
                 <View style={s.animalInfo}>
-                  <Text style={s.animalName}>{animal.animalName}</Text>
+                  <Text style={s.animalName}>{animal.animalType || 'Animal type needed'}</Text>
                   <Text style={s.animalService}>{animal.serviceType}</Text>
                   <View style={s.animalRow}>
                     <Icon name="farmer" size={12} color={Colors.textSecondary} />
@@ -209,7 +211,7 @@ export default function HealthRecordsListScreen() {
                   <View style={[s.recordType, { backgroundColor: typeStyle.bg }]}>
                     <Text style={[s.recordTypeText, { color: typeStyle.color }]}>{record.recordType.replace('_', ' ')}</Text>
                   </View>
-                  <Text style={s.recordAnimal}>{record.animalName}</Text>
+                  {!!record.animalType && <Text style={s.recordAnimal}>{record.animalType}</Text>}
                   <View style={s.recordFooter}>
                     <Text style={s.recordDiagnosis} numberOfLines={1}>{record.diagnosis || 'No diagnosis'}</Text>
                     <Text style={s.recordDate}>{formatTimestamp(record.date)}</Text>

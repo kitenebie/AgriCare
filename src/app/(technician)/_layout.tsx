@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, FontSize } from '@/constants/theme';
 import { Icon, IconName } from '@/components/ui';
 import { LocationTracker } from '@/components/LocationTracker';
+import { HeartbeatTracker } from '@/components/HeartbeatTracker';
 import { BanGuard } from '@/components/BanGuard';
 
 interface TabIconProps {
@@ -35,6 +36,7 @@ export default function TechnicianLayout() {
   return (
     <>
     <LocationTracker />
+    <HeartbeatTracker />
     <BanGuard />
     <Tabs
       screenOptions={{
@@ -72,12 +74,6 @@ export default function TechnicianLayout() {
         name="messages"
         options={{
           tabBarIcon: ({ focused }) => <TabIcon iconName="messages" label="Chats" focused={focused} />,
-        }}
-        listeners={{
-          tabPress: (e) => {
-            e.preventDefault();
-            router.replace('/(technician)/messages');
-          },
         }}
       />
       <Tabs.Screen

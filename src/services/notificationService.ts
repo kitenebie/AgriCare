@@ -8,6 +8,8 @@ import firestore from '@react-native-firebase/firestore';
 import { Platform } from 'react-native';
 import { Collections } from './firebase';
 
+let tokenRefreshUnsubscribe: (() => void) | null = null;
+
 /**
  * Request notification permission
  */
@@ -39,6 +41,8 @@ export const registerDeviceToken = async (userId: string): Promise<string | null
         lastTokenUpdate: firestore.FieldValue.serverTimestamp(),
         platform: Platform.OS,
       });
+      tokenRefreshUnsubscribe?.();
+      tokenRefreshUnsubscribe = onTokenRefresh(userId);
     }
     return token;
   } catch (error: any) {
@@ -52,6 +56,8 @@ export const registerDeviceToken = async (userId: string): Promise<string | null
  */
 export const unregisterDeviceToken = async (userId: string): Promise<void> => {
   try {
+    tokenRefreshUnsubscribe?.();
+    tokenRefreshUnsubscribe = null;
     await firestore().collection(Collections.USERS).doc(userId).update({
       fcmToken: '',
     });
@@ -69,6 +75,8 @@ export const onTokenRefresh = (userId: string) => {
     try {
       await firestore().collection(Collections.USERS).doc(userId).update({
         fcmToken: newToken,
+        lastTokenUpdate: firestore.FieldValue.serverTimestamp(),
+        platform: Platform.OS,
       });
     } catch (e) {}
   });

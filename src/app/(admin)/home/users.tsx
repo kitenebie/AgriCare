@@ -10,7 +10,6 @@ import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/the
 import { Icon, Avatar } from '@/components/ui';
 import { Collections } from '@/services/firebase';
 import { logCrud } from '@/services/logService';
-import { sendPushNotification } from '@/services/pushService';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -111,12 +110,6 @@ export default function UsersPage() {
                 createdAt: firestore.FieldValue.serverTimestamp()
               });
 
-              // FCM push notification
-              await sendPushNotification(user.id, {
-                title: 'Account Approved!',
-                body: `Your AgriCare ${user.role} account has been verified. You can now log in!`,
-                data: { type: 'account_approved' }
-              });
 
               await logCrud('User Approved', `Approved ${user.role}: ${user.displayName}`, 'users', user.id, {
                 old: { status: 'pending' },
@@ -198,12 +191,6 @@ export default function UsersPage() {
         createdAt: firestore.FieldValue.serverTimestamp()
       });
 
-      // FCM push
-      await sendPushNotification(user.id, {
-        title: 'Registration Not Approved',
-        body: reason,
-        data: { type: 'account_rejected' }
-      });
 
       await logCrud('User Rejected', `Rejected ${user.role}: ${user.displayName}. Reason: ${reason}`, 'users', user.id, {
         old: { status: 'pending' },
@@ -474,6 +461,15 @@ export default function UsersPage() {
                     </View>
                   )}
 
+                  {selectedUser.role === 'farmer' && selectedUser.photoURL && selectedUser.idImageUrl && selectedUser.status === 'pending' && (
+                    <View style={s.drawerSection}>
+                      <Text style={s.drawerSectionTitle}>Identity check · compare both faces</Text>
+                      <View style={s.identityCompareRow}>
+                        <View style={s.identityCompareItem}><Text style={s.drawerDocLabel}>Selfie</Text><Image source={{ uri: selectedUser.photoURL }} style={s.identityCompareImage} contentFit="cover" /></View>
+                        <View style={s.identityCompareItem}><Text style={s.drawerDocLabel}>Government ID</Text><Image source={{ uri: selectedUser.idImageUrl }} style={s.identityCompareImage} contentFit="contain" /></View>
+                      </View>
+                    </View>
+                  )}
                   {/* Documents */}
                   {(selectedUser.idImageUrl || selectedUser.proofImageUrl) && (
                     <View style={s.drawerSection}>
@@ -577,6 +573,9 @@ const s = StyleSheet.create({
   drawerDocCard: { marginBottom: 12 },
   drawerDocLabel: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.text, marginBottom: 8 },
   drawerDocImage: { width: '100%', height: 180, borderRadius: 12, backgroundColor: '#F5F5F5' },
+  identityCompareRow: { flexDirection: 'row', gap: 10 },
+  identityCompareItem: { flex: 1, minWidth: 0 },
+  identityCompareImage: { width: '100%', height: 130, borderRadius: 10, backgroundColor: '#F5F5F5' },
   drawerActionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: BorderRadius.lg },
   drawerActionText: { fontSize: FontSize.md, fontWeight: '700', color: Colors.white },
   // Reject Modal

@@ -1,17 +1,21 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import { AppText as Text, AppTextInput as TextInput } from '@/components/ui/FontScale';
 import Animated from 'react-native-reanimated';
 import firestore from '@react-native-firebase/firestore';
 import { router, useFocusEffect } from 'expo-router';
-import { Camera, CircleLayer, LineLayer, MapView, MarkerView, RasterLayer, RasterSource, ShapeSource } from '@maplibre/maplibre-react-native';
+import { Camera, CircleLayer, LineLayer, MapView, MarkerView, RasterLayer, RasterSource, ShapeSource, type CameraRef } from '@maplibre/maplibre-react-native';
+import { PHILIPPINES_MAP_BOUNDS } from '@/constants/map';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
 import { Icon, Avatar } from '@/components/ui';
+import { MapUserProfileDrawer, type MapProfileUser } from '@/components/map/MapUserProfileDrawer';
+import MapServiceRequestDetailsDrawer from '@/components/map/MapServiceRequestDetailsDrawer';
 import { useFadeInUp, useFadeIn } from '@/hooks/useAnimatedEntry';
 import { getSession } from '@/services/sessionService';
 import { Collections } from '@/services/firebase';
 import { getOrCreateChatRoom } from '@/services/chatService';
-import { listenToUserLocation, listenToUsersLocations } from '@/services/locationService';
+import { isLocationFresh, listenToUserLocation, listenToUsersLocations, type UserLocation } from '@/services/locationService';
+import { listenToHeartbeatsByRole, type UserHeartbeat } from '@/services/heartbeat';
 import { getMapTileSources, type MapTileSource } from '@/services/mapConfigService';
 import { formatDrivingDistance, formatDrivingDuration, getDrivingRoute, type DrivingRoute } from '@/services/routingService';
 
@@ -21,6 +25,9 @@ interface TechAppointment {
   technicianName: string;
   serviceType: string;
   animalName: string;
+  animalType?: string;
+  animalBreed?: string;
+  animalQuantity?: number | string;
   date: string;
   time: string;
   status: string;
@@ -30,7 +37,9 @@ interface TechAppointment {
   responderLongitude: number | null;
   location: string;
   photoURL: string;
+  description?: string;
 }
+type MapTechnician = MapProfileUser;
 
 // Farmer default location (Bulacan area)
 const DEFAULT_LOCATION = { latitude: 14.8527, longitude: 120.8120 };
@@ -46,9 +55,18 @@ const OSM_FALLBACK: MapTileSource = {
 const hasValidCoordinates = (latitude: unknown, longitude: unknown) =>
   typeof latitude === 'number' && Number.isFinite(latitude) && latitude >= -90 && latitude <= 90 &&
   typeof longitude === 'number' && Number.isFinite(longitude) && longitude >= -180 && longitude <= 180;
+const getRequestStatus = (appointment: TechAppointment, today: string) => appointment.date && appointment.date < today
+  ? { label: 'Overdue', color: '#DC2626', background: '#FEE2E2' }
+  : appointment.status === 'pending'
+    ? { label: 'Pending', color: '#F59E0B', background: '#FEF3C7' }
+    : { label: 'Accepted', color: '#16A34A', background: '#DCFCE7' };
 
 export default function FarmerMapScreen() {
+  const cameraRef = useRef<CameraRef>(null);
+  const returnToFarmerRef = useRef(false);
   const [appointments, setAppointments] = useState<TechAppointment[]>([]);
+  const [technicians, setTechnicians] = useState<MapTechnician[]>([]);
+  const [technicianLocations, setTechnicianLocations] = useState<Record<string, UserHeartbeat>>({});
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState('');
   const [farmerLocation, setFarmerLocation] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -56,8 +74,12 @@ export default function FarmerMapScreen() {
   const [mapTileSources, setMapTileSources] = useState<MapTileSource[]>([]);
   const [mapSourceIndex, setMapSourceIndex] = useState(0);
   const [mapErrorMessage, setMapErrorMessage] = useState('');
+  const [loadedMapKey, setLoadedMapKey] = useState('');
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<TechAppointment | null>(null);
+  const [selectedTechnicianId, setSelectedTechnicianId] = useState<string | null>(null);
+  const [profileDrawerVisible, setProfileDrawerVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [appointmentFilter, setAppointmentFilter] = useState<'All' | 'Upcoming' | 'Overdue'>('All');
   const [drivingRoute, setDrivingRoute] = useState<DrivingRoute | null>(null);
@@ -66,16 +88,27 @@ export default function FarmerMapScreen() {
   const listAnim = useFadeInUp(300);
 
   useEffect(() => {
+    const stopProfiles = firestore().collection(Collections.USERS).where('role', '==', 'technician').onSnapshot(snap => {
+      setTechnicians(snap.docs.filter(doc => doc.data()?.status === 'active').map(doc => ({ ...doc.data(), id: doc.id } as MapTechnician)));
+    });
+    const stopLocations = listenToHeartbeatsByRole('technician', setTechnicianLocations);
+    return () => { stopProfiles(); stopLocations(); };
+  }, []);
+
+  useEffect(() => {
     let unsub: () => void = () => {};
+    let latestSnapshot = 0;
     const load = async () => {
       const session = await getSession();
       if (!session) { setLoading(false); return; }
       setUid(session.uid);
 
+      let farmerAddress = '';
       // Get farmer's own location
       const userDoc = await firestore().collection(Collections.USERS).doc(session.uid).get();
       if (userDoc.exists) {
         const data = userDoc.data();
+        farmerAddress = typeof data?.location === 'string' ? data.location.trim() : '';
         setProfilePhotoURL(data?.photoURL || '');
         if (data && hasValidCoordinates(data.latitude, data.longitude)) {
           setFarmerLocation({ latitude: data.latitude, longitude: data.longitude });
@@ -88,6 +121,7 @@ export default function FarmerMapScreen() {
         .where('farmerId', '==', session.uid)
         .onSnapshot(
           async (snap) => {
+            const snapshotVersion = ++latestSnapshot;
             const apptDocs = snap.docs
               .map(d => ({ id: d.id, ...d.data() }))
               .filter((appointment: any) => appointment.status === 'pending' || appointment.status === 'confirmed');
@@ -107,7 +141,7 @@ export default function FarmerMapScreen() {
                 const appointmentLongitude = hasSavedAppointmentLocation
                   ? appt.appointmentLongitude
                   : hasLegacyAppointmentLocation ? appt.longitude : null;
-                let location = appt.location || '';
+                let location = farmerAddress || appt.location || '';
                 let photoURL = '';
 
                 // Read technician display details only. Live location is subscribed
@@ -117,7 +151,6 @@ export default function FarmerMapScreen() {
                     const techDoc = await firestore().collection(Collections.USERS).doc(appt.technicianId).get();
                     if (techDoc.exists) {
                       const td = techDoc.data();
-                      if (!location && td?.location) location = td.location;
                       if (td?.photoURL) photoURL = td.photoURL;
                     }
                   } catch (e) {}
@@ -129,6 +162,9 @@ export default function FarmerMapScreen() {
                   technicianName: appt.technicianName || 'Technician',
                   serviceType: appt.serviceType || '',
                   animalName: appt.animalName || '',
+                  animalType: appt.animalType || '',
+                  animalBreed: appt.animalBreed || '',
+                  animalQuantity: appt.animalQuantity,
                   date: appt.date || '',
                   time: appt.time || '',
                   status: appt.status || '',
@@ -138,10 +174,12 @@ export default function FarmerMapScreen() {
                   responderLongitude: null,
                   location,
                   photoURL,
+                  description: appt.description || '',
                 };
               })
             );
 
+            if (snapshotVersion !== latestSnapshot) return;
             techData.sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
             setAppointments(techData);
             setLoading(false);
@@ -186,7 +224,7 @@ export default function FarmerMapScreen() {
   const today = new Date().toISOString().split('T')[0];
   const search = searchQuery.trim().toLowerCase();
   const filteredAppointments = appointments.filter((appointment) => {
-    const matchesSearch = `${appointment.technicianName} ${appointment.serviceType} ${appointment.animalName} ${appointment.location}`.toLowerCase().includes(search);
+    const matchesSearch = `${appointment.technicianName} ${appointment.serviceType} ${appointment.animalName}`.toLowerCase().includes(search);
     const matchesFilter = appointmentFilter === 'All' || (appointmentFilter === 'Overdue'
       ? Boolean(appointment.date && appointment.date < today)
       : Boolean(appointment.date && appointment.date >= today));
@@ -195,6 +233,25 @@ export default function FarmerMapScreen() {
   const visibleAppointments = selectedAppointmentId
     ? filteredAppointments.filter((appointment) => appointment.id === selectedAppointmentId)
     : filteredAppointments;
+  const onlineTechnicians = technicians.filter(technician => !!technicianLocations[technician.id]);
+  const liveTechnicians = onlineTechnicians.flatMap(technician => {
+    const location = technicianLocations[technician.id];
+    // shortcut: use last-known coordinates while heartbeat is fresh; discard them when heartbeat expires.
+    return location?.isActive && hasValidCoordinates(location.latitude, location.longitude)
+      ? [{ ...technician, latitude: location.latitude, longitude: location.longitude }]
+      : [];
+  });
+  const onlineTechnicianCount = onlineTechnicians.length;
+  const matchesSearch = (technician: MapTechnician) => !search || search.split(/\s+/).every(term => technician.displayName.toLowerCase().includes(term));
+  const filteredTechnicians = onlineTechnicians.filter(matchesSearch);
+  const mappedTechnicians = liveTechnicians.filter(matchesSearch);
+  const searchMatch = search && mappedTechnicians.length === 1 ? mappedTechnicians[0] : null;
+  const searchMatchId = searchMatch?.id;
+  const searchMatchLatitude = searchMatch?.latitude;
+  const searchMatchLongitude = searchMatch?.longitude;
+
+  const selectedTechnician = onlineTechnicians.find(technician => technician.id === selectedTechnicianId);
+  const selectedLiveTechnician = liveTechnicians.find(technician => technician.id === selectedTechnicianId);
   const routeAppointment = visibleAppointments.find((appointment) =>
     hasValidCoordinates(appointment.appointmentLatitude, appointment.appointmentLongitude) &&
     hasValidCoordinates(appointment.responderLatitude, appointment.responderLongitude)
@@ -256,11 +313,11 @@ export default function FarmerMapScreen() {
     }, [])
   );
 
-  const handleMessage = async (technicianId: string, technicianName: string) => {
+  const handleMessage = async (technicianId: string, technicianName: string, photoURL = '') => {
     if (!technicianId || !uid) return;
     try {
       const chatId = await getOrCreateChatRoom(uid, technicianId);
-      router.push({ pathname: '/(farmer)/messages/chat', params: { chatId, otherUserId: technicianId, otherUserName: technicianName, otherPhoto: '' } });
+      router.push({ pathname: '/(farmer)/messages/chat', params: { chatId, otherUserId: technicianId, otherUserName: technicianName, otherPhoto: photoURL } });
     } catch (e) {
       console.warn('Failed to open chat:', e);
     }
@@ -284,10 +341,34 @@ export default function FarmerMapScreen() {
 
   const allTileSources = [...mapTileSources, OSM_FALLBACK];
   const activeTileSource = allTileSources[Math.min(mapSourceIndex, allTileSources.length - 1)];
+  const mapKey = `${activeTileSource.id}-${selectedTechnicianId || liveTechnicians[0]?.id || 'self'}-${isMapExpanded ? 'full' : 'card'}`;
   const tileUrlTemplate = activeTileSource.urlTemplate.replaceAll(
     '{key}',
     encodeURIComponent(activeTileSource.apiKey || '')
   );
+  useEffect(() => {
+    if (search) {
+      returnToFarmerRef.current = true;
+      if (loadedMapKey !== mapKey || !searchMatchId || searchMatchLatitude == null || searchMatchLongitude == null) return;
+    } else {
+      if (!returnToFarmerRef.current || loadedMapKey !== mapKey || !farmerLocation) return;
+      returnToFarmerRef.current = false;
+      cameraRef.current?.setCamera({
+        centerCoordinate: [farmerLocation.longitude, farmerLocation.latitude],
+        zoomLevel: 13,
+        animationDuration: 1000,
+        animationMode: 'flyTo',
+      });
+      return;
+    }
+    cameraRef.current?.setCamera({
+      centerCoordinate: [searchMatchLongitude, searchMatchLatitude],
+      zoomLevel: 14,
+      animationDuration: 1000,
+      animationMode: 'flyTo',
+    });
+  }, [loadedMapKey, mapKey, search, searchMatchId, searchMatchLatitude, searchMatchLongitude, farmerLocation]);
+
   const mapPoints = {
     type: 'FeatureCollection' as const,
     features: [
@@ -304,40 +385,51 @@ export default function FarmerMapScreen() {
           coordinates: [appointment.responderLongitude!, appointment.responderLatitude!],
         },
       })),
+      ...mappedTechnicians.map(technician => ({
+        type: 'Feature' as const,
+        properties: { role: 'technician' },
+        geometry: { type: 'Point' as const, coordinates: [technician.longitude!, technician.latitude!] },
+      })),
     ],
   };
   const appointmentWithLocation = visibleAppointments.find((appointment) => hasValidCoordinates(appointment.appointmentLatitude, appointment.appointmentLongitude));
   const responderWithLocation = visibleAppointments.find((appointment) => hasValidCoordinates(appointment.responderLatitude, appointment.responderLongitude));
-  const mapCenter = routeAppointment
+  const mapCenter = !search && farmerLocation
+    ? farmerLocation
+    : selectedLiveTechnician
+    ? { latitude: selectedLiveTechnician.latitude, longitude: selectedLiveTechnician.longitude }
+    : liveTechnicians[0]
+    ? { latitude: liveTechnicians[0].latitude, longitude: liveTechnicians[0].longitude }
+    : routeAppointment
     ? { latitude: routeAppointment.appointmentLatitude!, longitude: routeAppointment.appointmentLongitude! }
     : appointmentWithLocation
       ? { latitude: appointmentWithLocation.appointmentLatitude!, longitude: appointmentWithLocation.appointmentLongitude! }
     : responderWithLocation
       ? { latitude: responderWithLocation.responderLatitude!, longitude: responderWithLocation.responderLongitude! }
-      : farmerLocation ?? DEFAULT_LOCATION;
+      : farmerLocation ?? liveTechnicians[0] ?? DEFAULT_LOCATION;
 
   if (loading) return <View style={s.center}><ActivityIndicator size="large" color={Colors.primary} /></View>;
 
   return (
-    <View style={s.container}>
+    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       {/* Header */}
       <Animated.View style={[s.header, headerAnim]}>
-        <Image source={require('../../../../assets/images/technician/Green Map Pin Landscape.png')} style={s.headerArt} resizeMode="fit" pointerEvents="none" />
+        <View pointerEvents="none" style={s.headerArt}><Image source={require('../../../../assets/images/technician/Green Map Pin Landscape.png')} style={StyleSheet.absoluteFill} resizeMode="cover" /></View>
         <View style={s.headerIdentity}>
           <Text style={s.headerTitle}>Technician Locations</Text>
-          <View style={s.headerSubtitleRow}><View style={s.activeDot} /><Text style={s.headerSubtitle}>{appointments.length} active appointment{appointments.length !== 1 ? 's' : ''}</Text></View>
+          <View style={s.headerSubtitleRow}><View style={s.activeDot} /><Text style={s.headerSubtitle}>{liveTechnicians.length} technician{liveTechnicians.length !== 1 ? 's' : ''} sharing location</Text></View>
         </View>
       </Animated.View>
 
       {/* Map */}
       <View style={[s.mapContainer, isMapExpanded && s.mapContainerExpanded]}>
         <MapView
-          key={`${activeTileSource.id}-${mapCenter.latitude}-${mapCenter.longitude}-${isMapExpanded ? 'full' : 'card'}`}
+          key={mapKey}
           mapStyle={EMPTY_MAP_STYLE}
           style={s.map}
           attributionEnabled
           logoEnabled={false}
-          onDidFinishLoadingMap={() => setMapErrorMessage('')}
+          onDidFinishLoadingMap={() => { setLoadedMapKey(mapKey); setMapErrorMessage(''); }}
           onDidFailLoadingMap={() => {
             if (mapSourceIndex < allTileSources.length - 1) {
               setMapSourceIndex((index) => index + 1);
@@ -347,10 +439,13 @@ export default function FarmerMapScreen() {
           }}
         >
           <Camera
+            ref={cameraRef}
             defaultSettings={{
-              centerCoordinate: [mapCenter.longitude, mapCenter.latitude],
-              zoomLevel: filteredAppointments.length > 0 ? 11 : 13,
+              centerCoordinate: [mapCenter.longitude!, mapCenter.latitude!],
+              zoomLevel: liveTechnicians.length > 0 ? 10 : filteredAppointments.length > 0 ? 11 : 13,
             }}
+            minZoomLevel={5}
+            maxBounds={PHILIPPINES_MAP_BOUNDS}
           />
           <RasterSource
             id={`tiles-${activeTileSource.id}`}
@@ -382,7 +477,7 @@ export default function FarmerMapScreen() {
               id="map-points-layer"
               style={{
                 circleRadius: 8,
-                circleColor: ['match', ['get', 'role'], 'responder', '#16A34A', '#2196F3'],
+                circleColor: ['match', ['get', 'role'], 'responder', '#2563EB', 'technician', '#2563EB', '#2196F3'],
                 circleStrokeColor: '#FFFFFF',
                 circleStrokeWidth: 3,
               }}
@@ -390,27 +485,46 @@ export default function FarmerMapScreen() {
           </ShapeSource>
           {farmerLocation ? (
             <MarkerView
+              key="farmer-current-location"
               coordinate={[farmerLocation.longitude, farmerLocation.latitude]}
               anchor={{ x: 0.5, y: 0.5 }}
               allowOverlap
             >
-              <View style={s.mapAvatarMarker}>
-                <Avatar name="Farmer" imageUrl={profilePhotoURL} size={40} />
+              <View style={[s.mapAvatarMarker, { borderColor: '#2563EB' }]}>
+                <Icon name="location" size={21} color="#2563EB" />
               </View>
             </MarkerView>
           ) : null}
-          {visibleAppointments.filter((appointment) => hasValidCoordinates(appointment.appointmentLatitude, appointment.appointmentLongitude)).map((appointment) => (
-            <MarkerView
-              key={`appointment-${appointment.id}`}
-              coordinate={[appointment.appointmentLongitude!, appointment.appointmentLatitude!]}
-              anchor={{ x: 0.5, y: 0.5 }}
-              allowOverlap
-            >
-              <View style={s.mapAvatarMarker}>
-                <Avatar name="Farmer" imageUrl={profilePhotoURL} size={40} />
-              </View>
+          {mappedTechnicians.map(technician => (
+            <MarkerView key={`live-technician-${technician.id}-${technician.photoURL || 'no-photo'}`} coordinate={[technician.longitude!, technician.latitude!]} anchor={{ x: 0.5, y: 0.5 }} allowOverlap>
+              <TouchableOpacity style={[s.mapAvatarMarker, selectedTechnicianId === technician.id && s.mapAvatarSelected]} onPress={() => { setSelectedTechnicianId(technician.id); setProfileDrawerVisible(true); }} accessibilityRole="button" accessibilityLabel={`View ${technician.displayName} profile`}>
+                <Avatar key={`technician-${technician.id}-${technician.photoURL || 'no-photo'}`} name={technician.displayName} imageUrl={technician.photoURL || undefined} size={40} />
+              </TouchableOpacity>
             </MarkerView>
           ))}
+          {visibleAppointments.filter((appointment) => hasValidCoordinates(appointment.appointmentLatitude, appointment.appointmentLongitude)).map((appointment) => {
+            const markerStatus = getRequestStatus(appointment, today);
+            return (
+              <MarkerView
+                key={`service-request-${appointment.id}-${appointment.status}`}
+                coordinate={[appointment.appointmentLongitude!, appointment.appointmentLatitude!]}
+                anchor={{ x: 0.5, y: 0.5 }}
+                allowOverlap
+                onTouchEnd={() => setSelectedRequest(appointment)}
+              >
+                <TouchableOpacity
+                  style={s.mapAvatarMarker}
+                  onPress={() => setSelectedRequest(appointment)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`View ${markerStatus.label.toLowerCase()} ${appointment.serviceType} request details`}
+                >
+                  <Avatar name="Farmer" imageUrl={profilePhotoURL} size={40} />
+                  <View style={[s.requestStatusBadge, { backgroundColor: markerStatus.color }]} />
+                </TouchableOpacity>
+              </MarkerView>
+            );
+          })}
           {visibleAppointments.filter((appointment) => hasValidCoordinates(appointment.responderLatitude, appointment.responderLongitude)).map((appointment) => (
             <MarkerView
               key={`technician-${appointment.id}`}
@@ -419,7 +533,7 @@ export default function FarmerMapScreen() {
               allowOverlap
             >
               <View style={s.mapAvatarMarker}>
-                <Avatar name={appointment.technicianName} imageUrl={appointment.photoURL} size={40} />
+                <Avatar key={`appointment-technician-${appointment.technicianId}-${appointment.photoURL}`} name={appointment.technicianName} imageUrl={appointment.photoURL === profilePhotoURL ? undefined : appointment.photoURL} size={40} />
               </View>
             </MarkerView>
           ))}
@@ -446,12 +560,12 @@ export default function FarmerMapScreen() {
         </TouchableOpacity>
         <View pointerEvents="none" style={s.mapLegend}>
           <View style={s.legendItem}>
-            <Avatar name="Farmer" imageUrl={profilePhotoURL} size={16} />
-            <Text style={s.legendText}>Appointment</Text>
+            <Icon name="location" size={16} color="#2563EB" />
+            <Text style={s.legendText}>Your location</Text>
           </View>
           <View style={s.legendItem}>
-            <View style={[s.legendDot, { backgroundColor: '#16A34A' }]} />
-            <Text style={s.legendText}>Responder live location</Text>
+            <View style={[s.legendDot, { backgroundColor: '#2563EB' }]} />
+            <Text style={s.legendText}>Technician</Text>
           </View>
         </View>
         {mapErrorMessage ? (
@@ -461,74 +575,90 @@ export default function FarmerMapScreen() {
         ) : null}
       </View>
 
-      {appointments.length === 0 ? (
-        <View style={s.emptyAppointments}>
-          <Icon name="map" size={20} color={Colors.textLight} />
-          <Text style={s.emptyAppointmentsText}>No active appointments. Your location is shown on the map.</Text>
-        </View>
-      ) : null}
-
-      {/* Appointment List */}
+      {/* Live technician profiles */}
       <View style={s.searchBox}>
         <Icon name="search" size={20} color={Colors.textLight} />
         <TextInput
           style={s.searchInput}
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder="Search technician, service, or location..."
+          placeholder="Search technicians by name or location..."
           placeholderTextColor={Colors.textLight}
-          accessibilityLabel="Search technician, service, or location"
+          accessibilityLabel="Search technicians by name or location"
           returnKeyType="search"
         />
       </View>
       <Animated.View style={[s.listSection, listAnim]}>
         <View style={s.appointmentsHeading}>
-          <Text style={s.listTitle}>Appointments</Text>
-          <View style={s.filterTabs}>
-            {(['All', 'Upcoming', 'Overdue'] as const).map((filter) => (
-              <TouchableOpacity key={filter} style={[s.filterTab, appointmentFilter === filter && s.filterTabActive]} onPress={() => setAppointmentFilter(filter)}>
-                <Text style={[s.filterTabText, appointmentFilter === filter && s.filterTabTextActive]}>{filter}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <Text style={s.listTitle}>Technicians nearby</Text>
+          <Text style={s.liveCount}>{onlineTechnicianCount} online</Text>
         </View>
         <ScrollView showsVerticalScrollIndicator={false} style={s.list}>
-          {filteredAppointments.length === 0 ? <Text style={s.noResults}>No matching appointments.</Text> : filteredAppointments.map((appt) => (
+          {filteredTechnicians.length === 0 ? <Text style={s.noResults}>No technicians are online right now.</Text> : filteredTechnicians.map((technician) => (
             <TouchableOpacity
-              key={appt.id}
+              key={technician.id}
               activeOpacity={0.85}
-              style={[s.card, selectedAppointmentId === appt.id && s.cardSelected]}
-              onPress={() => setSelectedAppointmentId((selectedId) => selectedId === appt.id ? null : appt.id)}
+              style={[s.card, selectedTechnicianId === technician.id && s.cardSelected]}
+              onPress={() => { setSelectedTechnicianId(technician.id); setProfileDrawerVisible(true); }}
             >
               <View style={s.cardLeft}>
-                <Avatar name={appt.technicianName} imageUrl={appt.photoURL} size={40} />
+                <Avatar name={technician.displayName} imageUrl={technician.photoURL} size={40} />
               </View>
               <View style={s.cardContent}>
                 <View style={s.cardHeader}>
-                  <Text style={s.cardName}>{appt.technicianName}</Text>
-                  <Text style={[s.cardDateBadge, { color: getDateColor(appt.date), backgroundColor: getDateLabel(appt.date) === 'Overdue' ? '#FEE2E2' : getDateLabel(appt.date) === 'Today' ? '#FEF3C7' : '#DCFCE7' }]}>{getDateLabel(appt.date)}</Text>
+                  <Text style={s.cardName}>{technician.displayName}</Text>
+                  <Text style={s.onlineLabel}>Online</Text>
                 </View>
-                <Text style={s.cardService}>{appt.serviceType} — {appt.animalName}</Text>
-                <View style={s.cardRow}>
-                  <Icon name="clock" size={12} color={Colors.textSecondary} />
-                  <Text style={s.cardDetail}>{appt.date} {appt.time}</Text>
-                </View>
-                {appt.location ? (
+                {!!(technician.specialization || technician.expertise?.length) && <Text style={s.cardService} numberOfLines={1}>{technician.specialization || technician.expertise?.join(', ')}</Text>}
+                {technician.location ? (
                   <View style={s.cardRow}>
                     <Icon name="location" size={12} color={Colors.textSecondary} />
-                    <Text style={s.cardDetail}>{appt.location}</Text>
+                    <Text style={s.cardDetail}>{technician.location}</Text>
                   </View>
                 ) : null}
               </View>
-              <TouchableOpacity style={s.msgBtn} onPress={() => handleMessage(appt.technicianId, appt.technicianName)}>
-                <Icon name="messages" size={18} color={Colors.primary} />
-              </TouchableOpacity>
+              <Icon name="chevron-right" size={18} color={Colors.textLight} />
             </TouchableOpacity>
           ))}
           <View style={{ height: 80 }} />
         </ScrollView>
       </Animated.View>
-    </View>
+      <MapUserProfileDrawer
+        user={profileDrawerVisible ? selectedTechnician || null : null}
+        userType="Technician"
+        onClose={() => setProfileDrawerVisible(false)}
+        onRequestService={() => {
+          if (!selectedTechnician) return;
+          setProfileDrawerVisible(false);
+          router.push({ pathname: '/(farmer)/services', params: { technicianId: selectedTechnician.id } });
+        }}
+        onMessage={() => {
+          if (!selectedTechnician) return;
+          setProfileDrawerVisible(false);
+          void handleMessage(selectedTechnician.id, selectedTechnician.displayName, selectedTechnician.photoURL);
+        }}
+      />
+      <MapServiceRequestDetailsDrawer
+        request={selectedRequest ? {
+          id: selectedRequest.id,
+          serviceType: selectedRequest.serviceType,
+          statusLabel: getRequestStatus(selectedRequest, today).label,
+          statusColor: getRequestStatus(selectedRequest, today).color,
+          statusBackground: getRequestStatus(selectedRequest, today).background,
+          animalName: selectedRequest.animalName,
+          animalType: selectedRequest.animalType,
+          animalBreed: selectedRequest.animalBreed,
+          animalQuantity: selectedRequest.animalQuantity,
+          farmerName: 'You',
+          technicianName: selectedRequest.technicianName,
+          date: selectedRequest.date,
+          time: selectedRequest.time,
+          location: selectedRequest.location,
+          description: selectedRequest.description,
+        } : null}
+        onClose={() => setSelectedRequest(null)}
+      />
+    </KeyboardAvoidingView>
   );
 }
 
@@ -548,6 +678,8 @@ const s = StyleSheet.create({
   mapContainerExpanded: { position: 'absolute', zIndex: 20, elevation: 20, top: 0, right: 0, bottom: 0, left: 0, height: '100%', marginHorizontal: 0, marginTop: 0, borderRadius: 0 },
   map: { flex: 1 },
   mapAvatarMarker: { width: 48, height: 48, borderRadius: 24, borderWidth: 3, borderColor: Colors.white, backgroundColor: Colors.white, alignItems: 'center', justifyContent: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4 },
+  requestStatusBadge: { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: Colors.white, elevation: 6 },
+  mapAvatarSelected: { borderColor: Colors.primary, borderWidth: 4 },
   routeSummary: { position: 'absolute', top: 8, left: 8, right: 52, paddingHorizontal: Spacing.sm, paddingVertical: 7, borderRadius: BorderRadius.md, backgroundColor: 'rgba(255,255,255,0.95)' },
   routeTitle: { fontSize: FontSize.xs, color: Colors.text, fontWeight: '700' },
   routeDetails: { fontSize: FontSize.xs, color: '#1565C0', marginTop: 2, fontWeight: '600' },
@@ -566,6 +698,8 @@ const s = StyleSheet.create({
   listSection: { flex: 1, paddingHorizontal: Spacing.lg, marginTop: Spacing.md },
   appointmentsHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm, marginBottom: Spacing.sm },
   listTitle: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },
+  liveCount: { color: Colors.primary, fontSize: FontSize.sm, fontWeight: '700' },
+  onlineLabel: { color: '#16834D', fontSize: FontSize.xs, fontWeight: '700' },
   filterTabs: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   filterTab: { paddingHorizontal: Spacing.sm, paddingVertical: 7, borderRadius: BorderRadius.full, backgroundColor: Colors.white },
   filterTabActive: { backgroundColor: Colors.primary },
@@ -584,5 +718,4 @@ const s = StyleSheet.create({
   cardService: { fontSize: FontSize.sm, color: Colors.primary, marginTop: 2 },
   cardRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
   cardDetail: { fontSize: FontSize.xs, color: Colors.textSecondary },
-  msgBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center' },
 });

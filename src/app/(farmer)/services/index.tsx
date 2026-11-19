@@ -1,44 +1,64 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
 import { AppText as Text, AppTextInput as TextInput } from '@/components/ui/FontScale';
 import { modalAlert } from '@/components/ui/ModalAlert';
 import Animated from 'react-native-reanimated';
-import { Image } from 'expo-image';
 import firestore from '@react-native-firebase/firestore';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
 import { Icon, IconName } from '@/components/ui';
 import { Avatar } from '@/components/ui';
 import { useFadeInUp } from '@/hooks/useAnimatedEntry';
-import { useFocusEffect } from 'expo-router';
 import { getSession } from '@/services/sessionService';
 import { Collections } from '@/services/firebase';
+import { hasAppointmentTimeConflict, isTechnicianAppointmentActive, isTimeInAnyRange, isTimeInRange, type TimeRange } from '@/utils/availability';
 import { logCrud } from '@/services/logService';
 import * as Location from 'expo-location';
 import { DatePickerModal } from '@/components/ui/DatePickerModal';
 import { TimePickerModal } from '@/components/ui/TimePickerModal';
 
 interface ServiceItem { id: string; name: string; iconName: IconName; }
-interface Animal { id: string; name: string; breed: string; type: string; imageUrl?: string; }
-interface AvailabilitySlot { date?: string; dayOfWeek?: number; time: string; }
-interface Technician { id: string; displayName: string; specialization?: string; photoURL?: string; rating?: number; available?: boolean; availabilitySlots?: AvailabilitySlot[]; }
-interface CustomService { id: string; name: string; iconName: IconName; ownerId: string; }
+interface AvailabilitySlot { date?: string; dayOfWeek?: number; time?: string; startTime?: string; endTime?: string; }
+interface Technician { id: string; displayName: string; specialization?: string; photoURL?: string; rating?: number; available?: boolean; availabilitySlots?: AvailabilitySlot[]; alwaysAvailable?: TimeRange[] | TimeRange; alwaysAvailableEnabled?: boolean; }
+interface ScheduledAppointment { technicianId?: string; date?: string; time?: string; status?: string; responseDeadlineAt?: { toMillis?: () => number }; }
 const dateKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-const TECHNICIAN_RESPONSE_MINUTES = 15;
+const TECHNICIAN_RESPONSE_HOURS = 24;
+const MAX_DESCRIPTION_LENGTH = 5000;
+const isPastTimeOnDate = (date: Date, time: string) => {
+  const match = time.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return false;
+  const [, hour, minute, period] = match;
+  const requestedDate = new Date(date);
+  requestedDate.setHours((Number(hour) % 12) + (period.toUpperCase() === 'PM' ? 12 : 0), Number(minute), 0, 0);
+  return requestedDate.getTime() <= Date.now();
+};
+const issueTemplates = [
+  { label: 'Health concern', text: 'Main concern:\nSymptoms:\nWhen it started:' },
+  { label: 'Vaccination', text: 'Vaccine or service needed:\nLast vaccination date (if known):' },
+  { label: 'Treatment / follow-up', text: 'Treatment or follow-up needed:\nPrevious treatment (if any):' },
+  { label: 'Urgent concern', text: 'How urgent is this request?\nBest time to contact you:' },
+  { label: 'Animal details', text: 'Animal age or condition:\nRelevant health history:' },
+];
 
 const serviceTypes: ServiceItem[] = [
   { id: '1', name: 'Health Check', iconName: 'health-check' },
   { id: '2', name: 'Vaccination', iconName: 'vaccination' },
   { id: '3', name: 'Treatment', iconName: 'treatment' },
-  { id: '4', name: 'De-worming', iconName: 'bug' },
-  { id: '5', name: 'Artificial\nInsemination', iconName: 'dna' },
-  { id: '6', name: 'Others', iconName: 'dots' },
+  { id: '4', name: 'Deworming', iconName: 'bug' },
+  { id: '5', name: 'Artificial Insemination', iconName: 'dna' },
+  { id: '6', name: 'Iron Injection', iconName: 'vaccination' },
+  { id: '7', name: 'Vitamin Injection', iconName: 'vaccination' },
+  { id: '8', name: 'Castration', iconName: 'treatment' },
+  { id: '9', name: 'Wound Treatment', iconName: 'health-check' },
+  { id: '10', name: 'Antibiotic Injection', iconName: 'vaccination' },
 ];
 
 export default function ServicesScreen() {
+  const { technicianId, returnToAvailable, returnToTechnicians } = useLocalSearchParams<{ technicianId?: string; returnToAvailable?: string; returnToTechnicians?: string }>();
   const [selectedService, setSelectedService] = useState<string | null>(null);
-  const [animals, setAnimals] = useState<Animal[]>([]);
-  const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
+  const [animalType, setAnimalType] = useState('');
+  const [animalBreed, setAnimalBreed] = useState('');
+  const [animalQuantity, setAnimalQuantity] = useState('1');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedTime, setSelectedTime] = useState('');
   const [description, setDescription] = useState('');
@@ -46,17 +66,20 @@ export default function ServicesScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [uid, setUid] = useState('');
   const [userName, setUserName] = useState('');
+  const [farmerLocation, setFarmerLocation] = useState('');
 
   // Technicians
   const [technicians, setTechnicians] = useState<Technician[]>([]);
+  const [scheduledAppointments, setScheduledAppointments] = useState<ScheduledAppointment[]>([]);
+  const [appointmentsLoading, setAppointmentsLoading] = useState(true);
+  const [appointmentsLoadFailed, setAppointmentsLoadFailed] = useState(false);
   const [selectedTech, setSelectedTech] = useState<Technician | null>(null);
-  const [customServices, setCustomServices] = useState<CustomService[]>([]);
   const [dateModal, setDateModal] = useState(false);
   const [timeModal, setTimeModal] = useState(false);
-
-  // Modals
-  const [animalModal, setAnimalModal] = useState(false);
-  const [techModal, setTechModal] = useState(false);
+  const [descriptionHeight, setDescriptionHeight] = useState(100);
+  const formScroll = useRef<ScrollView>(null);
+  const descriptionFocused = useRef(false);
+  const [step, setStep] = useState(0);
 
   const contentAnim = useFadeInUp(200);
 
@@ -67,17 +90,12 @@ export default function ServicesScreen() {
       setUid(session.uid);
       setUserName(session.displayName || 'Farmer');
 
-      // Load farmer's animals
-      const animalSnap = await firestore().collection('animals').where('ownerId', '==', session.uid).get();
-      setAnimals(animalSnap.docs.map(d => ({ id: d.id, ...d.data() } as Animal)));
-
-      // Load technicians
-      const techSnap = await firestore().collection(Collections.USERS).where('role', '==', 'technician').where('status', '==', 'active').get();
+      const [techSnap, farmerDoc] = await Promise.all([
+        firestore().collection(Collections.USERS).where('role', '==', 'technician').where('status', '==', 'active').get(),
+        firestore().collection(Collections.USERS).doc(session.uid).get().catch(() => null),
+      ]);
       setTechnicians(techSnap.docs.map(d => ({ id: d.id, ...d.data() } as Technician)));
-
-      // Load user's custom services
-      const csSnap = await firestore().collection('customServices').where('ownerId', '==', session.uid).get();
-      setCustomServices(csSnap.docs.map(d => ({ id: d.id, ...d.data() } as CustomService)));
+      setFarmerLocation(farmerDoc?.data()?.location || '');
 
       // Default date to tomorrow
       const tomorrow = new Date();
@@ -89,27 +107,64 @@ export default function ServicesScreen() {
     load();
   }, []);
 
-  // Refresh custom services when screen gains focus (after adding a new one)
-  useFocusEffect(
-    useCallback(() => {
-      if (!uid) return;
-      firestore().collection('customServices').where('ownerId', '==', uid).get().then(snap => {
-        setCustomServices(snap.docs.map(d => ({ id: d.id, ...d.data() } as CustomService)));
-      });
-    }, [uid])
-  );
+  useEffect(() => {
+    let active = true;
+    setAppointmentsLoading(true);
+    setAppointmentsLoadFailed(false);
+    setScheduledAppointments([]);
+    return firestore().collection(Collections.APPOINTMENTS).where('status', 'in', ['pending', 'confirmed', 'upcoming']).onSnapshot(
+      snap => {
+        setScheduledAppointments(snap.docs.map(d => d.data() as ScheduledAppointment));
+        setAppointmentsLoading(false);
+      },
+      error => {
+        console.warn('Appointment availability load error:', error);
+        setAppointmentsLoadFailed(true);
+        setAppointmentsLoading(false);
+      }
+    );
+  }, [selectedDate]);
+
+  useEffect(() => {
+    setSelectedTech(technicianId ? technicians.find(tech => tech.id === technicianId) || null : null);
+  }, [technicianId, technicians]);
 
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('en-PH', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' });
   };
-  const techniciansForSlot = technicians.filter(tech => tech.available !== false && tech.availabilitySlots?.some(
-    slot => (slot.date === dateKey(selectedDate) || slot.dayOfWeek === selectedDate.getDay()) && slot.time === selectedTime
-  ));
+  const techniciansForSlot = technicians.filter(tech => {
+    if (appointmentsLoading || appointmentsLoadFailed || !selectedTime || tech.available === false) return false;
+    const hasSchedule = tech.availabilitySlots?.some(slot => {
+      const dateMatches = slot.date ? slot.date === dateKey(selectedDate) : slot.dayOfWeek === selectedDate.getDay();
+      if (!dateMatches) return false;
+      return slot.startTime && slot.endTime
+        ? isTimeInRange(selectedTime, slot.startTime, slot.endTime)
+        : !!slot.time && slot.time.trim().toUpperCase() === selectedTime.trim().toUpperCase();
+    }) || (tech.alwaysAvailableEnabled !== false && isTimeInAnyRange(selectedTime, tech.alwaysAvailable));
+    return hasSchedule && !scheduledAppointments.some(appointment => appointment.technicianId === tech.id && isTechnicianAppointmentActive(appointment) && hasAppointmentTimeConflict(dateKey(selectedDate), selectedTime, appointment));
+  });
+
+  const moveToStep = (nextStep: number) => {
+    Keyboard.dismiss();
+    setStep(nextStep);
+    requestAnimationFrame(() => formScroll.current?.scrollTo({ y: 0, animated: false }));
+  };
+  const continueForm = () => {
+    if (step === 0 && !selectedService) { modalAlert('Service required', 'Select a service to continue.'); return; }
+    if (step === 1 && (!animalType.trim() || !animalBreed.trim() || !Number.isSafeInteger(Number(animalQuantity)) || Number(animalQuantity) < 1)) { modalAlert('Animal details required', 'Enter the animal type, breed, and a quantity of at least 1.'); return; }
+    if (step === 1 && selectedService === '5' && !['pig', 'swine', 'cattle', 'carabao'].includes(animalType.trim().toLowerCase())) { modalAlert('Animal type not supported', 'Artificial Insemination is available for Pig/Swine, Cattle, and Carabao only.'); return; }
+    if (step === 2 && !selectedTime) { modalAlert('Time required', 'Select a preferred date and time to continue.'); return; }
+    if (step === 2 && isPastTimeOnDate(selectedDate, selectedTime)) { modalAlert('Invalid time', 'Choose a time later than the current time.'); return; }
+    if (step === 2 && selectedTech && !techniciansForSlot.some(tech => tech.id === selectedTech.id)) { modalAlert('Technician unavailable', 'Choose another available technician or select Any Available Technician.'); return; }
+    moveToStep(step + 1);
+  };
 
   const handleSubmit = async () => {
     if (!selectedService) { modalAlert('Error', 'Please select a service type.'); return; }
-    if (!selectedAnimal) { modalAlert('Error', 'Please select an animal.'); return; }
+    if (!animalType.trim() || !animalBreed.trim() || !Number.isSafeInteger(Number(animalQuantity)) || Number(animalQuantity) < 1) { modalAlert('Error', 'Enter the animal type, breed, and a quantity of at least 1.'); return; }
+    if (selectedService === '5' && !['pig', 'swine', 'cattle', 'carabao'].includes(animalType.trim().toLowerCase())) { modalAlert('Animal type not supported', 'Artificial Insemination is available for Pig/Swine, Cattle, and Carabao only.'); return; }
     if (!selectedTime) { modalAlert('Error', 'Please select a preferred date and time.'); return; }
+    if (isPastTimeOnDate(selectedDate, selectedTime)) { modalAlert('Invalid time', 'Choose a time later than the current time.'); return; }
     if (selectedTech && !techniciansForSlot.some(tech => tech.id === selectedTech.id)) { modalAlert('Error', 'This technician is not available at the selected date and time.'); return; }
 
     setSubmitting(true);
@@ -128,18 +183,14 @@ export default function ServicesScreen() {
         modalAlert('Location Not Accurate Yet', 'Wait until your phone has a stronger GPS signal, then submit the appointment again.');
         return;
       }
-      let serviceName = serviceTypes.find(s => s.id === selectedService)?.name || '';
-      // Check if it's a custom service
-      if (!serviceName && selectedService?.startsWith('custom_')) {
-        const csId = selectedService.replace('custom_', '');
-        serviceName = customServices.find(c => c.id === csId)?.name || 'Custom Service';
-      }
-      if (!serviceName) serviceName = 'Service';
+      const serviceName = serviceTypes.find(s => s.id === selectedService)?.name || 'Service';
       const dateStr = dateKey(selectedDate);
       const docRef = await firestore().collection(Collections.APPOINTMENTS).add({
         serviceType: serviceName,
-        animalId: selectedAnimal.id,
-        animalName: `${selectedAnimal.name} (${selectedAnimal.breed})`,
+        animalType: animalType.trim(),
+        animalName: animalType.trim(),
+        animalBreed: animalBreed.trim(),
+        animalQuantity: Number(animalQuantity),
         farmerId: uid,
         farmerName: userName,
         technicianId: selectedTech?.id || '',
@@ -147,21 +198,21 @@ export default function ServicesScreen() {
         date: dateStr,
         time: selectedTime,
         status: 'pending',
-        ...(selectedTech ? { responseDeadlineAt: new Date(Date.now() + TECHNICIAN_RESPONSE_MINUTES * 60 * 1000) } : {}),
+        ...(selectedTech ? { responseDeadlineAt: new Date(Date.now() + TECHNICIAN_RESPONSE_HOURS * 60 * 60 * 1000) } : {}),
         description: description.trim(),
-        location: '',
+        location: farmerLocation,
         appointmentLatitude: appointmentPosition.coords.latitude,
         appointmentLongitude: appointmentPosition.coords.longitude,
         appointmentLocationAccuracy: locationAccuracy ?? null,
         appointmentLocationCapturedAt: firestore.FieldValue.serverTimestamp(),
         createdAt: firestore.FieldValue.serverTimestamp()
       });
-      await logCrud('Service Requested', `${serviceName} for ${selectedAnimal.name}`, 'appointments', docRef.id, {
+      await logCrud('Service Requested', `${serviceName} for ${animalType.trim()}`, 'appointments', docRef.id, {
         old: {},
-        new: { serviceType: serviceName, animalName: selectedAnimal.name, date: dateStr, time: selectedTime, technician: selectedTech?.displayName || 'Any' }
+        new: { serviceType: serviceName, animalType: animalType.trim(), animalBreed: animalBreed.trim(), animalQuantity: Number(animalQuantity), date: dateStr, time: selectedTime, technician: selectedTech?.displayName || 'All available technicians' }
       });
       modalAlert('Success', 'Service request submitted! A technician will be assigned soon.');
-      setSelectedService(null); setSelectedAnimal(null); setDescription(''); setSelectedTime(''); setSelectedTech(null);
+      setSelectedService(null); setAnimalType(''); setAnimalBreed(''); setAnimalQuantity('1'); setDescription(''); setDescriptionHeight(100); setSelectedTime(''); setSelectedTech(null); moveToStep(0);
     } catch (e: any) { modalAlert('Error', e.message); }
     finally { setSubmitting(false); }
   };
@@ -172,54 +223,49 @@ export default function ServicesScreen() {
     <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       {/* Header */}
       <View style={s.header}>
-        <TouchableOpacity style={s.backButton} onPress={() => router.canGoBack() ? router.back() : router.replace('/(farmer)/home')} accessibilityLabel="Go back">
+        <TouchableOpacity style={s.backButton} onPress={() => returnToAvailable === 'true' ? router.dismissTo('/(farmer)/home/available-technicians') : returnToTechnicians === 'true' ? router.dismissTo('/(farmer)/home/technicians') : router.canGoBack() ? router.back() : router.replace('/(farmer)/home')} accessibilityLabel="Go back">
           <Icon name="chevron-left" size={20} color={Colors.white} strokeWidth={2.5} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Request Service</Text>
         <View style={{ width: 36 }} />
       </View>
 
-      <ScrollView style={s.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <View style={s.stepHeader}>
+        <View style={s.stepMeta}><Text style={s.stepCount}>STEP {step + 1} OF 5</Text><Text style={s.stepName}>{['Service Type', 'Animal Details', 'Schedule', 'Request Details', 'Review'][step]}</Text></View>
+        <View style={s.stepTrack}>{[0, 1, 2, 3, 4].map(index => <View key={index} style={[s.stepSegment, index <= step && s.stepSegmentActive]} />)}</View>
+      </View>
+
+      <ScrollView ref={formScroll} style={s.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}>
         <Animated.View style={contentAnim}>
+          {step === 0 && <>
           {/* Service Type */}
           <Text style={s.sectionTitle}>Select Service Type</Text>
+          <Text style={{ color: Colors.textSecondary, marginBottom: 8 }}>Choose the service needed for your animal.</Text>
           <View style={s.serviceGrid}>
             {serviceTypes.map((service) => (
-              <TouchableOpacity key={service.id} style={s.serviceItem} onPress={() => {
-                if (service.id === '6') { router.push('/(farmer)/services/custom-service'); }
-                else { setSelectedService(service.id); }
-              }}>
+              <TouchableOpacity key={service.id} accessibilityRole="button" accessibilityState={{ selected: selectedService === service.id }} style={s.serviceItem} onPress={() => setSelectedService(service.id)}>
                 <View style={[s.serviceIconBox, selectedService === service.id && s.serviceIconBoxActive]}>
                   <Icon name={service.iconName} size={28} color={selectedService === service.id ? Colors.white : Colors.primary} strokeWidth={1.5} />
                 </View>
                 <Text style={[s.serviceName, selectedService === service.id && s.serviceNameActive]}>{service.name}</Text>
               </TouchableOpacity>
             ))}
-            {/* Custom services from Firebase */}
-            {customServices.map((cs) => (
-              <TouchableOpacity key={cs.id} style={s.serviceItem} onPress={() => setSelectedService(`custom_${cs.id}`)}>
-                <View style={[s.serviceIconBox, selectedService === `custom_${cs.id}` && s.serviceIconBoxActive]}>
-                  <Icon name={cs.iconName} size={28} color={selectedService === `custom_${cs.id}` ? Colors.white : Colors.primary} strokeWidth={1.5} />
-                </View>
-                <Text style={[s.serviceName, selectedService === `custom_${cs.id}` && s.serviceNameActive]}>{cs.name}</Text>
-              </TouchableOpacity>
-            ))}
           </View>
 
-          {/* Select Animal */}
-          <Text style={s.sectionTitle}>Select Animal</Text>
-          <TouchableOpacity style={s.selectRow} onPress={() => setAnimalModal(true)}>
-            <View style={s.selectRowLeft}>
-              {selectedAnimal?.imageUrl ? (
-                <Image source={{ uri: selectedAnimal.imageUrl }} style={s.thumb} contentFit="cover" />
-              ) : (
-                <View style={[s.thumb, { justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.surface }]}><Icon name="paw" size={18} color={Colors.textLight} /></View>
-              )}
-              <Text style={s.selectRowText}>{selectedAnimal ? `${selectedAnimal.name} (${selectedAnimal.breed})` : 'Select an animal'}</Text>
-            </View>
-            <Icon name="chevron-down" size={18} color={Colors.textSecondary} />
-          </TouchableOpacity>
+          </>}
 
+          {step === 1 && <>
+          <Text style={s.sectionTitle}>Animal Details</Text>
+          <Text style={{ color: Colors.textSecondary, marginBottom: 8 }}>Tell the technician which animal needs the service.</Text>
+          <Text style={s.fieldLabel}>Animal type</Text>
+          <TextInput style={s.formInput} value={animalType} onChangeText={setAnimalType} placeholder="e.g. Pig, Horse, Cattle, Goat, Carabao" placeholderTextColor={Colors.textLight} />
+          <Text style={s.fieldLabel}>Breed</Text>
+          <TextInput style={s.formInput} value={animalBreed} onChangeText={setAnimalBreed} placeholder="Enter breed" placeholderTextColor={Colors.textLight} />
+          <Text style={s.fieldLabel}>Quantity</Text>
+          <TextInput style={s.formInput} value={animalQuantity} onChangeText={value => setAnimalQuantity(value.replace(/[^0-9]/g, ''))} placeholder="Number of animals" placeholderTextColor={Colors.textLight} keyboardType="number-pad" />
+          </>}
+
+          {step === 2 && <>
           {/* Preferred Date */}
           <Text style={s.sectionTitle}>Preferred Date</Text>
           <TouchableOpacity style={s.selectRow} onPress={() => setDateModal(true)}>
@@ -240,9 +286,8 @@ export default function ServicesScreen() {
             <Icon name="chevron-down" size={18} color={Colors.textSecondary} />
           </TouchableOpacity>
 
-          {/* Preferred Technician (Optional) */}
-          <Text style={s.sectionTitle}>Preferred Technician <Text style={{ fontWeight: '400', color: Colors.textLight }}>(optional)</Text></Text>
-          <TouchableOpacity style={s.selectRow} onPress={() => setTechModal(true)}>
+          <Text style={s.sectionTitle}>Preferred Technician</Text>
+          <View style={s.selectRow}>
             <View style={s.selectRowLeft}>
               {selectedTech ? (
                 <Avatar name={selectedTech.displayName} imageUrl={selectedTech.photoURL} size={36} />
@@ -250,76 +295,57 @@ export default function ServicesScreen() {
                 <View style={[s.thumb, { justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.surface }]}><Icon name="profile" size={18} color={Colors.textLight} /></View>
               )}
               <View>
-                <Text style={s.selectRowText}>{selectedTech?.displayName || 'Any available technician'}</Text>
+                <Text style={s.selectRowText}>{selectedTech?.displayName || 'All available technicians'}</Text>
                 {selectedTech?.specialization ? <Text style={{ fontSize: 11, color: Colors.textSecondary }}>{selectedTech.specialization}</Text> : null}
               </View>
             </View>
-            <Icon name="chevron-down" size={18} color={Colors.textSecondary} />
-          </TouchableOpacity>
-          {selectedTech && <Text style={{ color: Colors.textSecondary, fontSize: FontSize.xs, marginTop: Spacing.sm }}>The technician has {TECHNICIAN_RESPONSE_MINUTES} minutes to accept. If they don't, this request becomes available to all technicians.</Text>}
+            {!selectedTech && <Icon name="check" size={18} color={Colors.primary} />}
+          </View>
+          <Text style={{ color: Colors.textSecondary, fontSize: FontSize.xs, marginTop: Spacing.sm }}>{selectedTech ? 'This request is directed to this technician.' : 'Your request will be available to all technicians.'}</Text>
+          {selectedTech && <Text style={{ color: Colors.textSecondary, fontSize: FontSize.xs, marginTop: Spacing.sm }}>The technician has 1 day to accept. If they don’t, this request becomes available to all technicians.</Text>}
+          </>}
 
+          {step === 3 && <>
           {/* Describe Issue */}
           <Text style={s.sectionTitle}>Describe the Issue / Request</Text>
-          <TextInput style={s.textArea} placeholder="Please describe the issue or service needed..." placeholderTextColor={Colors.textLight} multiline numberOfLines={4} textAlignVertical="top" value={description} onChangeText={setDescription} />
+          <Text style={s.templateHint}>Choose a template to get started.</Text>
+          <View style={s.templateRow}>{issueTemplates.map(template => <TouchableOpacity key={template.label} style={s.templateChip} accessibilityRole="button" onPress={() => setDescription(current => current.includes(template.text) ? current : [current.trim(), template.text].filter(Boolean).join('\n\n').slice(0, MAX_DESCRIPTION_LENGTH))}><Text style={s.templateChipText}>{template.label}</Text></TouchableOpacity>)}</View>
+          <TextInput style={[s.textArea, { height: descriptionHeight }]} maxLength={MAX_DESCRIPTION_LENGTH} scrollEnabled={false} placeholder="Please describe the issue or service needed..." placeholderTextColor={Colors.textLight} multiline textAlignVertical="top" value={description} onChangeText={setDescription} onFocus={() => { descriptionFocused.current = true; requestAnimationFrame(() => formScroll.current?.scrollToEnd({ animated: true })); }} onBlur={() => { descriptionFocused.current = false; }} onContentSizeChange={event => { setDescriptionHeight(Math.max(100, event.nativeEvent.contentSize.height)); if (descriptionFocused.current) requestAnimationFrame(() => formScroll.current?.scrollToEnd({ animated: false })); }} />
+          <Text style={s.descriptionCounter}>{description.length}/{MAX_DESCRIPTION_LENGTH}</Text>
+          </>}
 
-          {/* Submit */}
-          <TouchableOpacity style={[s.submitBtn, submitting && { opacity: 0.6 }]} activeOpacity={0.8} onPress={handleSubmit} disabled={submitting}>
-            {submitting ? <ActivityIndicator color={Colors.white} /> : <Text style={s.submitBtnText}>Submit Request</Text>}
-          </TouchableOpacity>
-
-          <View style={{ height: 80 }} />
+          {step === 4 && <>
+            <Text style={s.sectionTitle}>Review your request</Text>
+            <Text style={s.reviewHint}>Check the details before sending your service request.</Text>
+            <View style={s.reviewCard}>
+              <View style={s.reviewHead}><Text style={s.reviewLabel}>SERVICE TYPE</Text><TouchableOpacity accessibilityRole="button" accessibilityLabel="Edit service type" onPress={() => moveToStep(0)}><Text style={s.reviewEdit}>Edit</Text></TouchableOpacity></View>
+              <Text style={s.reviewValue}>{serviceTypes.find(service => service.id === selectedService)?.name || 'Service'}</Text>
+            </View>
+            <View style={s.reviewCard}>
+              <View style={s.reviewHead}><Text style={s.reviewLabel}>ANIMAL DETAILS</Text><TouchableOpacity accessibilityRole="button" accessibilityLabel="Edit animal details" onPress={() => moveToStep(1)}><Text style={s.reviewEdit}>Edit</Text></TouchableOpacity></View>
+              <Text style={s.reviewValue}>{animalType.trim()} · {animalBreed.trim()}</Text>
+              <Text style={s.reviewSub}>Quantity: {animalQuantity}</Text>
+            </View>
+            <View style={s.reviewCard}>
+              <View style={s.reviewHead}><Text style={s.reviewLabel}>SCHEDULE & TECHNICIAN</Text><TouchableOpacity accessibilityRole="button" accessibilityLabel="Edit schedule and technician" onPress={() => moveToStep(2)}><Text style={s.reviewEdit}>Edit</Text></TouchableOpacity></View>
+              <Text style={s.reviewValue}>{formatDate(selectedDate)} · {selectedTime}</Text>
+              <Text style={s.reviewSub}>{selectedTech?.displayName || 'All available technicians'}</Text>
+            </View>
+            <View style={s.reviewCard}>
+              <View style={s.reviewHead}><Text style={s.reviewLabel}>ISSUE / REQUEST DETAILS</Text><TouchableOpacity accessibilityRole="button" accessibilityLabel="Edit request details" onPress={() => moveToStep(3)}><Text style={s.reviewEdit}>Edit</Text></TouchableOpacity></View>
+              <Text style={s.reviewDescription}>{description.trim() || 'No additional details provided.'}</Text>
+            </View>
+          </>}
         </Animated.View>
       </ScrollView>
 
-      {/* Animal Modal */}
-      <Modal visible={animalModal} transparent animationType="slide">
-        <View style={s.modalOverlay}><View style={s.modal}>
-          <View style={s.modalHead}><Text style={s.modalTitle}>Select Animal</Text><TouchableOpacity onPress={() => setAnimalModal(false)}><Icon name="close" size={22} color={Colors.text} /></TouchableOpacity></View>
-          {animals.length === 0 ? <Text style={s.emptyModal}>No animals registered yet.</Text> : (
-            <FlatList data={animals} keyExtractor={a => a.id} renderItem={({ item }) => (
-              <TouchableOpacity style={s.listRow} onPress={() => { setSelectedAnimal(item); setAnimalModal(false); }}>
-                {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={s.thumb} contentFit="cover" /> : <View style={[s.thumb, { justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.surface }]}><Icon name="paw" size={16} color={Colors.textLight} /></View>}
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={s.listRowTitle}>{item.name}</Text>
-                  <Text style={s.listRowSub}>{item.breed} • {item.type}</Text>
-                </View>
-                {selectedAnimal?.id === item.id && <Icon name="check" size={18} color={Colors.primary} />}
-              </TouchableOpacity>
-            )} />
-          )}
-        </View></View>
-      </Modal>
+      <View style={s.stepFooter}>
+        {step > 0 ? <TouchableOpacity style={s.stepBack} onPress={() => moveToStep(step - 1)}><Text style={s.stepBackText}>Back</Text></TouchableOpacity> : <View style={s.stepBackPlaceholder} />}
+        {step < 4 ? <TouchableOpacity style={s.stepNext} activeOpacity={0.8} onPress={continueForm}><Text style={s.stepNextText}>{step === 3 ? 'Review Request' : 'Continue'}</Text><Icon name="chevron-right" size={18} color={Colors.white} /></TouchableOpacity> : <TouchableOpacity style={[s.stepNext, submitting && { opacity: 0.6 }]} activeOpacity={0.8} onPress={handleSubmit} disabled={submitting}>{submitting ? <ActivityIndicator color={Colors.white} /> : <Text style={s.stepNextText}>Submit Request</Text>}</TouchableOpacity>}
+      </View>
 
-      {/* Technician Modal */}
-      <Modal visible={techModal} transparent animationType="slide">
-        <View style={s.modalOverlay}><View style={s.modal}>
-          <View style={s.modalHead}><Text style={s.modalTitle}>Select Technician</Text><TouchableOpacity onPress={() => setTechModal(false)}><Icon name="close" size={22} color={Colors.text} /></TouchableOpacity></View>
-          {/* Any option */}
-          <TouchableOpacity style={s.listRow} onPress={() => { setSelectedTech(null); setTechModal(false); }}>
-            <View style={[s.thumb, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#E8F5E9' }]}><Icon name="check" size={16} color={Colors.primary} /></View>
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={s.listRowTitle}>Any Available Technician</Text>
-              <Text style={s.listRowSub}>System will assign a technician when available</Text>
-            </View>
-            {!selectedTech && <Icon name="check" size={18} color={Colors.primary} />}
-          </TouchableOpacity>
-          {techniciansForSlot.length === 0 ? <Text style={s.emptyModal}>No technicians posted availability for this date and time. You can still request any available technician.</Text> : (
-            <FlatList data={techniciansForSlot} keyExtractor={t => t.id} renderItem={({ item }) => (
-              <TouchableOpacity style={s.listRow} onPress={() => { setSelectedTech(item); setTechModal(false); }}>
-                <Avatar name={item.displayName} imageUrl={item.photoURL} size={36} />
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={s.listRowTitle}>{item.displayName}</Text>
-                  <Text style={s.listRowSub}>{item.specialization || 'General Veterinary'}{item.rating ? ` • ⭐ ${item.rating}` : ''}</Text>
-                </View>
-                {selectedTech?.id === item.id && <Icon name="check" size={18} color={Colors.primary} />}
-              </TouchableOpacity>
-            )} />
-          )}
-        </View></View>
-      </Modal>
-
-      {dateModal && <DatePickerModal visible value={selectedDate} minimumDate={new Date()} onConfirm={date => { setSelectedDate(date); setDateModal(false); }} onCancel={() => setDateModal(false)} />}
-      {timeModal && <TimePickerModal visible value={selectedTime || '08:00 AM'} onConfirm={time => { setSelectedTime(time); setTimeModal(false); }} onCancel={() => setTimeModal(false)} />}
+      {dateModal && <DatePickerModal visible value={selectedDate} minimumDate={new Date()} onConfirm={date => { setSelectedDate(date); setDateModal(false); if (selectedTime && isPastTimeOnDate(date, selectedTime)) { setSelectedTime(''); modalAlert('Time cleared', 'That time has already passed for the selected date. Choose a later time.'); } }} onCancel={() => setDateModal(false)} />}
+      {timeModal && <TimePickerModal visible value={selectedTime || '08:00 AM'} selectedDate={selectedDate} onConfirm={time => { if (isPastTimeOnDate(selectedDate, time)) { modalAlert('Past time not allowed', 'Choose a future time for the selected date.'); return; } setSelectedTime(time); setTimeModal(false); }} onCancel={() => setTimeModal(false)} />}
 
     </KeyboardAvoidingView>
   );
@@ -330,7 +356,28 @@ const s = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: Colors.primary, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.lg, paddingBottom: Spacing.xl },
   headerTitle: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.white },
   backButton: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center' },
+  stepHeader: { backgroundColor: Colors.white, paddingHorizontal: Spacing.xl, paddingVertical: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  stepMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.sm },
+  stepCount: { color: Colors.primary, fontSize: FontSize.xs, fontWeight: '700', letterSpacing: 0.6 },
+  stepName: { color: Colors.textSecondary, fontSize: FontSize.xs, fontWeight: '600' },
+  stepTrack: { flexDirection: 'row', gap: Spacing.xs },
+  stepSegment: { flex: 1, height: 4, borderRadius: BorderRadius.full, backgroundColor: Colors.border },
+  stepSegmentActive: { backgroundColor: Colors.primary },
   content: { flex: 1, paddingHorizontal: Spacing.xl },
+  stepFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.md, paddingHorizontal: Spacing.xl, paddingVertical: Spacing.md, backgroundColor: Colors.white, borderTopWidth: 1, borderTopColor: Colors.border },
+  stepBack: { minWidth: 100, paddingVertical: Spacing.md, alignItems: 'center', borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.full },
+  stepBackPlaceholder: { minWidth: 100 },
+  stepBackText: { color: Colors.text, fontSize: FontSize.md, fontWeight: '600' },
+  stepNext: { flex: 1, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, backgroundColor: Colors.primary, borderRadius: BorderRadius.full },
+  stepNextText: { color: Colors.white, fontSize: FontSize.md, fontWeight: '700' },
+  reviewHint: { color: Colors.textSecondary, fontSize: FontSize.sm, marginBottom: Spacing.md },
+  reviewCard: { backgroundColor: Colors.white, borderRadius: BorderRadius.md, padding: Spacing.lg, marginBottom: Spacing.md, borderWidth: 1, borderColor: Colors.border },
+  reviewHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.sm },
+  reviewLabel: { color: Colors.textSecondary, fontSize: FontSize.xs, fontWeight: '700', letterSpacing: 0.5 },
+  reviewEdit: { color: Colors.primary, fontSize: FontSize.sm, fontWeight: '700' },
+  reviewValue: { color: Colors.text, fontSize: FontSize.md, fontWeight: '700' },
+  reviewSub: { color: Colors.textSecondary, fontSize: FontSize.sm, marginTop: Spacing.xs },
+  reviewDescription: { color: Colors.text, fontSize: FontSize.sm, lineHeight: 20 },
   sectionTitle: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text, marginTop: Spacing.xl, marginBottom: Spacing.md },
   serviceGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   serviceItem: { width: '31%', alignItems: 'center', marginBottom: Spacing.lg },
@@ -341,17 +388,13 @@ const s = StyleSheet.create({
   selectRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.border },
   selectRowLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, flex: 1 },
   selectRowText: { fontSize: FontSize.md, color: Colors.text },
+  fieldLabel: { color: Colors.text, fontSize: FontSize.sm, fontWeight: '700', marginTop: Spacing.md, marginBottom: Spacing.xs },
+  formInput: { minHeight: 48, borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md, paddingHorizontal: Spacing.lg, fontSize: FontSize.md, color: Colors.text, backgroundColor: Colors.white },
   thumb: { width: 36, height: 36, borderRadius: BorderRadius.sm },
+  templateHint: { color: Colors.textSecondary, fontSize: FontSize.xs, marginTop: -Spacing.sm, marginBottom: Spacing.sm },
+  templateRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginBottom: Spacing.md },
+  templateChip: { borderWidth: 1, borderColor: '#C8E6D0', borderRadius: BorderRadius.full, backgroundColor: '#EAF6EF', paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm },
+  templateChipText: { color: Colors.primary, fontSize: FontSize.xs, fontWeight: '600' },
   textArea: { borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md, padding: Spacing.lg, fontSize: FontSize.md, color: Colors.text, minHeight: 100, backgroundColor: Colors.white },
-  submitBtn: { backgroundColor: Colors.primary, borderRadius: BorderRadius.full, paddingVertical: Spacing.lg, alignItems: 'center', marginTop: Spacing.xxl },
-  submitBtnText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '700' },
-  // Modals
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modal: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: Spacing.xl, paddingBottom: 40, maxHeight: '70%' },
-  modalHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg },
-  modalTitle: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },
-  listRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.md, borderBottomWidth: 0.5, borderBottomColor: Colors.border },
-  listRowTitle: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
-  listRowSub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 1 },
-  emptyModal: { color: Colors.textLight, textAlign: 'center', paddingVertical: 40 }
+  descriptionCounter: { textAlign: 'right', color: Colors.textSecondary, fontSize: FontSize.xs, marginTop: Spacing.xs },
 });

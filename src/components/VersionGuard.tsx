@@ -14,9 +14,21 @@ import Constants from 'expo-constants';
 
 const LOCAL_APP_VERSION = Constants.expoConfig?.version || '1.0.0';
 
+const isNewerVersion = (remote: string, local: string) => {
+  const remoteParts = remote.split('.').map(Number);
+  const localParts = local.split('.').map(Number);
+  if ([...remoteParts, ...localParts].some(part => !Number.isInteger(part) || part < 0)) return false;
+  for (let i = 0; i < Math.max(remoteParts.length, localParts.length); i++) {
+    const difference = (remoteParts[i] || 0) - (localParts[i] || 0);
+    if (difference) return difference > 0;
+  }
+  return false;
+};
+
 export default function VersionGuard({ children }: { children: React.ReactNode }) {
   const [needsUpdate, setNeedsUpdate] = useState(false);
   const [downloadURL, setDownloadURL] = useState('');
+  const [latestVersion, setLatestVersion] = useState('');
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
@@ -28,7 +40,8 @@ export default function VersionGuard({ children }: { children: React.ReactNode }
           const remoteVersion = data?.version || '';
           const url = data?.downloadURL || '';
 
-          if (remoteVersion && remoteVersion !== LOCAL_APP_VERSION) {
+          if (remoteVersion && isNewerVersion(remoteVersion, LOCAL_APP_VERSION)) {
+            setLatestVersion(remoteVersion);
             setDownloadURL(url);
             setNeedsUpdate(true);
           }
@@ -76,7 +89,7 @@ export default function VersionGuard({ children }: { children: React.ReactNode }
               <Icon name="chevron-right" size={16} color={Colors.textLight} />
               <View style={s.versionItem}>
                 <Text style={s.versionLabel}>Latest</Text>
-                <Text style={[s.versionValue, { color: Colors.primary }]}>New Version</Text>
+                <Text style={[s.versionValue, { color: Colors.primary }]}>{latestVersion}</Text>
               </View>
             </View>
 

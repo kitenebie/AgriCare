@@ -10,7 +10,6 @@ import { Icon, IconName } from '@/components/ui';
 import { getSession } from '@/services/sessionService';
 import { Collections } from '@/services/firebase';
 import { getOrCreateChatRoom, sendMessage } from '@/services/chatService';
-import { sendPushNotification } from '@/services/pushService';
 import { logCrud } from '@/services/logService';
 
 const RECORD_TYPES = [
@@ -42,8 +41,9 @@ const FOLLOW_UP_TYPES = ['checkup', 'vaccination', 'monitoring', 'treatment_revi
 
 export default function HealthRecordFormScreen() {
   const params = useLocalSearchParams<{
+    appointmentId?: string;
     animalId?: string;
-    animalName?: string;
+    animalType?: string;
     farmerId?: string;
     farmerName?: string;
     serviceType?: string;
@@ -54,6 +54,7 @@ export default function HealthRecordFormScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [uid, setUid] = useState('');
   const [techName, setTechName] = useState('');
+  const [animalType, setAnimalType] = useState(params.animalType || '');
 
   // Form fields
   const [recordType, setRecordType] = useState('checkup');
@@ -88,7 +89,13 @@ export default function HealthRecordFormScreen() {
           'Health Check': 'checkup',
           'Vaccination': 'vaccination',
           'Treatment': 'treatment',
+          'Iron Injection': 'treatment',
+          'Vitamin Injection': 'treatment',
+          'Castration': 'surgery',
+          'Deworming': 'deworming',
           'De-worming': 'deworming',
+          'Wound Treatment': 'treatment',
+          'Antibiotic Injection': 'treatment',
           'Artificial Insemination': 'checkup',
           'Surgery': 'surgery',
         };
@@ -106,8 +113,12 @@ export default function HealthRecordFormScreen() {
   };
 
   const handleSubmit = async () => {
-    if (!params.animalId) {
+    if (!params.animalId && !params.appointmentId) {
       modalAlert('Error', 'No animal selected.');
+      return;
+    }
+    if (!animalType.trim()) {
+      modalAlert('Animal type required', 'Enter the animal type before saving this health record.');
       return;
     }
     if (!diagnosis.trim() && recordType !== 'vaccination') {
@@ -120,8 +131,10 @@ export default function HealthRecordFormScreen() {
       const now = firestore.FieldValue.serverTimestamp();
 
       const healthRecord: any = {
-        animalId: params.animalId,
-        animalName: params.animalName || 'Animal',
+        animalId: params.animalId || '',
+        appointmentId: params.appointmentId || '',
+        animalType: animalType.trim(),
+        animalName: animalType.trim(),
         recordType,
         date: now,
         diagnosis: diagnosis.trim(),
@@ -165,14 +178,16 @@ export default function HealthRecordFormScreen() {
         followDate.setDate(followDate.getDate() + (parseInt(followUpInterval) || 7));
         await firestore().collection('healthReminders').add({
           healthRecordId: docRef.id,
-          animalId: params.animalId,
-          animalName: params.animalName,
+          animalId: params.animalId || '',
+          appointmentId: params.appointmentId || '',
+          animalType: animalType.trim(),
+          animalName: animalType.trim(),
           farmerId: params.farmerId || '',
           farmerName: params.farmerName || '',
           technicianId: uid,
           technicianName: techName,
           reminderType: followUpType === 'vaccination' ? 'vaccination_due' : 'follow_up',
-          title: `Follow-up: ${params.animalName} - ${recordType}`,
+          title: `Follow-up: ${animalType.trim()} - ${recordType}`,
           description: `${followUpType} scheduled. Previous: ${diagnosis || recordType}`,
           scheduledDate: firestore.Timestamp.fromDate(followDate),
           priority: status === 'ongoing' ? 'high' : 'medium',
@@ -192,7 +207,7 @@ export default function HealthRecordFormScreen() {
       const summaryLines = [
         `📋 Health Record Summary`,
         `━━━━━━━━━━━━━━━━━━━━━`,
-        `🐄 Animal: ${params.animalName}`,
+        `🐄 Animal type: ${animalType.trim()}`,
         `📝 Type: ${recordType.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}`,
       ];
       if (diagnosis.trim()) summaryLines.push(`🔍 Diagnosis: ${diagnosis.trim()}`);
@@ -222,18 +237,12 @@ export default function HealthRecordFormScreen() {
           userId: farmerId,
           type: 'health_record_created',
           title: '📋 New Health Record',
-          body: `${techName} created a ${recordType} record for ${params.animalName}. Diagnosis: ${diagnosis.trim() || 'N/A'}`,
+          body: `${techName} created a ${recordType} record for ${animalType.trim()}. Diagnosis: ${diagnosis.trim() || 'N/A'}`,
           read: false,
           data: { healthRecordId: docRef.id, technicianId: uid },
           createdAt: now,
         });
 
-        // FCM push to farmer
-        await sendPushNotification(farmerId, {
-          title: '📋 New Health Record',
-          body: `${techName} created a ${recordType} record for ${params.animalName}.`,
-          data: { type: 'health_record', healthRecordId: docRef.id },
-        });
       }
 
       // Create notification for TECHNICIAN (self — for record keeping)
@@ -241,23 +250,17 @@ export default function HealthRecordFormScreen() {
         userId: uid,
         type: 'health_record_created',
         title: '📋 Record Saved',
-        body: `${recordType.replace('_', ' ')} record for ${params.animalName} (${farmerName}) saved successfully.`,
+          body: `${recordType.replace('_', ' ')} record for ${animalType.trim()} (${farmerName}) saved successfully.`,
         read: false,
         data: { healthRecordId: docRef.id, farmerId },
         createdAt: now,
       });
 
-      // FCM push to technician (self)
-      await sendPushNotification(uid, {
-        title: '📋 Record Saved',
-        body: `Your ${recordType} record for ${params.animalName} has been saved.`,
-        data: { type: 'health_record', healthRecordId: docRef.id },
-      });
 
       // Log activity
-      await logCrud('Health Record Created', `${recordType} for ${params.animalName}`, 'healthRecords', docRef.id, {
+      await logCrud('Health Record Created', `${recordType} for ${animalType.trim()}`, 'healthRecords', docRef.id, {
         old: {},
-        new: { recordType, animalName: params.animalName, diagnosis, status },
+        new: { recordType, animalType: animalType.trim(), diagnosis, status },
       });
 
       modalAlert('Success', 'Health record saved and notifications sent!', [
@@ -301,7 +304,8 @@ export default function HealthRecordFormScreen() {
             </View>
           )}
           <View style={s.animalBannerInfo}>
-            <Text style={s.animalBannerName}>{params.animalName || 'Animal'}</Text>
+            <Text style={s.fieldLabel}>Animal type *</Text>
+            <TextInput style={s.input} value={animalType} onChangeText={setAnimalType} placeholder="e.g. Pig, Horse, Cattle, Goat, Carabao" />
             <Text style={s.animalBannerOwner}>Owner: {params.farmerName || 'Farmer'}</Text>
             {params.serviceType ? (
               <Text style={s.animalBannerService}>Service: {params.serviceType}</Text>
@@ -339,10 +343,11 @@ export default function HealthRecordFormScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-            <Text style={s.sectionTitle}>Batch / Lot No.</Text>
+            <Text style={s.sectionTitle}>Batch / Lot number (optional)</Text>
+            <Text style={s.followUpHint}>Code printed on the vaccine packaging. Leave blank if you do not have it.</Text>
             <TextInput
               style={s.input}
-              placeholder="e.g. LOT-2026-0801"
+              placeholder="Optional"
               value={vaccineBatch}
               onChangeText={setVaccineBatch}
               placeholderTextColor={Colors.textLight}

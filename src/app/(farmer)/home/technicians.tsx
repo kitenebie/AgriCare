@@ -2,9 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { AppText as Text } from '@/components/ui/FontScale';
 import firestore from '@react-native-firebase/firestore';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
 import { Icon, Avatar } from '@/components/ui';
+import { MapUserProfileDrawer } from '@/components/map/MapUserProfileDrawer';
+import { getOrCreateChatRoom } from '@/services/chatService';
 import { Collections } from '@/services/firebase';
 import { getSession } from '@/services/sessionService';
 
@@ -21,11 +23,13 @@ interface TechnicianItem {
 }
 
 export default function TechniciansPage() {
+  const { technicianId, returnToAvailable } = useLocalSearchParams<{ technicianId?: string; returnToAvailable?: string }>();
   const [technicians, setTechnicians] = useState<TechnicianItem[]>([]);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'all' | 'favorites'>('all');
   const [uid, setUid] = useState('');
+  const [selectedTech, setSelectedTech] = useState<TechnicianItem | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -60,6 +64,29 @@ export default function TechniciansPage() {
   };
 
   const displayed = tab === 'favorites' ? technicians.filter(t => favorites.includes(t.id)) : technicians;
+  const closeProfile = () => {
+    if (technicianId && router.canGoBack()) { router.back(); return; }
+    setSelectedTech(null);
+  };
+
+  useEffect(() => {
+    if (technicianId) {
+      const technician = technicians.find(item => item.id === technicianId);
+      if (technician) setSelectedTech(technician);
+    }
+  }, [technicianId, technicians]);
+
+  const handleMessage = async () => {
+    if (!selectedTech || !uid) return;
+    try {
+      const chatId = await getOrCreateChatRoom(uid, selectedTech.id);
+      const otherUser = selectedTech;
+      setSelectedTech(null);
+      router.push({ pathname: '/(farmer)/messages/chat', params: { chatId, otherUserId: otherUser.id, otherUserName: otherUser.displayName, otherPhoto: otherUser.photoURL || '' } });
+    } catch (error) {
+      console.warn('Failed to open technician chat:', error);
+    }
+  };
 
   if (loading) return <View style={s.center}><ActivityIndicator size="large" color={Colors.primary} /></View>;
 
@@ -101,26 +128,28 @@ export default function TechniciansPage() {
           const specs = t.expertise || (t.specialization ? t.specialization.split(',').map(s => s.trim()) : []);
           return (
             <View key={t.id} style={s.card}>
-              <Avatar name={t.displayName} imageUrl={t.photoURL} size={50} />
-              <View style={s.cardInfo}>
-                <Text style={s.cardName}>{t.displayName}</Text>
-                {specs.length > 0 && <Text style={s.cardSpec} numberOfLines={1}>{specs.join(' • ')}</Text>}
-                <View style={s.cardMeta}>
-                  {t.rating ? (
-                    <View style={s.ratingRow}>
-                      <Icon name="star" size={12} color="#F59E0B" />
-                      <Text style={s.ratingText}>{t.rating.toFixed(1)}</Text>
-                      {t.reviewCount ? <Text style={s.reviewText}>({t.reviewCount})</Text> : null}
-                    </View>
-                  ) : null}
-                  {t.location ? (
-                    <View style={s.locRow}>
-                      <Icon name="location" size={12} color={Colors.textSecondary} />
-                      <Text style={s.locText}>{t.location}</Text>
-                    </View>
-                  ) : null}
+              <TouchableOpacity style={s.cardBody} onPress={() => setSelectedTech(t)} accessibilityRole="button" accessibilityLabel={`View ${t.displayName} profile`}>
+                <Avatar name={t.displayName} imageUrl={t.photoURL} size={50} />
+                <View style={s.cardInfo}>
+                  <Text style={s.cardName}>{t.displayName}</Text>
+                  {specs.length > 0 && <Text style={s.cardSpec} numberOfLines={1}>{specs.join(' • ')}</Text>}
+                  <View style={s.cardMeta}>
+                    {t.rating ? (
+                      <View style={s.ratingRow}>
+                        <Icon name="star" size={12} color="#F59E0B" />
+                        <Text style={s.ratingText}>{t.rating.toFixed(1)}</Text>
+                        {t.reviewCount ? <Text style={s.reviewText}>({t.reviewCount})</Text> : null}
+                      </View>
+                    ) : null}
+                    {t.location ? (
+                      <View style={s.locRow}>
+                        <Icon name="location" size={12} color={Colors.textSecondary} />
+                        <Text style={s.locText}>{t.location}</Text>
+                      </View>
+                    ) : null}
+                  </View>
                 </View>
-              </View>
+              </TouchableOpacity>
               <TouchableOpacity style={s.favBtn} onPress={() => toggleFavorite(t.id)}>
                 <Icon name="star" size={20} color={isFav ? '#F59E0B' : Colors.border} />
               </TouchableOpacity>
@@ -129,6 +158,19 @@ export default function TechniciansPage() {
         })}
         <View style={{ height: 80 }} />
       </ScrollView>
+      <MapUserProfileDrawer
+        user={selectedTech}
+        userType="Technician"
+        statusLabel="Active technician"
+        onClose={closeProfile}
+        onMessage={() => void handleMessage()}
+        onRequestService={() => {
+          if (!selectedTech) return;
+          const technicianId = selectedTech.id;
+          setSelectedTech(null);
+          router.push({ pathname: '/(farmer)/services', params: { technicianId, ...(returnToAvailable === 'true' ? { returnToAvailable } : { returnToTechnicians: 'true' }) } });
+        }}
+      />
     </View>
   );
 }
@@ -154,6 +196,7 @@ const s = StyleSheet.create({
   emptySubtext: { fontSize: FontSize.sm, color: Colors.textLight, marginTop: 4 },
   // Card
   card: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.white, borderRadius: BorderRadius.lg, padding: Spacing.lg, marginBottom: Spacing.sm, ...Shadow.light },
+  cardBody: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   cardInfo: { flex: 1, marginLeft: Spacing.md },
   cardName: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
   cardSpec: { fontSize: FontSize.sm, color: Colors.primary, marginTop: 2 },

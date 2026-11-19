@@ -18,9 +18,10 @@ import auth from "@react-native-firebase/auth";
 import firestore from "@react-native-firebase/firestore";
 import * as LocalAuthentication from "expo-local-authentication";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  FlatList,
   ImageBackground,
   KeyboardAvoidingView,
   Modal,
@@ -31,8 +32,37 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import regions from "../../../../assets/addresses/region.json";
+import provinces from "../../../../assets/addresses/province.json";
+import municipalities from "../../../../assets/addresses/muncity.json";
+import barangays from "../../../../assets/addresses/barangay.json";
 
 const BIOMETRICS_KEY = "@agricare_biometrics_enabled";
+type AddressPicker = "region" | "province" | "municipality" | "barangay" | null;
+type AddressOption = { value: string; label: string };
+
+const getInitialAddress = (address = "") => {
+  const parts = address.split(",").map((part) => part.trim());
+  const province = provinces.find((item) => parts.includes(item.description));
+  const municipality = province && municipalities.find((item) =>
+    parts.includes(item.description) &&
+    String(item.code).padStart(9, "0").slice(0, 4) === String(province.code).padStart(9, "0").slice(0, 4)
+  );
+  return {
+    region: regions.find((item) => item.region_id === province?.region_id) || null,
+    province: province || null,
+    municipality: municipality || null,
+    barangay: municipality && barangays.find((item) =>
+      item.muncity_id === municipality.muncity_id && parts.includes(item.description)
+    ) || null,
+  };
+};
+
+const getInitialStreetPurok = (address = "") => {
+  const parts = address.split(",").map((part) => part.trim());
+  const barangayIndex = parts.findIndex((part) => barangays.some((item) => item.description === part));
+  return barangayIndex > 0 ? parts.slice(0, barangayIndex).join(", ") : "";
+};
 
 export default function TechnicianProfileScreen() {
   const [user, setUser] = useState<UserSession | null>(null);
@@ -44,8 +74,46 @@ export default function TechnicianProfileScreen() {
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
-  const [editLocation, setEditLocation] = useState("");
+  const [editStreetPurok, setEditStreetPurok] = useState("");
+  const [selectedAddress, setSelectedAddress] = useState(getInitialAddress);
+  const [addressPicker, setAddressPicker] = useState<AddressPicker>(null);
   const [saving, setSaving] = useState(false);
+
+  const addressOptions = useMemo<AddressOption[]>(() => {
+    switch (addressPicker) {
+      case "region":
+        return regions.map((item) => ({ value: String(item.region_id), label: item.description }));
+      case "province":
+        return provinces.filter((item) => item.region_id === selectedAddress.region?.region_id)
+          .map((item) => ({ value: String(item.province_id), label: item.description }));
+      case "municipality":
+        return municipalities.filter((item) =>
+          String(item.code).padStart(9, "0").slice(0, 4) === String(selectedAddress.province?.code).padStart(9, "0").slice(0, 4)
+        ).map((item) => ({ value: String(item.muncity_id), label: item.description }));
+      case "barangay":
+        return barangays.filter((item) => item.muncity_id === selectedAddress.municipality?.muncity_id)
+          .map((item) => ({ value: String(item.barangay_id), label: item.description }));
+      default:
+        return [];
+    }
+  }, [addressPicker, selectedAddress]);
+
+  const handleAddressPick = (option: AddressOption) => {
+    if (addressPicker === "region") {
+      const region = regions.find((item) => String(item.region_id) === option.value) || null;
+      setSelectedAddress({ region, province: null, municipality: null, barangay: null });
+    } else if (addressPicker === "province") {
+      const province = provinces.find((item) => String(item.province_id) === option.value) || null;
+      setSelectedAddress((current) => ({ ...current, province, municipality: null, barangay: null }));
+    } else if (addressPicker === "municipality") {
+      const municipality = municipalities.find((item) => String(item.muncity_id) === option.value) || null;
+      setSelectedAddress((current) => ({ ...current, municipality, barangay: null }));
+    } else if (addressPicker === "barangay") {
+      const barangay = barangays.find((item) => String(item.barangay_id) === option.value) || null;
+      setSelectedAddress((current) => ({ ...current, barangay }));
+    }
+    setAddressPicker(null);
+  };
 
   // Security
   const [securityModal, setSecurityModal] = useState(false);
@@ -71,7 +139,10 @@ export default function TechnicianProfileScreen() {
             const data = doc.data();
             if (data?.photoURL) setPhotoURL(data.photoURL);
             if (data?.phoneNumber) setEditPhone(data.phoneNumber);
-            if (data?.location) setEditLocation(data.location);
+            if (data?.location) {
+              setSelectedAddress(getInitialAddress(data.location));
+              setEditStreetPurok(getInitialStreetPurok(data.location));
+            }
           }
         } catch (e) {}
       }
@@ -106,6 +177,22 @@ export default function TechnicianProfileScreen() {
       modalAlert("Error", "Name cannot be empty.");
       return;
     }
+    if (!/^[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ .'-]*$/.test(editName.trim())) {
+      modalAlert("Invalid Name", "Use letters only, with spaces, apostrophes, or hyphens.");
+      return;
+    }
+    if (editPhone.trim() && !/^\d{11}$/.test(editPhone.trim())) {
+      modalAlert("Invalid Phone Number", "Enter an 11-digit phone number.");
+      return;
+    }
+    if (!editStreetPurok.trim()) {
+      modalAlert("Street / Purok Required", "Enter your street or purok.");
+      return;
+    }
+    if (!selectedAddress.region || !selectedAddress.province || !selectedAddress.municipality || !selectedAddress.barangay) {
+      modalAlert("Address Required", "Please select region, province, city/municipality, and barangay.");
+      return;
+    }
     setSaving(true);
     try {
       const currentUser = auth().currentUser;
@@ -114,7 +201,7 @@ export default function TechnicianProfileScreen() {
         await firestore().collection("users").doc(currentUser.uid).update({
           displayName: editName.trim(),
           phoneNumber: editPhone.trim(),
-          location: editLocation.trim(),
+          location: `${editStreetPurok.trim()}, ${selectedAddress.barangay.description}, ${selectedAddress.municipality.description}, ${selectedAddress.province.description}`,
         });
       }
       if (user) {
@@ -313,19 +400,39 @@ export default function TechnicianProfileScreen() {
                   <TextInput
                     style={styles.input}
                     value={editPhone}
-                    onChangeText={setEditPhone}
+                    onChangeText={(value) => setEditPhone(value.replace(/\D/g, "").slice(0, 11))}
                     placeholder="09xxxxxxxxx"
                     placeholderTextColor={Colors.textLight}
-                    keyboardType="phone-pad"
+                    keyboardType="number-pad"
+                    maxLength={11}
                   />
-                  <Text style={styles.label}>Location</Text>
+                  <Text style={styles.label}>Street / Purok *</Text>
                   <TextInput
                     style={styles.input}
-                    value={editLocation}
-                    onChangeText={setEditLocation}
-                    placeholder="Your location"
+                    value={editStreetPurok}
+                    onChangeText={setEditStreetPurok}
+                    placeholder="Enter street or purok"
                     placeholderTextColor={Colors.textLight}
                   />
+                  {[
+                    { key: "region" as const, label: "Region", value: selectedAddress.region?.description, disabled: false },
+                    { key: "province" as const, label: "Province", value: selectedAddress.province?.description, disabled: !selectedAddress.region },
+                    { key: "municipality" as const, label: "City / Municipality", value: selectedAddress.municipality?.description, disabled: !selectedAddress.province },
+                    { key: "barangay" as const, label: "Barangay", value: selectedAddress.barangay?.description, disabled: !selectedAddress.municipality },
+                  ].map((field) => (
+                    <Fragment key={field.key}>
+                      <Text style={styles.label}>{field.label} *</Text>
+                      <TouchableOpacity
+                        style={[styles.input, styles.addressSelect, field.disabled && styles.disabledSelect]}
+                        disabled={field.disabled}
+                        onPress={() => setAddressPicker(field.key)}
+                        accessibilityRole="button"
+                      >
+                        <Text style={{ color: field.value ? Colors.text : Colors.textLight }}>{field.value || `Select ${field.label}`}</Text>
+                        <Text style={{ color: Colors.textLight }}>⌄</Text>
+                      </TouchableOpacity>
+                    </Fragment>
+                  ))}
                   <TouchableOpacity
                     style={[styles.saveBtn, saving && { opacity: 0.6 }]}
                     onPress={handleSaveAccount}
@@ -338,6 +445,30 @@ export default function TechnicianProfileScreen() {
                     )}
                   </TouchableOpacity>
                 </ScrollView>
+                <Modal
+                  transparent
+                  visible={!!addressPicker}
+                  animationType="slide"
+                  onRequestClose={() => setAddressPicker(null)}
+                >
+                  <View style={styles.addressModalBackdrop}>
+                    <View style={styles.addressModal}>
+                      <Text style={styles.addressModalTitle}>Select {addressPicker}</Text>
+                      <FlatList
+                        data={addressOptions}
+                        keyExtractor={(item) => item.value}
+                        contentContainerStyle={{ paddingBottom: Spacing.sm }}
+                        keyboardShouldPersistTaps="handled"
+                        renderItem={({ item }) => (
+                          <TouchableOpacity style={styles.addressOption} onPress={() => handleAddressPick(item)}>
+                            <Text style={styles.addressOptionText}>{item.label}</Text>
+                          </TouchableOpacity>
+                        )}
+                        ListEmptyComponent={<Text style={styles.addressOptionText}>No options available.</Text>}
+                      />
+                    </View>
+                  </View>
+                </Modal>
               </View>
             </View>
           </KeyboardAvoidingView>
@@ -570,6 +701,13 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     color: Colors.text,
   },
+  addressSelect: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  disabledSelect: { opacity: 0.5 },
+  addressModalBackdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(15, 23, 42, 0.45)" },
+  addressModal: { maxHeight: "70%", backgroundColor: Colors.white, borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: BorderRadius.xl, padding: Spacing.lg },
+  addressModalTitle: { fontSize: FontSize.lg, fontWeight: "700", color: Colors.text, marginBottom: Spacing.md },
+  addressOption: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#E2E8F0" },
+  addressOptionText: { fontSize: FontSize.md, color: Colors.text },
   saveBtn: {
     backgroundColor: Colors.primary,
     borderRadius: BorderRadius.full,

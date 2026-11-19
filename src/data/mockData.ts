@@ -11,9 +11,13 @@ export const serviceTypes: ServiceType[] = [
   { id: '1', name: 'Health Check', icon: 'medical-bag' },
   { id: '2', name: 'Vaccination', icon: 'needle' },
   { id: '3', name: 'Treatment', icon: 'pill' },
-  { id: '4', name: 'De-worming', icon: 'bug' },
-  { id: '5', name: 'Artificial\nInsemination', icon: 'dna' },
-  { id: '6', name: 'Others', icon: 'dots-horizontal' },
+  { id: '4', name: 'Deworming', icon: 'bug' },
+  { id: '5', name: 'Artificial Insemination', icon: 'dna' },
+  { id: '6', name: 'Iron Injection', icon: 'needle' },
+  { id: '7', name: 'Vitamin Injection', icon: 'needle' },
+  { id: '8', name: 'Castration', icon: 'treatment' },
+  { id: '9', name: 'Wound Treatment', icon: 'treatment' },
+  { id: '10', name: 'Antibiotic Injection', icon: 'needle' },
 ];
 
 export const technicians: Technician[] = [

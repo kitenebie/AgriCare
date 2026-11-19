@@ -8,7 +8,7 @@ import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/the
 import { Icon } from '@/components/ui';
 import { Collections } from '@/services/firebase';
 import { logCrud } from '@/services/logService';
-import { sendPushNotificationToMany } from '@/services/pushService';
+import { createEmailNotification } from '@/services/emailNotificationService';
 
 interface Category { id: string; name: string; type: string; breeds: string[]; count: number; }
 
@@ -30,7 +30,12 @@ export default function LivestockCategoriesPage() {
 
   useEffect(() => {
     const unsub = firestore().collection(Collections.LIVESTOCK_CATEGORIES).onSnapshot(
-      (snap) => { setCategories(snap.docs.map(d => ({ id: d.id, ...d.data() } as Category))); setLoading(false); },
+      (snap) => {
+        const obsolete = snap.docs.filter(d => d.data()?.name?.trim?.().toLowerCase() === 'add animals');
+        void Promise.all(obsolete.map(d => d.ref.delete())).catch(error => console.warn('Failed to remove Add Animals category:', error));
+        setCategories(snap.docs.filter(d => d.data()?.name?.trim?.().toLowerCase() !== 'add animals').map(d => ({ id: d.id, ...d.data() } as Category)));
+        setLoading(false);
+      },
       () => setLoading(false)
     );
     return () => unsub();
@@ -42,6 +47,7 @@ export default function LivestockCategoriesPage() {
 
   const handleSave = async () => {
     if (!name.trim()) { modalAlert('Error', 'Name is required.'); return; }
+    if (name.trim().toLowerCase() === 'add animals') { modalAlert('Invalid Name', 'Add Animals is reserved and cannot be a livestock category.'); return; }
     const breedList = breeds.split(',').map(b => b.trim()).filter(b => b);
     setSaving(true);
     try {
@@ -58,11 +64,10 @@ export default function LivestockCategoriesPage() {
       }
       try {
         const usersSnap = await firestore().collection(Collections.USERS).where('status', '==', 'active').get();
-        await sendPushNotificationToMany(usersSnap.docs.map(doc => doc.id), {
-          title: `🐄 Livestock Category ${isUpdate ? 'Updated' : 'Added'}`,
-          body: name.trim(),
-          data: { type: 'livestock_category' },
-        });
+        const title = `🐄 Livestock Category ${isUpdate ? 'Updated' : 'Added'}`;
+        await Promise.all(usersSnap.docs.map(doc => createEmailNotification(
+          doc.id, 'livestock_category', title, name.trim(), { type: 'livestock_category' },
+        )));
       } catch (pushErr) { console.warn('Livestock category push failed:', pushErr); }
       setModal(false); reset();
     } catch (e: any) {
@@ -80,11 +85,10 @@ export default function LivestockCategoriesPage() {
           await logCrud('Category Deleted', `Deleted: ${catName}`, 'livestockCategories', id);
           try {
             const usersSnap = await firestore().collection(Collections.USERS).where('status', '==', 'active').get();
-            await sendPushNotificationToMany(usersSnap.docs.map(doc => doc.id), {
-              title: '🐄 Livestock Category Removed',
-              body: catName,
-              data: { type: 'livestock_category' },
-            });
+            const title = '🐄 Livestock Category Removed';
+            await Promise.all(usersSnap.docs.map(doc => createEmailNotification(
+              doc.id, 'livestock_category', title, catName, { type: 'livestock_category' },
+            )));
           } catch (pushErr) { console.warn('Livestock category push failed:', pushErr); }
         } catch (e: any) { modalAlert('Error', e.message || 'Failed'); }
       }},

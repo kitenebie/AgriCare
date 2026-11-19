@@ -23,7 +23,10 @@ export default function AdminProfileScreen() {
   const [accountModal, setAccountModal] = useState(false);
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
+  const [pendingEmail, setPendingEmail] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
   const [saving, setSaving] = useState(false);
+  const [checkingEmail, setCheckingEmail] = useState(false);
 
   // Security
   const [securityModal, setSecurityModal] = useState(false);
@@ -48,6 +51,10 @@ export default function AdminProfileScreen() {
           if (doc.exists) {
             const data = doc.data();
             if (data?.photoURL) setPhotoURL(data.photoURL);
+            if (data?.pendingEmail) {
+              setPendingEmail(data.pendingEmail);
+              setEditEmail(data.pendingEmail);
+            }
           }
         } catch (e) {}
       }
@@ -77,22 +84,66 @@ export default function AdminProfileScreen() {
   // ─── Account Settings Save ───
   const handleSaveAccount = async () => {
     if (!editName.trim()) { modalAlert('Error', 'Name cannot be empty.'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editEmail.trim())) { modalAlert('Invalid Email', 'Enter a valid email address.'); return; }
     setSaving(true);
     try {
       const currentUser = auth().currentUser;
-      if (currentUser) {
-        await currentUser.updateProfile({ displayName: editName.trim() });
-        await firestore().collection('users').doc(currentUser.uid).update({ displayName: editName.trim() });
+      if (!currentUser?.email) throw new Error('You must be signed in to change account settings.');
+      const emailChanged = !pendingEmail && editEmail.trim().toLowerCase() !== currentUser.email.toLowerCase();
+      if (emailChanged) {
+        if (!currentPassword) { modalAlert('Password Required', 'Enter your current password to verify your identity.'); return; }
+        await currentUser.reauthenticateWithCredential(auth.EmailAuthProvider.credential(currentUser.email, currentPassword));
+        await currentUser.verifyBeforeUpdateEmail(editEmail.trim());
+        setPendingEmail(editEmail.trim());
+        setCurrentPassword('');
       }
+      await currentUser.updateProfile({ displayName: editName.trim() });
+      await firestore().collection('users').doc(currentUser.uid).update({
+        displayName: editName.trim(),
+        ...(emailChanged ? { pendingEmail: editEmail.trim() } : {}),
+      });
       if (user) {
         const updated: UserSession = { ...user, displayName: editName.trim() };
         await saveSession(updated);
         setUser(updated);
       }
-      modalAlert('Success', 'Profile updated.');
-      setAccountModal(false);
+      if (emailChanged) {
+        modalAlert('Verification Sent', 'Open the link sent to the new email address, then return here and check verification.');
+      } else if (!pendingEmail) {
+        modalAlert('Success', 'Profile updated.');
+        setAccountModal(false);
+      } else {
+        modalAlert('Profile Updated', 'Verify the new email address to finish the change.');
+      }
     } catch (e: any) { modalAlert('Error', e.message); }
     finally { setSaving(false); }
+  };
+
+  const handleCheckEmailVerification = async () => {
+    const currentUser = auth().currentUser;
+    if (!currentUser || !pendingEmail) return;
+    setCheckingEmail(true);
+    try {
+      await currentUser.reload();
+      const verifiedEmail = auth().currentUser?.email || '';
+      if (verifiedEmail.toLowerCase() !== pendingEmail.toLowerCase()) {
+        modalAlert('Not Verified Yet', `Check the verification link sent to ${pendingEmail}.`);
+        return;
+      }
+      await firestore().collection('users').doc(currentUser.uid).update({
+        email: verifiedEmail,
+        pendingEmail: firestore.FieldValue.delete(),
+      });
+      if (user) {
+        const updated: UserSession = { ...user, email: verifiedEmail };
+        await saveSession(updated);
+        setUser(updated);
+      }
+      setEditEmail(verifiedEmail);
+      setPendingEmail('');
+      modalAlert('Email Confirmed', 'Your account email has been updated.');
+    } catch (e: any) { modalAlert('Error', e.message); }
+    finally { setCheckingEmail(false); }
   };
 
   // ─── Security ───
@@ -166,8 +217,38 @@ export default function AdminProfileScreen() {
           <Text style={styles.label}>Display Name</Text>
           <TextInput style={styles.input} value={editName} onChangeText={setEditName} placeholder="Your name" placeholderTextColor={Colors.textLight} />
           <Text style={styles.label}>Email</Text>
-          <TextInput style={[styles.input, { color: Colors.textLight }]} value={editEmail} editable={false} />
-          <Text style={{ fontSize: 11, color: Colors.textLight, marginTop: 4 }}>Email cannot be changed</Text>
+          <TextInput
+            style={styles.input}
+            value={editEmail}
+            onChangeText={setEditEmail}
+            editable={!pendingEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="name@gmail.com"
+            placeholderTextColor={Colors.textLight}
+          />
+          <Text style={{ fontSize: 11, color: Colors.textLight, marginTop: 4 }}>
+            {pendingEmail ? `Verification pending: ${pendingEmail}` : 'A confirmation link will be sent to a new email address.'}
+          </Text>
+          {!pendingEmail && editEmail.trim().toLowerCase() !== (user?.email || '').toLowerCase() && (
+            <>
+              <Text style={styles.label}>Current Password</Text>
+              <TextInput
+                style={styles.input}
+                value={currentPassword}
+                onChangeText={setCurrentPassword}
+                placeholder="Confirm your identity"
+                placeholderTextColor={Colors.textLight}
+                secureTextEntry
+              />
+            </>
+          )}
+          {pendingEmail ? (
+            <TouchableOpacity style={styles.saveBtn} onPress={handleCheckEmailVerification} disabled={checkingEmail}>
+              {checkingEmail ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.saveBtnText}>Check Verification</Text>}
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSaveAccount} disabled={saving}>
             {saving ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.saveBtnText}>Save Changes</Text>}
           </TouchableOpacity>

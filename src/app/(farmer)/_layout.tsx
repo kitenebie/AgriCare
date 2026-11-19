@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, FontSize } from '@/constants/theme';
 import { Icon, IconName } from '@/components/ui';
 import { LocationTracker } from '@/components/LocationTracker';
+import { HeartbeatTracker } from '@/components/HeartbeatTracker';
 import { BanGuard } from '@/components/BanGuard';
 
 interface TabIconProps {
@@ -35,6 +36,7 @@ export default function FarmerLayout() {
   return (
     <>
     <LocationTracker />
+    <HeartbeatTracker />
     <BanGuard />
     <Tabs
       screenOptions={{
@@ -79,12 +81,6 @@ export default function FarmerLayout() {
         name="messages"
         options={{
           tabBarIcon: ({ focused }) => <TabIcon iconName="messages" label="Messages" focused={focused} />,
-        }}
-        listeners={{
-          tabPress: (e) => {
-            e.preventDefault();
-            router.replace('/(farmer)/messages');
-          },
         }}
       />
       <Tabs.Screen

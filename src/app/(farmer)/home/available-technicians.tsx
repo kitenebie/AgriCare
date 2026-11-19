@@ -6,8 +6,8 @@ import { AppText as Text } from '@/components/ui/FontScale';
 import { Avatar, Icon } from '@/components/ui';
 import { BorderRadius, Colors, FontSize, Shadow, Spacing } from '@/constants/theme';
 import { Collections } from '@/services/firebase';
+import { getNextAvailability, type AvailabilitySlot, type TimeRange } from '@/utils/availability';
 
-interface AvailabilitySlot { date?: string; dayOfWeek?: number; time: string; }
 interface Technician {
   id: string;
   displayName: string;
@@ -17,32 +17,22 @@ interface Technician {
   location?: string;
   available?: boolean;
   availabilitySlots?: AvailabilitySlot[];
+  alwaysAvailable?: TimeRange[] | TimeRange;
+  alwaysAvailableEnabled?: boolean;
 }
 
-const dateKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-
 export default function AvailableTechniciansPage() {
-  const [technicians, setTechnicians] = useState<(Technician & { nextSlot: AvailabilitySlot })[]>([]);
+  const [technicians, setTechnicians] = useState<(Technician & { nextAvailability: string })[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     firestore().collection(Collections.USERS).where('role', '==', 'technician').where('status', '==', 'active').get()
       .then(snapshot => {
-        const today = dateKey(new Date());
         setTechnicians(snapshot.docs.flatMap(doc => {
           const tech = { id: doc.id, ...doc.data() } as Technician;
-          const nextSlot = (tech.availabilitySlots || []).flatMap(slot => {
-            if (slot.date) return slot.date >= today ? [slot] : [];
-            if (slot.dayOfWeek === undefined) return [];
-            const nextDate = Array.from({ length: 7 }, (_, offset) => {
-              const date = new Date();
-              date.setDate(date.getDate() + offset);
-              return date;
-            }).find(date => date.getDay() === slot.dayOfWeek);
-            return nextDate ? [{ date: dateKey(nextDate), time: slot.time }] : [];
-          }).sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`))[0];
-          return tech.available !== false && nextSlot ? [{ ...tech, nextSlot }] : [];
+          const nextAvailability = getNextAvailability(tech);
+          return nextAvailability ? [{ ...tech, nextAvailability }] : [];
         }));
       })
       .catch(error => {
@@ -70,7 +60,14 @@ export default function AvailableTechniciansPage() {
               <Text style={s.emptyText}>{loadFailed ? 'Unable to load technicians' : 'No technicians with upcoming availability'}</Text>
             </View>
           ) : technicians.map(tech => (
-            <View key={tech.id} style={s.card}>
+            <TouchableOpacity
+              key={tech.id}
+              style={s.card}
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel={`View ${tech.displayName} profile and request service`}
+              onPress={() => router.push({ pathname: '/(farmer)/home/technicians', params: { technicianId: tech.id, returnToAvailable: 'true' } })}
+            >
               <Avatar name={tech.displayName} imageUrl={tech.photoURL} size={50} />
               <View style={s.cardInfo}>
                 <Text style={s.cardName}>{tech.displayName}</Text>
@@ -79,11 +76,12 @@ export default function AvailableTechniciansPage() {
                 )}
                 <View style={s.slotRow}>
                   <Icon name="calendar" size={14} color={Colors.primary} />
-                  <Text style={s.slotText}>Next: {tech.nextSlot.date} at {tech.nextSlot.time}</Text>
+                  <Text style={s.slotText}>{tech.nextAvailability}</Text>
                 </View>
                 {!!tech.location && <Text style={s.location}>{tech.location}</Text>}
               </View>
-            </View>
+              <Icon name="chevron-right" size={20} color={Colors.textLight} />
+            </TouchableOpacity>
           ))}
           <View style={s.bottomSpace} />
         </ScrollView>

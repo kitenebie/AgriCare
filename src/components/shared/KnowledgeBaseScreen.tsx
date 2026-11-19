@@ -19,7 +19,8 @@ import { Icon, Avatar } from '@/components/ui';
 import { Collections } from '@/services/firebase';
 import { getCurrentUserProfile } from '@/services/authService';
 import { logCrud } from '@/services/logService';
-import { sendPushNotification } from '@/services/pushService';
+import { createEmailNotification } from '@/services/emailNotificationService';
+import { markCurrentContentViewed } from '@/services/contentViewService';
 
 interface Article {
   id: string;
@@ -94,6 +95,7 @@ export default function KnowledgeBaseScreen() {
     setSaving(true);
     try {
       const isUpdate = Boolean(editId);
+      let articleId = editId || '';
       if (editId) {
         await firestore().collection(Collections.KNOWLEDGE_BASE).doc(editId).update({
           title: title.trim(),
@@ -103,7 +105,7 @@ export default function KnowledgeBaseScreen() {
         });
         await logCrud('Article Updated', `Updated: ${title.trim()}`, 'knowledgeBase', editId);
       } else {
-        await firestore().collection(Collections.KNOWLEDGE_BASE).add({
+        const article = await firestore().collection(Collections.KNOWLEDGE_BASE).add({
           title: title.trim(),
           category,
           content: content.trim(),
@@ -113,17 +115,22 @@ export default function KnowledgeBaseScreen() {
           views: 0,
           createdAt: firestore.FieldValue.serverTimestamp()
         });
+        articleId = article.id;
         await logCrud('Article Created', `Added: ${title.trim()}`, 'knowledgeBase');
       }
 
       // Notify active users on both article creation and edit.
       try {
         const usersSnap = await firestore().collection(Collections.USERS).where('status', '==', 'active').get();
-        await Promise.all(usersSnap.docs.map(doc => sendPushNotification(doc.id, {
-            title: `📚 Knowledge Base ${isUpdate ? 'Updated' : 'New Article'}`,
-            body: `${currentUser.name} ${isUpdate ? 'updated' : 'published'}: ${title.trim()}`,
-            data: { type: 'knowledge_base', category }
-          })));
+        await Promise.all(usersSnap.docs.map(async doc =>
+          createEmailNotification(
+            doc.id,
+            'knowledge_base',
+            `📚 Knowledge Base ${isUpdate ? 'Updated' : 'New Article'}`,
+            `${currentUser.name} ${isUpdate ? 'updated' : 'published'}: ${title.trim()}`,
+            { type: 'knowledge_base', category, articleId },
+          ),
+        ));
       } catch (pushErr) { console.warn('KB push failed:', pushErr); }
       setModal(false);
       reset();
@@ -140,11 +147,9 @@ export default function KnowledgeBaseScreen() {
           await logCrud('Article Deleted', `Deleted: ${name}`, 'knowledgeBase', id);
           try {
             const usersSnap = await firestore().collection(Collections.USERS).where('status', '==', 'active').get();
-            await Promise.all(usersSnap.docs.map(doc => sendPushNotification(doc.id, {
-              title: '📚 Knowledge Base Article Removed',
-              body: name,
-              data: { type: 'knowledge_base' }
-            })));
+            await Promise.all(usersSnap.docs.map(doc =>
+              createEmailNotification(doc.id, 'knowledge_base', '📚 Knowledge Base Article Removed', name, { type: 'knowledge_base' }),
+            ));
           } catch (pushErr) { console.warn('KB push failed:', pushErr); }
         } catch (e: any) { modalAlert('Error', e.message); }
       }},
@@ -159,7 +164,8 @@ export default function KnowledgeBaseScreen() {
     } catch (e) {}
   };
 
-  const openArticle = (articleId: string) => {
+  const openArticle = async (articleId: string) => {
+    await markCurrentContentViewed('knowledgeBase', articleId);
     // Determine route prefix based on current user's role
     let prefix = '/(farmer)/home';
     if (currentUser.role === 'admin') prefix = '/(admin)/home';

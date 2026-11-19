@@ -1,7 +1,6 @@
 import { Icon } from "@/components/ui";
 import {
   BorderRadius, Colors, FontSize, Shadow, Spacing, } from "@/constants/theme";
-import { Collections } from "@/services/firebase";
 import { logCrud } from "@/services/logService";
 import { getSession } from "@/services/sessionService";
 import { pickImage, uploadImageToSupabase } from "@/services/storage";
@@ -10,7 +9,7 @@ import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator, Dimensions, Image, Modal, ScrollView, StyleSheet, TouchableOpacity, View, KeyboardAvoidingView, Platform } from "react-native";
+  ActivityIndicator, Image, Modal, ScrollView, StyleSheet, TouchableOpacity, View, KeyboardAvoidingView, Platform } from "react-native";
 import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/FontScale';
 import { modalAlert } from '@/components/ui/ModalAlert';
 
@@ -20,28 +19,23 @@ interface Animal {
   breed: string;
   type: string;
   age: number;
+  ageUnit?: string;
   gender: string;
   weight: string;
   healthStatus: string;
   imageUrl: string;
   count?: number;
 }
-interface Category {
-  id: string;
-  name: string;
-  focusType: string;
-  breeds: string[];
-  imageUrl?: string;
-}
 
-const SCREEN_W = Dimensions.get("window").width;
-const MODAL_PADDING = 24; // Spacing.xl
-const GRID_GAP = 8;
-const COL_W = Math.floor((SCREEN_W - MODAL_PADDING * 2 - GRID_GAP * 2) / 3);
+const animalArtwork = (animal: Animal) => {
+  const type = `${animal.type || ''} ${animal.name || ''}`.toLowerCase();
+  if (/\b(pig|swine|hog)\b/.test(type)) return { source: require('../../../../assets/images/farmer/pig.png'), background: '#FFF0F1' };
+  if (/\b(cow|cattle|carabao|buffalo)\b/.test(type)) return { source: require('../../../../assets/images/farmer/cow.png'), background: '#FFF8E7' };
+  return { source: require('../../../../assets/images/farmer/cow-pig.png'), background: '#E9F9F0' };
+};
 
 export default function MyAnimalsPage() {
   const [animals, setAnimals] = useState<Animal[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState("");
   
@@ -50,11 +44,11 @@ export default function MyAnimalsPage() {
 
   // Registration steps
   const [modal, setModal] = useState(false);
-  const [step, setStep] = useState(1); // 1=category, 2=breed, 3=details
-  const [selectedCat, setSelectedCat] = useState<Category | null>(null);
+  const [step, setStep] = useState(1); // 1=animal type, 2=details
+  const [animalType, setAnimalType] = useState("");
   const [selectedBreed, setSelectedBreed] = useState("");
 
-  // Form (step 3)
+  // Form (step 2)
   const [formName, setFormName] = useState("");
   const [formAge, setFormAge] = useState("");
   const [formAgeUnit, setFormAgeUnit] = useState<
@@ -76,13 +70,6 @@ export default function MyAnimalsPage() {
       }
       setUid(session.uid);
 
-      const catSnap = await firestore()
-        .collection(Collections.LIVESTOCK_CATEGORIES)
-        .get();
-      setCategories(
-        catSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Category),
-      );
-
       const unsub = firestore()
         .collection("animals")
         .where("ownerId", "==", session.uid)
@@ -102,7 +89,7 @@ export default function MyAnimalsPage() {
 
   const resetForm = () => {
     setStep(1);
-    setSelectedCat(null);
+    setAnimalType("");
     setSelectedBreed("");
     setFormName("");
     setFormAge("");
@@ -113,19 +100,14 @@ export default function MyAnimalsPage() {
     setFormCount("1");
   };
 
-  const handleSelectCategory = (cat: Category) => {
-    setSelectedCat(cat);
-    if (cat.breeds && cat.breeds.length > 0) {
-      setStep(2);
-    } else {
-      setSelectedBreed("");
-      setStep(3);
+  const handleContinueAnimalType = () => {
+    const type = animalType.trim();
+    if (!type) {
+      modalAlert("Animal type required", "Enter the animal type to continue.");
+      return;
     }
-  };
-
-  const handleSelectBreed = (breed: string) => {
-    setSelectedBreed(breed);
-    setStep(3);
+    setSelectedBreed("");
+    setStep(2);
   };
 
   const handlePickImage = async () => {
@@ -167,6 +149,10 @@ export default function MyAnimalsPage() {
   };
 
   const validateAnimalForm = () => {
+    if (!animalType.trim()) {
+      modalAlert("Animal type required", "Enter the animal type.");
+      return false;
+    }
     if (!/^\d+$/.test(formCount) || Number(formCount) < 1) {
       modalAlert("Invalid Quantity", "Enter a whole number greater than zero.");
       return false;
@@ -182,9 +168,38 @@ export default function MyAnimalsPage() {
     return true;
   };
 
+  const hasDuplicateAnimal = async (excludeId?: string) => {
+    const normalize = (value?: string) => (value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    const normalizeAgeUnit = (value?: string) => normalize(value || 'years').replace(/s$/, '');
+    const type = normalize(animalType);
+    const breed = normalize(selectedBreed || 'Unknown');
+    const age = parseInt(formAge, 10) || 0;
+    const snapshot = await firestore().collection('animals').where('ownerId', '==', uid).get();
+    return snapshot.docs.some(doc => {
+      if (doc.id === excludeId) return false;
+      const animal = doc.data() as Animal;
+      return (
+      normalize(animal.type || animal.name) === type &&
+      normalize(animal.breed || 'Unknown') === breed &&
+      Number(animal.age || 0) === age &&
+      normalizeAgeUnit(animal.ageUnit) === normalizeAgeUnit(formAgeUnit) &&
+      normalize(animal.gender || 'male') === normalize(formGender)
+      );
+    });
+  };
+
   const handleSave = async () => {
     if (!validateAnimalForm()) return;
-    const animalName = selectedBreed || selectedCat?.name || "Animal";
+    try {
+      if (await hasDuplicateAnimal()) {
+        modalAlert('Animal already registered', 'This animal type, breed, age, and gender already exist. Update the quantity on the existing record instead.');
+        return;
+      }
+    } catch (e: any) {
+      modalAlert('Error', e.message);
+      return;
+    }
+    const animalName = animalType.trim() || "Animal";
     setSaving(true);
 
     let imageUrl = "";
@@ -200,7 +215,7 @@ export default function MyAnimalsPage() {
         .collection("animals")
         .add({
           name: animalName,
-          type: selectedCat?.focusType || selectedCat?.name || "",
+          type: animalName,
           breed: selectedBreed || "Unknown",
           count: parseInt(formCount) || 1,
           age: parseInt(formAge) || 0,
@@ -217,14 +232,14 @@ export default function MyAnimalsPage() {
         });
       await logCrud(
         "Animal Registered",
-        `Added: ${animalName} (${selectedBreed || selectedCat?.name})`,
+        `Added: ${animalName} (${selectedBreed || animalName})`,
         "animals",
         docRef.id,
         {
           old: {},
           new: {
             name: animalName,
-            type: selectedCat?.focusType || "",
+            type: animalName,
             breed: selectedBreed,
             count: parseInt(formCount) || 1,
             age: parseInt(formAge) || 0,
@@ -250,15 +265,16 @@ export default function MyAnimalsPage() {
     // Pre-fill form with existing data
     setFormName(animal.name);
     setFormAge(String(animal.age || ''));
+    setFormAgeUnit((animal.ageUnit || 'years') as typeof formAgeUnit);
     setFormGender(animal.gender || 'male');
     setFormWeight(animal.weight || '');
     setFormImage(animal.imageUrl || null);
     setFormCount(String(animal.count || 1));
     setSelectedBreed(animal.breed || '');
     // Find matching category
-    const matchedCat = categories.find(c => c.focusType === animal.type || c.name === animal.type);
-    setSelectedCat(matchedCat || null);
-    setStep(3); // Go directly to details form
+    const type = animal.type || animal.name;
+    setAnimalType(type);
+    setStep(2); // Go directly to details form
     setModal(true);
   };
 
@@ -272,6 +288,15 @@ export default function MyAnimalsPage() {
       return;
     }
     if (!validateAnimalForm()) return;
+    try {
+      if (await hasDuplicateAnimal(editingAnimal.id)) {
+        modalAlert('Animal already registered', 'This animal type, breed, age, and gender already exist. Update the quantity on the existing record instead.');
+        return;
+      }
+    } catch (e: any) {
+      modalAlert('Error', e.message);
+      return;
+    }
     setSaving(true);
 
     let imageUrl = editingAnimal.imageUrl || '';
@@ -288,6 +313,7 @@ export default function MyAnimalsPage() {
         breed: selectedBreed || editingAnimal.breed,
         count: parseInt(formCount) || 1,
         age: parseInt(formAge) || 0,
+        ageUnit: formAgeUnit,
         gender: formGender,
         weight: formWeight.trim(),
         imageUrl,
@@ -351,7 +377,7 @@ export default function MyAnimalsPage() {
             setModal(true);
           }}
         >
-          <Icon name="dots" size={28} color={Colors.white} />
+          <Icon name="plus" size={24} color={Colors.white} />
         </TouchableOpacity>
       </View>
 
@@ -366,13 +392,15 @@ export default function MyAnimalsPage() {
             </Text>
           </View>
         )}
-        {animals.map((a) => (
+        {animals.map((a) => {
+          const artwork = animalArtwork(a);
+          return (
           <View key={a.id} style={s.card}>
             {a.imageUrl ? (
               <Image source={{ uri: a.imageUrl }} style={s.cardImg} />
             ) : (
-              <View style={[s.cardImg, s.cardImgPlaceholder]}>
-                <Icon name="cow" size={28} color={Colors.textLight} />
+              <View style={[s.cardImg, s.cardImgPlaceholder, { backgroundColor: artwork.background }]}>
+                <Image source={artwork.source} style={s.animalArt} resizeMode="contain" accessibilityLabel={`${a.type || a.name} 3D animal image`} />
               </View>
             )}
             <View style={s.cardInfo}>
@@ -386,7 +414,7 @@ export default function MyAnimalsPage() {
                 <Text style={s.metaText}>•</Text>
                 <Text style={s.metaText}>{a.gender}</Text>
                 <Text style={s.metaText}>•</Text>
-                <Text style={s.metaText}>{a.age}yrs</Text>
+                <Text style={s.metaText}>{a.age} {a.ageUnit || 'years'}</Text>
                 {a.weight ? (
                   <>
                     <Text style={s.metaText}>•</Text>
@@ -424,7 +452,8 @@ export default function MyAnimalsPage() {
               </View>
             </View>
           </View>
-        ))}
+          );
+        })}
         <View style={{ height: 30 }} />
       </ScrollView>
 
@@ -446,110 +475,34 @@ export default function MyAnimalsPage() {
                   else setModal(false);
                 }}
               >
-                <Icon
-                  name={step > 1 ? "chevron-left" : ""}
-                  size={22}
-                  color={Colors.text}
-                  style={
-                    step > 1 ? { transform: [{ rotate: "180deg" }] } : undefined
-                  }
-                />
+                {step > 1 && <Icon name="chevron-left" size={22} color={Colors.text} style={{ transform: [{ rotate: "180deg" }] }} />}
               </TouchableOpacity>
               <Text style={s.modalTitle}>
-                {step === 1
-                  ? "Select Category"
-                  : step === 2
-                    ? "Select Breed"
-                    : editingAnimal ? "Edit Animal" : "Animal Details"}
+                {step === 1 ? "Add Animal" : editingAnimal ? "Edit Animal" : "Animal Details"}
               </Text>
               <TouchableOpacity onPress={() => { setModal(false); }}>
                 <Icon name="close" size={22} color={Colors.text} />
               </TouchableOpacity>
             </View>
 
-            {/* Step 1: Category Grid */}
+            {/* Step 1: Animal type */}
             {step === 1 && (
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
                 <Text style={s.stepDesc}>
-                  What type of animal are you registering?
+                  Enter the animal type to continue.
                 </Text>
-                <View style={s.grid}>
-                  {categories.map((cat) => (
-                    <TouchableOpacity
-                      key={cat.id}
-                      style={s.gridItem}
-                      activeOpacity={0.7}
-                      onPress={() => handleSelectCategory(cat)}
-                    >
-                      {cat.imageUrl ? (
-                        <Image
-                          source={{ uri: cat.imageUrl }}
-                          style={s.gridImg}
-                        />
-                      ) : (
-                        <View style={[s.gridImg, s.gridImgPlaceholder]}>
-                          <Icon name="cow" size={28} color={Colors.primary} />
-                        </View>
-                      )}
-                      <Text style={s.gridLabel} numberOfLines={2}>
-                        {cat.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                <View style={{ height: 80 }} />
+                <Text style={s.label}>Animal type</Text>
+                <TextInput style={s.input} value={animalType} onChangeText={setAnimalType} placeholder="e.g. Pig" placeholderTextColor={Colors.textLight} returnKeyType="done" />
+                <TouchableOpacity style={s.continueButton} onPress={handleContinueAnimalType} accessibilityRole="button">
+                  <Text style={s.continueButtonText}>Continue</Text>
+                  <Icon name="chevron-right" size={18} color={Colors.white} />
+                </TouchableOpacity>
+                <View style={{ height: 24 }} />
               </ScrollView>
             )}
 
-            {/*    */}
-            {step === 2 && selectedCat && (
-              <ScrollView showsVerticalScrollIndicator={false}>
-                <Text style={s.stepDesc}>
-                  Select breed for {selectedCat.name}
-                </Text>
-                <View style={s.breedList}>
-                  {selectedCat.breeds.map((breed) => (
-                    <TouchableOpacity
-                      key={breed}
-                      style={s.breedItem}
-                      activeOpacity={0.7}
-                      onPress={() => handleSelectBreed(breed)}
-                    >
-                      <View style={s.breedIcon}>
-                        <Icon name="paw" size={18} color={Colors.primary} />
-                      </View>
-                      <Text style={s.breedText}>{breed}</Text>
-                      <Icon
-                        name="chevron-right"
-                        size={16}
-                        color={Colors.textLight}
-                      />
-                    </TouchableOpacity>
-                  ))}
-                  <TouchableOpacity
-                    style={[s.breedItem, { borderColor: Colors.textLight }]}
-                    onPress={() => {
-                      setSelectedBreed("");
-                      setStep(3);
-                    }}
-                  >
-                    <View style={[s.breedIcon, { backgroundColor: "#FFF3E0" }]}>
-                      <Icon name="dots" size={18} color="#FF9800" />
-                    </View>
-                    <Text style={s.breedText}>Other / Not Listed</Text>
-                    <Icon
-                      name="chevron-right"
-                      size={16}
-                      color={Colors.textLight}
-                    />
-                  </TouchableOpacity>
-                  <View style={{ height: 80 }} />
-                </View>
-              </ScrollView>
-            )}
-
-            {/* Step 3: Details Form */}
-            {step === 3 && (
+            {/* Step 2: Details Form */}
+            {step === 2 && (
                 <ScrollView
                   showsVerticalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
@@ -562,11 +515,11 @@ export default function MyAnimalsPage() {
                   {/* Selected info */}
                   <View style={s.selectedInfo}>
                     <Text style={s.selectedInfoText}>
-                      Category:{" "}
+                      Animal type:{" "}
                       <Text
                         style={{ fontWeight: "700", color: Colors.primary }}
                       >
-                        {selectedCat?.name}
+                        {animalType}
                       </Text>
                     </Text>
                     {selectedBreed ? (
@@ -633,19 +586,15 @@ export default function MyAnimalsPage() {
                     For batch registration (e.g. 12 piglets as one record)
                   </Text>
 
-                  {/* Breed (if not selected in step 2) */}
-                  {!selectedBreed && (
-                    <>
-                      <Text style={s.label}>Breed</Text>
-                      <TextInput
-                        style={s.input}
-                        value={selectedBreed}
-                        onChangeText={setSelectedBreed}
-                        placeholder="Enter breed"
-                        placeholderTextColor={Colors.textLight}
-                      />
-                    </>
-                  )}
+                  {/* Breed */}
+                  <Text style={s.label}>Breed</Text>
+                  <TextInput
+                    style={s.input}
+                    value={selectedBreed}
+                    onChangeText={setSelectedBreed}
+                    placeholder="Enter breed"
+                    placeholderTextColor={Colors.textLight}
+                  />
 
                   {/* Age & Weight */}
                   <Text style={s.label}>Age</Text>
@@ -826,10 +775,10 @@ const s = StyleSheet.create({
   },
   cardImg: { width: 100, alignSelf: 'stretch' },
   cardImgPlaceholder: {
-    backgroundColor: "#F1F5F9",
     justifyContent: "center",
     alignItems: "center",
   },
+  animalArt: { width: 94, height: 118 },
   cardInfo: { flex: 1, padding: Spacing.md },
   cardName: { fontSize: FontSize.md, fontWeight: "700", color: Colors.text },
   cardCount: {
@@ -894,66 +843,9 @@ const s = StyleSheet.create({
     color: Colors.textSecondary,
     marginBottom: Spacing.lg,
   },
-  // Step 1: Grid
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: GRID_GAP,
-    justifyContent: "flex-start",
-  },
-  gridItem: {
-    width: COL_W,
-    alignItems: "center",
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.sm,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-  },
-  gridImg: {
-    width: COL_W - 24,
-    height: COL_W - 24,
-    borderRadius: BorderRadius.md,
-  },
-  gridImgPlaceholder: {
-    backgroundColor: Colors.primary + "10",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  gridLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: Colors.text,
-    textAlign: "center",
-    marginTop: 6,
-  },
-  // Step 2: Breeds
-  breedList: { gap: Spacing.sm },
-  breedItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  breedIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.primary + "10",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: Spacing.md,
-  },
-  breedText: {
-    flex: 1,
-    fontSize: FontSize.md,
-    fontWeight: "600",
-    color: Colors.text,
-  },
-  // Step 3: Form
+  continueButton: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: Spacing.sm, borderRadius: BorderRadius.full, backgroundColor: Colors.primary, marginTop: Spacing.xl, paddingHorizontal: Spacing.lg },
+  continueButtonText: { color: Colors.white, fontSize: FontSize.md, fontWeight: "700" },
+  // Step 2: Form
   selectedInfo: {
     backgroundColor: Colors.primary + "08",
     borderRadius: BorderRadius.lg,

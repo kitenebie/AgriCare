@@ -5,12 +5,13 @@ import { useFadeIn, useFadeInUp } from "@/hooks/useAnimatedEntry";
 import { getCurrentUser, getCurrentUserProfile } from "@/services/authService";
 import { Collections } from "@/services/firebase";
 import { getSession } from "@/services/sessionService";
+import { handleNotificationNavigation } from "@/services/notificationNavigator";
 import firestore from "@react-native-firebase/firestore";
 import { router } from "expo-router";
 import { Image } from "expo-image";
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator, Dimensions, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+  ActivityIndicator, Dimensions, Modal, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import { AppText as Text } from '@/components/ui/FontScale';
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -26,13 +27,6 @@ interface QuickAccessItem {
 }
 
 const quickAccess: QuickAccessItem[] = [
-  {
-    icon: "hen",
-    label: "Livestock\nCategories",
-    route: "/(admin)/livestock",
-    color: "#2E7D32",
-    bgColor: "#E2F7E2",
-  },
   {
     icon: "messages-square",
     label: "Forum &\nDiscussions",
@@ -167,6 +161,8 @@ export default function AdminHome() {
   // Dynamic Realtime Activity Stream
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [activitiesLoading, setActivitiesLoading] = useState(true);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   const headerAnim = useFadeIn(100);
   const statsAnim = useFadeInUp(200);
@@ -189,20 +185,56 @@ export default function AdminHome() {
         setPhotoURL(authUser.photoURL);
       }
 
-      const profile: any = await getCurrentUserProfile();
-      if (profile) {
+      let profile: any = null;
+      try {
+        profile = await getCurrentUserProfile();
+      } catch (error) {
+        console.warn("Admin profile load error:", error);
+      }
+      if (profile && typeof profile === "object") {
         const nameFromProfile =
           profile.displayName || profile.name || profile.fullName;
         if (nameFromProfile) {
           setUserName(nameFromProfile);
         }
-        if (profile.photoURL) {
+        if (profile?.photoURL) {
           setPhotoURL(profile.photoURL);
         }
       }
     };
     loadProfile();
   }, []);
+
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    let active = true;
+    getSession().then((session) => {
+      if (!active || !session?.uid) return;
+      unsubscribe = firestore().collection(Collections.NOTIFICATIONS)
+        .where("userId", "==", session.uid)
+        .orderBy("createdAt", "desc")
+        .limit(50)
+        .onSnapshot(
+          (snap) => {
+            if (snap) setNotifications(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+          },
+          (error) => console.warn("Notifications listen error:", error.message),
+        );
+    });
+    return () => { active = false; unsubscribe?.(); };
+  }, []);
+
+  const openNotification = async (notification: any) => {
+    setNotificationsOpen(false);
+    if (!notification.read) {
+      try {
+        await firestore().collection(Collections.NOTIFICATIONS).doc(notification.id).update({ read: true });
+      } catch (error) {
+        console.warn("Failed to mark notification as read:", error);
+      }
+    }
+    await handleNotificationNavigation({ type: notification.data?.type || notification.type, ...notification.data });
+  };
 
   // ─── 2. Realtime Firebase Firestore Listeners for Stats & Activities ───
   useEffect(() => {
@@ -235,11 +267,9 @@ export default function AdminHome() {
 
       // Badge counts for Quick Access grid
       setBadgeCounts({
-        "/(admin)/livestock": 0, // loaded separately
         "/(admin)/forum": 0, // loaded separately
         "/(admin)/home/knowledge-base": 0, // loaded separately
         "/(admin)/home/announcements": 0, // loaded separately
-        "/(admin)/home/appointments": apptsList.length,
         "/(admin)/home/users": usersList.length,
         "/(admin)/home/reviews": 0, // loaded separately
         "/(admin)/home/logs": 0, // loaded separately
@@ -299,8 +329,7 @@ export default function AdminHome() {
   useEffect(() => {
     const loadBadges = async () => {
       try {
-        const [livestockSnap, forumSnap, kbSnap, announcementsSnap, reviewsSnap, logsSnap] = await Promise.all([
-          firestore().collection(Collections.LIVESTOCK_CATEGORIES).get(),
+        const [forumSnap, kbSnap, announcementsSnap, reviewsSnap, logsSnap] = await Promise.all([
           firestore().collection(Collections.COMMUNITY_FORUM).get(),
           firestore().collection(Collections.KNOWLEDGE_BASE).get(),
           firestore().collection(Collections.ANNOUNCEMENTS).get(),
@@ -309,7 +338,6 @@ export default function AdminHome() {
         ]);
         setBadgeCounts(prev => ({
           ...prev,
-          "/(admin)/livestock": livestockSnap.size,
           "/(admin)/forum": forumSnap.size,
           "/(admin)/home/knowledge-base": kbSnap.size,
           "/(admin)/home/announcements": announcementsSnap.size,
@@ -432,8 +460,9 @@ export default function AdminHome() {
               <Text style={styles.headerRole}>Administrator</Text>
             </View>
           </View>
-          <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={() => setNotificationsOpen(true)} accessibilityRole="button" accessibilityLabel="Open notifications">
             <Icon name="bell" size={22} color={Colors.primary} />
+            {notifications.some((notification) => !notification.read) && <View style={styles.bellBadge} />}
           </TouchableOpacity>
         </View>
 
@@ -552,6 +581,29 @@ export default function AdminHome() {
       </View>
 
       <View style={{ height: 40 }} />
+      <Modal visible={notificationsOpen} transparent animationType="fade" onRequestClose={() => setNotificationsOpen(false)}>
+        <View style={styles.notificationOverlay}>
+          <View style={styles.notificationModal}>
+            <View style={styles.notificationHeader}>
+              <Text style={styles.notificationTitle}>Notifications</Text>
+              <TouchableOpacity onPress={() => setNotificationsOpen(false)} accessibilityRole="button" accessibilityLabel="Close notifications">
+                <Icon name="close" size={22} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView>
+              {notifications.length ? notifications.map((notification) => (
+                <TouchableOpacity key={notification.id} style={styles.notificationItem} onPress={() => openNotification(notification)} activeOpacity={0.7}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.notificationItemTitle}>{notification.title || "AgriCare Notification"}</Text>
+                    <Text style={styles.notificationBody}>{notification.body || "Tap to view."}</Text>
+                  </View>
+                  {!notification.read && <View style={styles.notificationUnread} />}
+                </TouchableOpacity>
+              )) : <Text style={styles.notificationEmpty}>No notifications yet.</Text>}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -607,7 +659,18 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.8)",
     justifyContent: "center",
     alignItems: "center",
+    position: "relative",
   },
+  bellBadge: { position: "absolute", top: 7, right: 8, width: 9, height: 9, borderRadius: 5, backgroundColor: Colors.error, borderWidth: 1, borderColor: Colors.white },
+  notificationOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", padding: Spacing.lg },
+  notificationModal: { maxHeight: "75%", backgroundColor: Colors.white, borderRadius: BorderRadius.xl, padding: Spacing.lg },
+  notificationHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: Spacing.md },
+  notificationTitle: { fontSize: FontSize.lg, fontWeight: "700", color: Colors.text },
+  notificationItem: { flexDirection: "row", alignItems: "center", gap: Spacing.sm, paddingVertical: Spacing.md, borderTopWidth: 1, borderColor: "#E8EEE9" },
+  notificationItemTitle: { fontSize: FontSize.md, fontWeight: "600", color: Colors.text },
+  notificationBody: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 3 },
+  notificationUnread: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.primary },
+  notificationEmpty: { textAlign: "center", color: Colors.textSecondary, paddingVertical: Spacing.xl },
   // ─── Stat Cards ───
   statsRow: {
     flexDirection: "row",

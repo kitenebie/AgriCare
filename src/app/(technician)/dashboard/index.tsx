@@ -5,6 +5,7 @@ import {
   IconName,
   ModernQuickAccessIcon,
 } from "@/components/ui";
+import ServiceRequestDetailsDrawer from "@/components/technician/ServiceRequestDetailsDrawer";
 import { AppText as Text } from "@/components/ui/FontScale";
 import {
   BorderRadius,
@@ -16,12 +17,16 @@ import {
 import { useFadeIn, useFadeInUp } from "@/hooks/useAnimatedEntry";
 import { Collections } from "@/services/firebase";
 import { getSession } from "@/services/sessionService";
+import { getUnviewedContentCounts } from "@/services/contentViewService";
+import { isRequestAvailableToTechnician, type ServiceRequest } from "@/utils/technicianRequests";
 import firestore from "@react-native-firebase/firestore";
+import { isTimeInAnyRange, normalizeTimeRanges } from "@/utils/availability";
 import { router, useFocusEffect } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Modal,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
@@ -41,6 +46,7 @@ export default function TechDashboardScreen() {
   const overviewAnim = useFadeInUp(200);
   const quickAccessAnim = useFadeInUp(400);
   const [userName, setUserName] = useState("");
+  const [technicianId, setTechnicianId] = useState("");
   const [photoURL, setPhotoURL] = useState<string | null>(null);
   const [dashData, setDashData] = useState<DashboardData>({
     pendingRequests: 0,
@@ -52,6 +58,9 @@ export default function TechDashboardScreen() {
   const [reviewCount, setReviewCount] = useState(0);
   const [notifCount, setNotifCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [farmerRequests, setFarmerRequests] = useState<ServiceRequest[]>([]);
+  const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null);
+  const [availabilityPrompt, setAvailabilityPrompt] = useState<"setup" | "update" | null>(null);
   const [badgeCounts, setBadgeCounts] = useState({
     availableRequests: 0,
     appointments: 0,
@@ -70,6 +79,7 @@ export default function TechDashboardScreen() {
       }
       setUserName(session.displayName || "Technician");
       const uid = session.uid;
+      setTechnicianId(uid);
       // Get user photoURL and availability
       const userDoc = await firestore()
         .collection(Collections.USERS)
@@ -78,6 +88,12 @@ export default function TechDashboardScreen() {
       if (userDoc.exists) {
         const data = userDoc.data();
         if (data?.photoURL) setPhotoURL(data.photoURL);
+        const dailyRange = data?.alwaysAvailable;
+        const dailyRanges = normalizeTimeRanges(dailyRange);
+        const hasSchedule = (Array.isArray(data?.availabilitySlots) && data.availabilitySlots.length > 0) || (dailyRanges.length > 0 && data?.alwaysAvailableEnabled !== false);
+        const now = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+        if (!hasSchedule) setAvailabilityPrompt("setup");
+        else if (data?.available === false || (dailyRanges.length > 0 && data?.alwaysAvailableEnabled !== false && !isTimeInAnyRange(now, dailyRange))) setAvailabilityPrompt("update");
         // Get rating from user doc (already aggregated by ratingService)
         const avgRating = data?.rating || 0;
         const rvCount = data?.reviewCount || 0;
@@ -87,18 +103,10 @@ export default function TechDashboardScreen() {
       const allApptsSnap = await firestore()
         .collection(Collections.APPOINTMENTS)
         .get();
-      const allAppts = allApptsSnap.docs.map((d) => d.data());
+      const allAppts = allApptsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as ServiceRequest);
 
       // Pending: status "pending" AND (unassigned OR assigned to this tech)
-      const pendingRequests = allAppts.filter((a) => {
-        if (a.status !== "pending") return false;
-        return (
-          !a.technicianId ||
-          a.technicianId === "" ||
-          a.technicianId === uid ||
-          (a.technicianName || "").toLowerCase() === "unassigned"
-        );
-      }).length;
+      const pendingRequests = allAppts.filter((appointment) => isRequestAvailableToTechnician(appointment, uid)).length;
 
       // Accepted: confirmed appointments where technicianId matches this user
       const myAppts = allAppts.filter((a) => a.technicianId === uid);
@@ -153,27 +161,16 @@ export default function TechDashboardScreen() {
       const availableRequests = pendingRequests;
 
       const healthSnap = await firestore()
-        .collection(Collections.APPOINTMENTS)
+        .collection("healthRecords")
         .where("technicianId", "==", uid)
-        .where("status", "==", "completed")
         .get();
-      const announcementsSnap = await firestore()
-        .collection(Collections.ANNOUNCEMENTS)
-        .get();
-      const kbSnap = await firestore()
-        .collection(Collections.KNOWLEDGE_BASE)
-        .get();
-      const forumSnap = await firestore()
-        .collection(Collections.COMMUNITY_FORUM)
-        .get();
+      const contentCounts = await getUnviewedContentCounts(uid, "technician");
 
       setBadgeCounts({
         availableRequests,
         appointments,
         healthRecords: healthSnap.size,
-        announcements: announcementsSnap.size,
-        knowledgeBase: kbSnap.size,
-        forum: forumSnap.size,
+        ...contentCounts,
       });
     } catch (e) {
       console.warn("Tech dashboard load error:", e);
@@ -184,8 +181,26 @@ export default function TechDashboardScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchDashboard();
-    }, []),
+    }, [fetchDashboard]),
   );
+  useEffect(() => {
+    let active = true;
+    let unsubscribe = () => {};
+    getSession().then(session => {
+      if (!active || !session) return;
+      unsubscribe = firestore().collection(Collections.APPOINTMENTS).where('status', '==', 'pending').onSnapshot(snapshot => {
+        const requests = snapshot.docs
+          .map(doc => ({ ...doc.data(), id: doc.id }) as ServiceRequest)
+          .filter(request => isRequestAvailableToTechnician(request, session.uid))
+          .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+        if (active) {
+          setFarmerRequests(requests);
+          setBadgeCounts(current => ({ ...current, availableRequests: requests.length }));
+        }
+      }, error => console.warn('Farmer request services load error:', error));
+    }).catch(error => console.warn('Farmer request services subscription failed:', error));
+    return () => { active = false; unsubscribe(); };
+  }, []);
   if (loading)
     return (
       <View
@@ -198,6 +213,7 @@ export default function TechDashboardScreen() {
       </View>
     );
   return (
+    <>
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Header */}
       <Animated.View style={[styles.header, headerAnim]}>
@@ -212,9 +228,7 @@ export default function TechDashboardScreen() {
           <View style={styles.headerRight}>
             <TouchableOpacity
               style={styles.notifButton}
-              onPress={() =>
-                router.push("/(technician)/messages?tab=notifications")
-              }
+              onPress={() => router.navigate({ pathname: '/(technician)/messages', params: { tab: 'notifications' } })}
               accessibilityRole="button"
               accessibilityLabel={`${notifCount} notifications`}
             >
@@ -282,6 +296,19 @@ export default function TechDashboardScreen() {
             </View>
           </Card>
         </Animated.View>
+        <Card style={styles.requestsCard}>
+          <View style={styles.cardHeading}><Icon name="services" size={23} color={Colors.primary} /><Text style={styles.cardTitle}>Farmer Request Services</Text><Text style={styles.requestCount}>{badgeCounts.availableRequests}</Text></View>
+          {farmerRequests.length ? <ScrollView style={styles.requestList} nestedScrollEnabled showsVerticalScrollIndicator={farmerRequests.length > 3}>
+            {farmerRequests.map(request => <TouchableOpacity key={request.id} style={styles.requestRow} activeOpacity={0.75} onPress={() => setSelectedRequest(request)} accessibilityRole="button" accessibilityLabel={`View ${request.serviceType} request from ${request.farmerName}`}>
+            <View style={styles.requestRowCopy}>
+              <View style={styles.requestRowHeading}><Text style={styles.requestService} numberOfLines={1}>{request.serviceType}</Text><Text style={styles.requestAudience}>{request.technicianId === technicianId ? 'For you' : 'Public'}</Text></View>
+              <Text style={styles.requestAnimal} numberOfLines={1}>{request.animalName || request.animalType || 'Animal'} · {request.farmerName || 'Farmer'}</Text>
+              <Text style={styles.requestSchedule} numberOfLines={1}>{request.date || 'Date not set'}{request.time ? ` · ${request.time}` : ''}</Text>
+            </View>
+            <Icon name="chevron-right" size={18} color={Colors.primary} />
+          </TouchableOpacity>)}
+          </ScrollView> : <Text style={styles.noSickReports}>No farmer service requests right now.</Text>}
+        </Card>
         {/* Quick Access */}
         <Animated.View style={[styles.quickAccessSection, quickAccessAnim]}>
           <Card style={styles.quickAccessCard}>
@@ -387,6 +414,23 @@ export default function TechDashboardScreen() {
         <View style={{ height: 24 }} />
       </View>
     </ScrollView>
+    <Modal visible={!!availabilityPrompt} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setAvailabilityPrompt(null)}>
+      <View style={styles.availabilityOverlay}>
+        <View style={styles.availabilityModal}>
+          <Image source={require("../../../../assets/images/technician/Home/setup.png")} style={styles.availabilityArtwork} resizeMode="contain" accessibilityLabel="Technician preparing service tools" />
+          <Text style={styles.availabilityEyebrow}>{availabilityPrompt === "setup" ? "GET STARTED" : "AVAILABILITY UPDATE"}</Text>
+          <Text style={styles.availabilityTitle}>{availabilityPrompt === "setup" ? "Set up your availability" : "You’re not available right now"}</Text>
+          <Text style={styles.availabilityMessage}>{availabilityPrompt === "setup" ? "Add the days and hours you can take service requests so farmers know when to book you." : "Your schedule doesn’t include the current time. Update your hours so farmers know when you can take requests."}</Text>
+          <TouchableOpacity style={styles.availabilityPrimaryButton} activeOpacity={0.85} onPress={() => { setAvailabilityPrompt(null); router.push("/(technician)/dashboard/availability"); }}>
+            <Text style={styles.availabilityPrimaryText}>{availabilityPrompt === "setup" ? "Set up availability" : "Update availability"}</Text>
+            <Icon name="chevron-right" size={18} color={Colors.white} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.availabilityLaterButton} onPress={() => setAvailabilityPrompt(null)} accessibilityRole="button"><Text style={styles.availabilityLaterText}>Maybe later</Text></TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+    <ServiceRequestDetailsDrawer request={selectedRequest} technicianId={technicianId} technicianName={userName} onClose={() => setSelectedRequest(null)} />
+    </>
   );
 }
 interface OverviewItemProps {
@@ -494,6 +538,16 @@ const QuickAccessItem: React.FC<QuickAccessItemProps> = ({
   );
 };
 const styles = StyleSheet.create({
+  availabilityOverlay: { flex: 1, alignItems: "center", justifyContent: "center", padding: Spacing.xl, backgroundColor: "rgba(12, 29, 21, 0.58)" },
+  availabilityModal: { width: "100%", maxWidth: 420, alignItems: "center", padding: Spacing.xxl, borderRadius: 24, backgroundColor: Colors.white, ...Shadow.medium },
+  availabilityArtwork: { width: 250, height: 120, marginBottom: Spacing.sm },
+  availabilityEyebrow: { color: Colors.primary, fontSize: FontSize.xs, fontWeight: "800", letterSpacing: 1, marginBottom: Spacing.xs },
+  availabilityTitle: { color: Colors.text, fontSize: FontSize.xl, fontWeight: "800", textAlign: "center" },
+  availabilityMessage: { color: Colors.textSecondary, fontSize: FontSize.md, lineHeight: 21, textAlign: "center", marginTop: Spacing.md, marginBottom: Spacing.xl },
+  availabilityPrimaryButton: { width: "100%", minHeight: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: Spacing.sm, borderRadius: BorderRadius.full, backgroundColor: Colors.primary },
+  availabilityPrimaryText: { color: Colors.white, fontSize: FontSize.md, fontWeight: "700" },
+  availabilityLaterButton: { width: "100%", minHeight: 48, alignItems: "center", justifyContent: "center", paddingHorizontal: Spacing.xl, marginTop: Spacing.sm, borderRadius: BorderRadius.full, borderWidth: 1, borderColor: Colors.border },
+  availabilityLaterText: { color: Colors.text, fontSize: FontSize.sm, fontWeight: "700" },
   container: {
     flex: 1,
     backgroundColor: Colors.surface,
@@ -644,6 +698,17 @@ const styles = StyleSheet.create({
   },
   // Quick Access
   quickAccessSection: { marginTop: Spacing.md },
+  requestsCard: { marginTop: Spacing.md, borderRadius: BorderRadius.xl, padding: Spacing.md, backgroundColor: Colors.white },
+  requestCount: { marginLeft: "auto", color: Colors.primary, fontSize: FontSize.sm, fontWeight: "700" },
+  requestList: { maxHeight: 216 },
+  requestRow: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: Spacing.sm, paddingVertical: Spacing.sm, borderTopWidth: 1, borderTopColor: Colors.border },
+  requestRowCopy: { flex: 1, gap: 3 },
+  requestRowHeading: { flexDirection: "row", alignItems: "center", gap: Spacing.sm },
+  requestService: { flex: 1, color: Colors.text, fontSize: FontSize.md, fontWeight: "700" },
+  requestAudience: { overflow: "hidden", paddingHorizontal: Spacing.sm, paddingVertical: 3, borderRadius: BorderRadius.full, color: Colors.primary, backgroundColor: "#EAF8EF", fontSize: FontSize.xs, fontWeight: "700" },
+  requestAnimal: { color: Colors.textSecondary, fontSize: FontSize.sm },
+  requestSchedule: { color: Colors.textLight, fontSize: FontSize.xs },
+  noSickReports: { color: Colors.textSecondary, fontSize: FontSize.sm, paddingVertical: Spacing.md },
   quickAccessCard: {
     borderRadius: BorderRadius.xl,
     padding: Spacing.md,

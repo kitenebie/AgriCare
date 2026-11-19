@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { AppText as Text } from '@/components/ui/FontScale';
-import { modalAlert } from '@/components/ui/ModalAlert';
 import Animated from 'react-native-reanimated';
 import { router } from 'expo-router';
 import firestore from '@react-native-firebase/firestore';
@@ -10,24 +9,11 @@ import { Icon } from '@/components/ui';
 import { useFadeInUp, useFadeIn } from '@/hooks/useAnimatedEntry';
 import { getSession } from '@/services/sessionService';
 import { Collections } from '@/services/firebase';
-import { acceptAppointment, declineAppointment } from '@/services/appointmentService';
-interface Appointment {
-  id: string;
-  serviceType: string;
-  animalName: string;
-  farmerName: string;
-  farmerId: string;
-  date: string;
-  time: string;
-  status: string;
-  description: string;
-  technicianId: string;
-  technicianName: string;
-  location?: string;
-  createdAt?: any;
-}
+import ServiceRequestDetailsDrawer from '@/components/technician/ServiceRequestDetailsDrawer';
+import { isRequestAvailableToTechnician, type ServiceRequest } from '@/utils/technicianRequests';
 export default function TechAppointmentsScreen() {
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [appointments, setAppointments] = useState<ServiceRequest[]>([]);
+  const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null);
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState('');
   const [userName, setUserName] = useState('');
@@ -64,8 +50,8 @@ export default function TechAppointmentsScreen() {
         .onSnapshot(
           (snap) => {
             let data = snap.docs
-              .map(d => ({ id: d.id, ...d.data() } as Appointment))
-              .filter(a => !a.technicianId || a.technicianId === '' || a.technicianId === session.uid || (a.technicianName || '').toLowerCase() === 'unassigned');
+              .map(d => ({ id: d.id, ...d.data() } as ServiceRequest))
+              .filter(a => isRequestAvailableToTechnician(a, session.uid));
 
             // Filter by technician's specialization
             if (expertise.length > 0) {
@@ -107,45 +93,6 @@ export default function TechAppointmentsScreen() {
     load();
     return () => unsub();
   }, []);
-  const handleAccept = (appt: Appointment) => {
-    modalAlert('Accept Request', `Accept "${appt.serviceType}" for ${appt.farmerName}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Accept', onPress: async () => {
-        try {
-          await acceptAppointment({
-            appointmentId: appt.id,
-            serviceType: appt.serviceType,
-            animalName: appt.animalName,
-            date: appt.date,
-            time: appt.time,
-            farmerId: appt.farmerId,
-            farmerName: appt.farmerName,
-            technicianId: uid,
-            technicianName: userName
-          });
-          modalAlert('Accepted! ✅', `You've accepted the request. A message has been sent to ${appt.farmerName}.`);
-        } catch (e: any) { modalAlert('Error', e.message); }
-      }},
-    ]);
-  };
-  const handleDecline = (appt: Appointment) => {
-    modalAlert('Decline Request', `Decline "${appt.serviceType}" for ${appt.farmerName}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Decline', style: 'destructive', onPress: async () => {
-        try {
-          await declineAppointment({
-            appointmentId: appt.id,
-            serviceType: appt.serviceType,
-            animalName: appt.animalName,
-            farmerId: appt.farmerId,
-            farmerName: appt.farmerName,
-            technicianId: uid,
-            technicianName: userName
-          });
-        } catch (e: any) { modalAlert('Error', e.message); }
-      }},
-    ]);
-  };
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '';
     const d = new Date(dateStr);
@@ -171,7 +118,7 @@ export default function TechAppointmentsScreen() {
         </TouchableOpacity>
         <View style={s.headerText}>
           <Text style={s.headerTitle}>Available Requests</Text>
-          <Text style={s.headerSubtitle}>{appointments.length} request{appointments.length !== 1 ? 's' : ''} matching your specialization</Text>
+          <Text style={s.headerSubtitle}>{appointments.length} public or assigned request{appointments.length !== 1 ? 's' : ''}</Text>
         </View>
       </Animated.View>
       {/* List */}
@@ -187,7 +134,7 @@ export default function TechAppointmentsScreen() {
             appointments.map((a) => {
               const relDate = getRelativeDate(a.date);
               return (
-                <View key={a.id} style={s.card}>
+                <TouchableOpacity key={a.id} style={s.card} activeOpacity={0.8} onPress={() => setSelectedRequest(a)} accessibilityRole="button" accessibilityLabel={`View ${a.serviceType} request from ${a.farmerName}`}>
                   {/* Header Row */}
                   <View style={s.cardHeader}>
                     <View style={s.pendingBadge}>
@@ -206,6 +153,7 @@ export default function TechAppointmentsScreen() {
                     <Icon name="paw" size={14} color={Colors.primary} />
                     <Text style={s.infoText}>{a.animalName}</Text>
                   </View>
+                  {(a.animalType || a.animalBreed || a.animalQuantity) ? <Text style={[s.infoText, { marginLeft: 22 }]}>{[a.animalType && `Type: ${a.animalType}`, a.animalBreed && `Breed: ${a.animalBreed}`, a.animalQuantity && `Quantity: ${a.animalQuantity}`].filter(Boolean).join(' · ')}</Text> : null}
                   {/* Farmer */}
                   <View style={s.infoRow}>
                     <Icon name="farmer" size={14} color={Colors.textSecondary} />
@@ -223,24 +171,15 @@ export default function TechAppointmentsScreen() {
                       <Text style={s.descText} numberOfLines={3}>{a.description}</Text>
                     </View>
                   ) : null}
-                  {/* Action Buttons */}
-                  <View style={s.actionRow}>
-                    <TouchableOpacity style={s.declineBtn} onPress={() => handleDecline(a)}>
-                      <Icon name="close" size={16} color={Colors.error} />
-                      <Text style={s.declineBtnText}>Decline</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={s.acceptBtn} onPress={() => handleAccept(a)}>
-                      <Icon name="check" size={16} color={Colors.white} />
-                      <Text style={s.acceptBtnText}>Accept</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
+                  <View style={s.openDetails}><Text style={s.openDetailsText}>View full request</Text><Icon name="chevron-right" size={18} color={Colors.primary} /></View>
+                </TouchableOpacity>
               );
             })
           )}
           <View style={{ height: 80 }} />
         </ScrollView>
       </Animated.View>
+      <ServiceRequestDetailsDrawer request={selectedRequest} technicianId={uid} technicianName={userName} onClose={() => setSelectedRequest(null)} />
     </View>
   );
 }
@@ -276,10 +215,6 @@ const s = StyleSheet.create({
   descBox: { backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginTop: Spacing.sm },
   descLabel: { fontSize: FontSize.xs, color: Colors.textLight, marginBottom: 4 },
   descText: { fontSize: FontSize.sm, color: Colors.text, lineHeight: 18 },
-  // Actions
-  actionRow: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.lg, paddingTop: Spacing.md, borderTopWidth: 1, borderTopColor: Colors.border },
-  acceptBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: Colors.primary, paddingVertical: Spacing.md, borderRadius: BorderRadius.md },
-  acceptBtnText: { color: Colors.white, fontWeight: '700', fontSize: FontSize.md },
-  declineBtn: { flex: 0.7, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#FEE2E2', paddingVertical: Spacing.md, borderRadius: BorderRadius.md },
-  declineBtnText: { color: Colors.error, fontWeight: '700', fontSize: FontSize.md }
+  openDetails: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: Spacing.sm, paddingTop: Spacing.sm, borderTopWidth: 1, borderTopColor: Colors.border },
+  openDetailsText: { color: Colors.primary, fontSize: FontSize.sm, fontWeight: '700' },
 });

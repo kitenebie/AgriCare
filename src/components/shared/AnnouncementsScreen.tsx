@@ -3,12 +3,13 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, Modal, ActivityIndicato
 import { AppText as Text, AppTextInput as TextInput } from '@/components/ui/FontScale';
 import { modalAlert } from '@/components/ui/ModalAlert';
 import firestore from '@react-native-firebase/firestore';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
 import { Icon } from '@/components/ui';
 import { Collections } from '@/services/firebase';
 import { logCrud } from '@/services/logService';
-import { sendPushNotification } from '@/services/pushService';
+import { createEmailNotification } from '@/services/emailNotificationService';
+import { markCurrentContentViewed } from '@/services/contentViewService';
 
 interface Announcement {
   id: string;
@@ -29,10 +30,22 @@ const AUDIENCES = ['all', 'farmers', 'technicians'];
 const PRIORITIES = ['high', 'medium', 'low'];
 
 export default function AnnouncementsScreen({ role }: Props) {
+  const { announcementId } = useLocalSearchParams<{ announcementId?: string }>();
   const isAdmin = role === 'admin';
   const [items, setItems] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setExpandedId(announcementId || null);
+    if (announcementId && !isAdmin) void markCurrentContentViewed('announcements', announcementId);
+  }, [announcementId, isAdmin]);
+
+  const toggleAnnouncement = (id: string) => {
+    const isOpening = expandedId !== id;
+    setExpandedId(isOpening ? id : null);
+    if (isOpening && !isAdmin) void markCurrentContentViewed('announcements', id);
+  };
 
   // Admin CRUD state
   const [modal, setModal] = useState(false);
@@ -72,11 +85,13 @@ export default function AnnouncementsScreen({ role }: Props) {
     setSaving(true);
     try {
       const isUpdate = Boolean(editId);
+      let announcementId = editId || '';
       if (editId) {
         await firestore().collection(Collections.ANNOUNCEMENTS).doc(editId).update({ title: title.trim(), content: content.trim(), audience, priority, updatedAt: firestore.FieldValue.serverTimestamp() });
         await logCrud('Announcement Updated', `Updated: ${title.trim()}`, 'announcements', editId);
       } else {
-        await firestore().collection(Collections.ANNOUNCEMENTS).add({ title: title.trim(), content: content.trim(), audience, priority, createdBy: 'admin_001', createdAt: firestore.FieldValue.serverTimestamp() });
+        const announcement = await firestore().collection(Collections.ANNOUNCEMENTS).add({ title: title.trim(), content: content.trim(), audience, priority, createdBy: 'admin_001', createdAt: firestore.FieldValue.serverTimestamp() });
+        announcementId = announcement.id;
         await logCrud('Announcement Created', `Added: ${title.trim()}`, 'announcements');
       }
 
@@ -86,13 +101,10 @@ export default function AnnouncementsScreen({ role }: Props) {
         if (audience === 'farmers') query = query.where('role', '==', 'farmer');
         else if (audience === 'technicians') query = query.where('role', '==', 'technician');
         const usersSnap = await query.get();
-        await Promise.all(usersSnap.docs.map(doc =>
-          sendPushNotification(doc.id, {
-            title: `📢 ${isUpdate ? 'Announcement Updated' : title.trim()}`,
-            body: content.trim().substring(0, 120),
-            data: { type: 'announcement', priority }
-          })
-        ));
+        await Promise.all(usersSnap.docs.map(async doc => {
+          const notificationTitle = `📢 ${isUpdate ? 'Announcement Updated' : title.trim()}`;
+          await createEmailNotification(doc.id, 'announcement', notificationTitle, content.trim(), { type: 'announcement', priority, announcementId });
+        }));
       } catch (pushErr) { console.warn('Push notification failed:', pushErr); }
       setModal(false); reset();
     } catch (e: any) { modalAlert('Error', e.message); }
@@ -109,9 +121,9 @@ export default function AnnouncementsScreen({ role }: Props) {
           if (targetAudience === 'farmers') query = query.where('role', '==', 'farmer');
           else if (targetAudience === 'technicians') query = query.where('role', '==', 'technician');
           const usersSnap = await query.get();
-          await Promise.all(usersSnap.docs.map(doc => sendPushNotification(doc.id, {
-            title: '📢 Announcement Removed', body: name, data: { type: 'announcement' }
-          })));
+           await Promise.all(usersSnap.docs.map(async doc => {
+             await createEmailNotification(doc.id, 'announcement', '📢 Announcement Removed', name, { type: 'announcement' });
+           }));
         } catch (pushErr) { console.warn('Announcement push failed:', pushErr); }
       } catch (e: any) { modalAlert('Error', e.message); }
     }}]);
@@ -176,7 +188,9 @@ export default function AnnouncementsScreen({ role }: Props) {
                 <TouchableOpacity style={s.delBtn} onPress={() => handleDelete(a.id, a.title, a.audience)}><Icon name="close" size={14} color={Colors.error} /></TouchableOpacity>
               </View>
             </View>
-            <Text style={s.adminCardContent} numberOfLines={2}>{a.content}</Text>
+            <TouchableOpacity onPress={() => toggleAnnouncement(a.id)} activeOpacity={0.7}>
+              <Text style={s.adminCardContent} numberOfLines={expandedId === a.id ? undefined : 2}>{a.content}</Text>
+            </TouchableOpacity>
           </View>
         ))}
 
@@ -185,7 +199,7 @@ export default function AnnouncementsScreen({ role }: Props) {
           <TouchableOpacity
             key={a.id}
             style={s.card}
-            onPress={() => setExpandedId(expandedId === a.id ? null : a.id)}
+            onPress={() => toggleAnnouncement(a.id)}
             activeOpacity={0.8}
           >
             {/* Priority indicator */}

@@ -55,13 +55,14 @@ export const handleNotificationNavigation = async (data: NotificationData): Prom
     if (role === 'admin') router.push('/(admin)/home' as any);    else if (role === 'technician') router.push('/(technician)/messages?tab=notifications' as any);    else router.push('/(farmer)/messages?tab=notifications' as any);    return;
   }
 
-  switch (data.type) {
-    // ─── Chat message → open the 1-on-1 conversation ───
-    case 'new_chat_message': {
-      const chatId = data.chatId || '';
-      const otherUserId = data.senderId || '';
-      const otherUserName = data.senderName || '';
-
+      switch (data.type) {
+    // ─── Chat message → open the 1-on-1 conversation ───
+
+    case 'new_chat_message': {
+      const chatId = data.chatId || '';
+      const otherUserId = data.senderId || '';
+      const otherUserName = data.senderName || '';
+
       if (role === 'technician') {
         router.push({
           pathname: '/(technician)/messages/chat',
@@ -79,8 +80,8 @@ export const handleNotificationNavigation = async (data: NotificationData): Prom
     // ─── Appointment notifications → appointments screen ───
     case 'appointment_accepted':
     case 'appointment_declined':
-    case 'appointment_confirmed':
-    case 'new_appointment':
+    case 'appointment_confirmed':
+    case 'new_appointment':
     case 'new_request': {
       if (role === 'technician') {
         router.push('/(technician)/appointments' as any);
@@ -117,23 +118,22 @@ export const handleNotificationNavigation = async (data: NotificationData): Prom
     }
 
     // ─── Announcement → announcements screen ───
-    case 'announcement': {
-      if (role === 'technician') {
-        router.push('/(technician)/dashboard/announcements' as any);
-      } else {
-        router.push(`${prefix}/home/announcements` as any);
-      }
-      break;
+    case 'announcement': {
+      if (role === 'technician') {
+        router.push({ pathname: '/(technician)/dashboard/announcements' as any, params: data.announcementId ? { announcementId: data.announcementId } : {} } as any);
+      } else {
+        router.push({ pathname: `${prefix}/home/announcements` as any, params: data.announcementId ? { announcementId: data.announcementId } : {} } as any);
+      }
+      break;
     }
 
     // ─── Knowledge base → knowledge base screen ───
-    case 'knowledge_base': {
-      if (role === 'technician') {
-        router.push('/(technician)/dashboard/knowledge-base' as any);
-      } else {
-        router.push(`${prefix}/home/knowledge-base` as any);
-      }
-      break;
+    case 'knowledge_base': {
+      const screen = role === 'technician' ? '/(technician)/dashboard' : `${prefix}/home`;
+      router.push(data.articleId
+        ? { pathname: `${screen}/knowledge-base-view` as any, params: { id: data.articleId } }
+        : `${screen}/knowledge-base` as any);
+      break;
     }
 
     // ─── Health record → health records screen ───
@@ -141,9 +141,9 @@ export const handleNotificationNavigation = async (data: NotificationData): Prom
     case 'health_record_created':
     case 'vaccination_reminder': {
       if (role === 'technician') {
-        router.push('/(technician)/dashboard/health-records' as any);
+        router.push({ pathname: '/(technician)/dashboard/health-records' as any, params: data.healthRecordId ? { healthRecordId: data.healthRecordId } : {} } as any);
       } else {
-        router.push(`${prefix}/home/health-records` as any);
+        router.push({ pathname: `${prefix}/home/health-records` as any, params: data.healthRecordId ? { healthRecordId: data.healthRecordId } : {} } as any);
       }
       break;
     }
@@ -201,11 +201,16 @@ export const handleNotificationNavigation = async (data: NotificationData): Prom
       else router.push('/(technician)/dashboard' as any);
       break;
     }
-    case 'account_approved':
-    case 'account_rejected':
-    case 'account_action': {
-      router.replace('/(auth)/login' as any);
-      break;
+    case 'account_rejected':
+    case 'account_action': {
+      router.replace('/(auth)/login' as any);
+      break;
+    }
+    case 'account_approved': {
+      if (role === 'admin') router.replace('/(admin)/home' as any);
+      else if (role === 'technician') router.replace('/(technician)/dashboard' as any);
+      else router.replace('/(farmer)/home' as any);
+      break;
     }
 
     // ─── Default fallback → home screen for role ───

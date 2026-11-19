@@ -10,10 +10,15 @@ import { useFadeInUp, useFadeIn } from '@/hooks/useAnimatedEntry';
 import { getSession } from '@/services/sessionService';
 import { Collections } from '@/services/firebase';
 import { getOrCreateChatRoom } from '@/services/chatService';
+import { completeAppointment, resolveFarmerCancellation } from '@/services/appointmentService';
+import { modalAlert } from '@/components/ui/ModalAlert';
 interface ScheduleItem {
   id: string;
   serviceType: string;
+  animalType?: string;
   animalName: string;
+  animalBreed?: string;
+  animalQuantity?: number;
   farmerName: string;
   date: string;
   time: string;
@@ -21,6 +26,7 @@ interface ScheduleItem {
   location?: string;
   description?: string;
   farmerId?: string;
+  cancellationRequestStatus?: 'pending' | 'approved' | 'declined';
 }
 type DateStatus = 'overdue' | 'today' | 'upcoming';
 const STATUS_CONFIG: Record<DateStatus, { color: string; bg: string; label: string; icon: string }> = {
@@ -253,6 +259,8 @@ export default function TechScheduleScreen() {
 // Appointment Card Component
 interface AppointmentCardProps { item: ScheduleItem; status: DateStatus; technicianId: string; }
 const AppointmentCard: React.FC<AppointmentCardProps> = ({ item, status, technicianId }) => {
+  const [completing, setCompleting] = useState(false);
+  const [resolvingCancellation, setResolvingCancellation] = useState(false);
   const handleMessage = async () => {
     if (!item.farmerId || !technicianId) return;
     try {
@@ -261,6 +269,42 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({ item, status, technic
     } catch (e) {
       console.warn('Failed to open chat:', e);
     }
+  };
+  const handleComplete = () => {
+    if (completing) return;
+    modalAlert('Mark service complete?', `Confirm that ${item.serviceType} for ${item.animalName} has been completed.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Mark Complete', onPress: async () => {
+        setCompleting(true);
+        try {
+          await completeAppointment(item.id, technicianId);
+          modalAlert('Service completed', 'The farmer has been notified.');
+        } catch (error: any) {
+          modalAlert('Unable to complete appointment', error?.message || 'Please try again.');
+        } finally {
+          setCompleting(false);
+        }
+      } },
+    ]);
+  };
+  const handleCancellationDecision = (approve: boolean) => {
+    if (resolvingCancellation) return;
+    modalAlert(approve ? 'Approve cancellation?' : 'Decline cancellation?', approve
+      ? 'This appointment will be cancelled and its schedule released.'
+      : 'The appointment will remain accepted.', [
+      { text: 'Go back', style: 'cancel' },
+      { text: approve ? 'Approve' : 'Decline', style: approve ? 'default' : 'destructive', onPress: async () => {
+        setResolvingCancellation(true);
+        try {
+          await resolveFarmerCancellation(item.id, technicianId, approve);
+          modalAlert(approve ? 'Cancellation approved' : 'Cancellation declined', approve ? 'The appointment was cancelled and the farmer was notified.' : 'The appointment remains accepted. The farmer was notified.');
+        } catch (error: any) {
+          modalAlert('Unable to update cancellation', error?.message || 'Please try again.');
+        } finally {
+          setResolvingCancellation(false);
+        }
+      } },
+    ]);
   };
   const config = STATUS_CONFIG[status];
   return (
@@ -277,6 +321,7 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({ item, status, technic
         <Icon name="paw" size={13} color={Colors.primary} />
         <Text style={s.cardInfoText}>{item.animalName}</Text>
       </View>
+      {(item.animalType || item.animalBreed || item.animalQuantity) ? <Text style={[s.cardInfoText, { marginLeft: 20 }]}>{[item.animalType && `Type: ${item.animalType}`, item.animalBreed && `Breed: ${item.animalBreed}`, item.animalQuantity && `Quantity: ${item.animalQuantity}`].filter(Boolean).join(' · ')}</Text> : null}
       <View style={s.cardInfoRow}>
         <Icon name="farmer" size={13} color={Colors.textSecondary} />
         <Text style={s.cardInfoText}>{item.farmerName}</Text>
@@ -293,6 +338,20 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({ item, status, technic
         <Icon name="messages" size={16} color={Colors.white} />
         <Text style={s.messageBtnText}>Message Farmer</Text>
       </TouchableOpacity>
+      {item.cancellationRequestStatus === 'pending' ? <View style={s.cancellationBox}>
+        <Text style={s.cancellationLabel}>Farmer requested to cancel this appointment.</Text>
+        <View style={s.cancellationActions}>
+          <TouchableOpacity style={s.cancellationDeclineBtn} onPress={() => handleCancellationDecision(false)} disabled={resolvingCancellation} accessibilityRole="button" accessibilityLabel="Decline cancellation request">
+            <Text style={s.cancellationDeclineText}>Decline</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.cancellationApproveBtn} onPress={() => handleCancellationDecision(true)} disabled={resolvingCancellation} accessibilityRole="button" accessibilityLabel="Approve cancellation request">
+            {resolvingCancellation ? <ActivityIndicator color={Colors.white} /> : <Text style={s.cancellationApproveText}>Approve cancellation</Text>}
+          </TouchableOpacity>
+        </View>
+      </View> : <TouchableOpacity style={[s.completeBtn, completing && { opacity: 0.6 }]} onPress={handleComplete} disabled={completing} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={`Mark ${item.serviceType} appointment complete`}>
+        <Icon name="check-circle" size={16} color={Colors.white} />
+        <Text style={s.completeBtnText}>{completing ? 'Updating…' : 'Mark as Complete'}</Text>
+      </TouchableOpacity>}
     </View>
   );
 };
@@ -353,4 +412,13 @@ const s = StyleSheet.create({
   cardDate: { fontSize: FontSize.xs, color: Colors.textLight, marginTop: Spacing.sm, fontStyle: 'italic' },
   messageBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: Colors.primary, paddingVertical: Spacing.sm + 2, borderRadius: BorderRadius.md, marginTop: Spacing.md },
   messageBtnText: { color: Colors.white, fontWeight: '700', fontSize: FontSize.sm },
+  completeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#16834A', paddingVertical: Spacing.sm + 2, borderRadius: BorderRadius.md, marginTop: Spacing.sm },
+  completeBtnText: { color: Colors.white, fontWeight: '700', fontSize: FontSize.sm },
+  cancellationBox: { marginTop: Spacing.md, padding: Spacing.md, borderRadius: BorderRadius.md, backgroundColor: '#FFF7D6', borderWidth: 1, borderColor: '#F5D778' },
+  cancellationLabel: { color: '#795600', fontSize: FontSize.sm, fontWeight: '700', marginBottom: Spacing.sm },
+  cancellationActions: { flexDirection: 'row', gap: Spacing.sm },
+  cancellationDeclineBtn: { flex: 1, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: BorderRadius.md, borderWidth: 1, borderColor: '#D6B85A', backgroundColor: Colors.white },
+  cancellationDeclineText: { color: '#795600', fontWeight: '700', fontSize: FontSize.sm },
+  cancellationApproveBtn: { flex: 1.5, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: BorderRadius.md, backgroundColor: '#16834A' },
+  cancellationApproveText: { color: Colors.white, fontWeight: '700', fontSize: FontSize.sm },
 });

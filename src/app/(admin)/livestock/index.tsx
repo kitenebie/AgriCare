@@ -62,6 +62,7 @@ export default function LivestockCategoriesScreen() {
   const [categories, setCategories] = useState<LivestockCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
+  const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -80,7 +81,9 @@ export default function LivestockCategoriesScreen() {
       .onSnapshot(
         (snapshot) => {
           if (snapshot) {
-            const data: LivestockCategory[] = snapshot.docs.map((doc) => {
+            const obsolete = snapshot.docs.filter(doc => safeStr(doc.data().name).trim().toLowerCase() === "add animals");
+            void Promise.all(obsolete.map(doc => doc.ref.delete())).catch(error => console.warn("Failed to remove Add Animals category:", error));
+            const data: LivestockCategory[] = snapshot.docs.filter(doc => safeStr(doc.data().name).trim().toLowerCase() !== "add animals").map((doc) => {
               const d = doc.data();
               return {
                 id: doc.id,
@@ -113,17 +116,6 @@ export default function LivestockCategoriesScreen() {
     setEditingId(null);
   };
 
-  const openAddModal = (focusType: "cow" | "swine" = "cow") => {
-    resetForm();
-    setFormFocusType(focusType);
-    if (focusType === "cow") {
-      setFormName("Cattle / Cow Breed Category");
-    } else {
-      setFormName("Swine / Pig Breed Category");
-    }
-    setModalVisible(true);
-  };
-
   const openEdit = (cat: LivestockCategory) => {
     setFormName(cat.name);
     setFormFocusType(cat.focusType || "cow");
@@ -132,6 +124,14 @@ export default function LivestockCategoriesScreen() {
     setFormImageUrl(cat.imageUrl || "");
     setEditingId(cat.id);
     setModalVisible(true);
+  };
+
+  const handleAddBreed = () => {
+    if (!categories.length) {
+      modalAlert("No Categories", "There are no livestock categories to add a breed to.");
+      return;
+    }
+    setCategoryPickerVisible(true);
   };
 
   // ─── Image Picker & Storage Upload ───
@@ -184,8 +184,13 @@ export default function LivestockCategoriesScreen() {
 
   // ─── Save to Firestore ───
   const handleSave = async () => {
+    if (!editingId) return;
     if (!formName.trim()) {
       modalAlert("Missing Name", "Please enter a category name.");
+      return;
+    }
+    if (formName.trim().toLowerCase() === "add animals") {
+      modalAlert("Invalid Name", "Add Animals is reserved and cannot be a livestock category.");
       return;
     }
 
@@ -207,59 +212,30 @@ export default function LivestockCategoriesScreen() {
     };
 
     try {
-      if (editingId) {
-        // Update existing
-        const oldCategory = categories.find(c => c.id === editingId);
-        await firestore()
-          .collection(Collections.LIVESTOCK_CATEGORIES)
-          .doc(editingId)
-          .update(payload);
-        await logCrud('Category Updated', `Updated: ${formName.trim()}`, 'livestockCategories', editingId, {
-          old: {
-            name: oldCategory?.name || '',
-            focusType: oldCategory?.focusType || '',
-            breeds: oldCategory?.breeds || [],
-            description: oldCategory?.description || '',
-            imageUrl: oldCategory?.imageUrl || '',
-          },
-          new: payload,
-        });
-      } else {
-        // Add new
-        const docRef = await firestore()
-          .collection(Collections.LIVESTOCK_CATEGORIES)
-          .add({
-            ...payload,
-            count: 0,
-            createdAt: firestore.FieldValue.serverTimestamp(),
-          });
-        await logCrud('Category Created', `Added: ${formName.trim()}`, 'livestockCategories', docRef.id, {
-          old: {},
-          new: { ...payload, count: 0 },
-        });
-      }
+      const oldCategory = categories.find(c => c.id === editingId);
+      await firestore()
+        .collection(Collections.LIVESTOCK_CATEGORIES)
+        .doc(editingId)
+        .update(payload);
+      await logCrud('Category Updated', `Updated: ${formName.trim()}`, 'livestockCategories', editingId, {
+        old: {
+          name: oldCategory?.name || '',
+          focusType: oldCategory?.focusType || '',
+          breeds: oldCategory?.breeds || [],
+          description: oldCategory?.description || '',
+          imageUrl: oldCategory?.imageUrl || '',
+        },
+        new: payload,
+      });
 
       setModalVisible(false);
       resetForm();
     } catch (error: any) {
       console.warn("Save category error:", error.message);
       // Fallback local state update
-      if (editingId) {
-        setCategories((prev) =>
-          prev.map((c) => (c.id === editingId ? { ...c, ...payload } : c))
-        );
-      } else {
-        const newCat: LivestockCategory = {
-          id: `cat_${Date.now()}`,
-          name: payload.name,
-          focusType: payload.focusType,
-          breeds: payload.breeds,
-          description: payload.description,
-          imageUrl: payload.imageUrl,
-          count: 0,
-        };
-        setCategories((prev) => [newCat, ...prev]);
-      }
+      setCategories((prev) =>
+        prev.map((c) => (c.id === editingId ? { ...c, ...payload } : c))
+      );
       setModalVisible(false);
       resetForm();
     } finally {
@@ -313,7 +289,7 @@ export default function LivestockCategoriesScreen() {
         <Text style={styles.headerTitle}>Cattle & Swine Breeds</Text>
 
         <TouchableOpacity
-          onPress={() => openAddModal("cow")}
+          onPress={handleAddBreed}
           style={styles.addHeaderBtn}
           activeOpacity={0.8}
         >
@@ -342,21 +318,6 @@ export default function LivestockCategoriesScreen() {
             Manage breed classification, photo references, and health specs for cows and pigs.
           </Text>
 
-          <View style={styles.quickAddRow}>
-            <TouchableOpacity
-              style={styles.quickAddCowBtn}
-              onPress={() => openAddModal("cow")}
-            >
-              <Text style={styles.quickAddBtnText}>+ Add Cattle Category</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.quickAddSwineBtn}
-              onPress={() => openAddModal("swine")}
-            >
-              <Text style={styles.quickAddBtnText}>+ Add Swine Category</Text>
-            </TouchableOpacity>
-          </View>
         </View>
 
         {loading ? (
@@ -476,7 +437,31 @@ export default function LivestockCategoriesScreen() {
         )}
       </ScrollView>
 
-      {/* ─── ADD / EDIT CATEGORY MODAL FORM ─── */}
+      <Modal visible={categoryPickerVisible} transparent animationType="fade" onRequestClose={() => setCategoryPickerVisible(false)}>
+        <View style={styles.overlay}>
+          <View style={styles.modal}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Add Breed</Text>
+                <Text style={styles.pickerSubtitle}>Choose an existing category to update.</Text>
+              </View>
+              <TouchableOpacity onPress={() => setCategoryPickerVisible(false)} accessibilityRole="button" accessibilityLabel="Close category picker">
+                <Icon name="close" size={22} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.formScroll}>
+              {categories.map((cat) => (
+                <TouchableOpacity key={cat.id} style={styles.categoryChoice} onPress={() => { setCategoryPickerVisible(false); openEdit(cat); }}>
+                  <Text style={styles.categoryChoiceName}>{cat.name}</Text>
+                  <Text style={styles.categoryChoiceMeta}>{cat.breeds.length} breeds</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── EDIT CATEGORY MODAL FORM ─── */}
       <Modal visible={modalVisible} transparent animationType="slide">
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.overlay}>
@@ -488,7 +473,7 @@ export default function LivestockCategoriesScreen() {
           >
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {editingId ? "Edit" : "Add"} Livestock Category
+                Edit Livestock Category
               </Text>
               <TouchableOpacity
                 onPress={() => {
@@ -635,7 +620,7 @@ export default function LivestockCategoriesScreen() {
                 <ActivityIndicator color={Colors.white} />
               ) : (
                 <Text style={styles.saveBtnText}>
-                  {editingId ? "Update Category" : "Save Category"}
+                  Update Category
                 </Text>
               )}
             </TouchableOpacity>
@@ -711,29 +696,10 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     lineHeight: 17,
   },
-  quickAddRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  quickAddCowBtn: {
-    flex: 1,
-    backgroundColor: "#1E40AF",
-    paddingVertical: 8,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  quickAddSwineBtn: {
-    flex: 1,
-    backgroundColor: "#DB2777",
-    paddingVertical: 8,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  quickAddBtnText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Colors.white,
-  },
+  pickerSubtitle: { fontSize: 12, color: Colors.textSecondary, marginTop: 3 },
+  categoryChoice: { paddingVertical: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  categoryChoiceName: { fontSize: FontSize.md, fontWeight: "700", color: Colors.text },
+  categoryChoiceMeta: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
   loadingBox: {
     alignItems: "center",
     paddingVertical: 60,

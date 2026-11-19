@@ -8,6 +8,7 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Keyb
 import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/FontScale';
 import { modalAlert } from '@/components/ui/ModalAlert';
 import firestore from '@react-native-firebase/firestore';
+import { markCurrentContentViewed } from '@/services/contentViewService';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
 import { Icon, Avatar } from '@/components/ui';
@@ -72,6 +73,7 @@ export default function ForumViewScreen() {
             } catch (e) {}
           }
           setPost(postData);
+          await markCurrentContentViewed('forum', doc.id);
           // Increment views
           await firestore().collection(Collections.COMMUNITY_FORUM).doc(id).update({
             views: firestore.FieldValue.increment(1)

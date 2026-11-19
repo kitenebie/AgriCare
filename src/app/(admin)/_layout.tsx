@@ -5,6 +5,7 @@ import { AppText as Text } from '@/components/ui/FontScale';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, FontSize } from '@/constants/theme';
 import { Icon, IconName } from '@/components/ui';
+import { HeartbeatTracker } from '@/components/HeartbeatTracker';
 
 interface TabIconProps {
   iconName: IconName;
@@ -30,37 +31,40 @@ export default function AdminLayout() {
   const tabBarHeight = 56 + bottomPadding;
 
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: [
-          styles.tabBar,
-          {
-            height: tabBarHeight,
-            paddingBottom: bottomPadding,
-            paddingTop: 6,
-          },
-        ],
-        tabBarShowLabel: false,
-      }}
-    >
-      <Tabs.Screen
-        name="home"
-        options={{ tabBarIcon: ({ focused }) => <TabIcon iconName="home" label="Home" focused={focused} /> }}
-      />
-      <Tabs.Screen
-        name="forum"
-        options={{ tabBarIcon: ({ focused }) => <TabIcon iconName="messages" label="Forum" focused={focused} /> }}
-      />
-      <Tabs.Screen
-        name="livestock"
-        options={{ tabBarIcon: ({ focused }) => <TabIcon iconName="hen" label="Livestock" focused={focused} /> }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{ tabBarIcon: ({ focused }) => <TabIcon iconName="profile" label="Profile" focused={focused} /> }}
-      />
-    </Tabs>
+    <>
+      <HeartbeatTracker />
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarStyle: [
+            styles.tabBar,
+            {
+              height: tabBarHeight,
+              paddingBottom: bottomPadding,
+              paddingTop: 6,
+            },
+          ],
+          tabBarShowLabel: false,
+        }}
+      >
+        <Tabs.Screen
+          name="home"
+          options={{ tabBarIcon: ({ focused }) => <TabIcon iconName="home" label="Home" focused={focused} /> }}
+        />
+        <Tabs.Screen
+          name="forum"
+          options={{ tabBarIcon: ({ focused }) => <TabIcon iconName="messages" label="Forum" focused={focused} /> }}
+        />
+        <Tabs.Screen
+          name="livestock"
+          options={{ href: null }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{ tabBarIcon: ({ focused }) => <TabIcon iconName="profile" label="Profile" focused={focused} /> }}
+        />
+      </Tabs>
+    </>
   );
 }
 

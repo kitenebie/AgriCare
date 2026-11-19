@@ -7,9 +7,14 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
               import WebView from 'react-native-webview';
               import { Colors, Spacing, FontSize, BorderRadius } from '@/constants/theme';
               import { Icon } from '@/components/ui';
+import IdentityVerificationResult from '@/components/auth/IdentityVerificationResult';
               import { signUp } from '@/services/authService';
+              import { sendRegistrationEmailOtp, verifyRegistrationEmailOtp } from '@/services/emailVerificationService';
               import { uploadImageToSupabase } from '@/services/storage';
               import * as ImagePicker from 'expo-image-picker';
+import { decode as base64Decode } from 'base64-arraybuffer';
+import { File, Paths } from 'expo-file-system';
+import { fetch as expoFetch } from 'expo/fetch';
               import regions from '../../../assets/addresses/region.json';
               import provinces from '../../../assets/addresses/province.json';
               import municipalities from '../../../assets/addresses/muncity.json';
@@ -37,15 +42,14 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                 };
               };
 
+              const getInitialStreetPurok = (address = '') => {
+                const parts = address.split(',').map((part) => part.trim());
+                const barangayIndex = parts.findIndex((part) => barangays.some((item) => item.description === part));
+                return barangayIndex > 0 ? parts.slice(0, barangayIndex).join(', ') : '';
+              };
+
               // Generate a random session ID for face detection
               const generateSessionId = () => `agricare_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
-
-              const EXPERTISE_OPTIONS = [
-                { id: 'cow_treatment', label: 'Cow Healthcare & Treatment 🐄', category: 'cow' },
-                { id: 'swine_treatment', label: 'Swine Healthcare & Treatment 🐖', category: 'swine' },
-                { id: 'cow_breeding', label: 'Cow Breeding & Artificial Insemination 🧬🐄', category: 'cow' },
-                { id: 'swine_breeding', label: 'Swine Breeding & Gestation 🧬🐖', category: 'swine' },
-              ];
 
               export default function RegisterScreen() {
                 const insets = useSafeAreaInsets();
@@ -63,16 +67,60 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                 const [email, setEmail] = useState(params.email || '');
                 const [password, setPassword] = useState('');
                 const [confirmPassword, setConfirmPassword] = useState('');
+                const isStrongPassword = /(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9\s]).{8,}/.test(password);
+                const passwordsMatch = password === confirmPassword;
                 const [phoneNumber, setPhoneNumber] = useState((params.phoneNumber || '').replace(/\D/g, '').slice(0, 11));
                 const [farmerPurok, setFarmerPurok] = useState(() => {
                   const match = params.location?.match(/^Purok ([1-7])/i);
                   return match?.[1] || '1';
                 });
                 const [selectedAddress, setSelectedAddress] = useState(() => getInitialAddress(params.location));
+                const [streetPurok, setStreetPurok] = useState(() => getInitialStreetPurok(params.location));
                 const [addressPicker, setAddressPicker] = useState<AddressPicker>(null);
                 const [role, setRole] = useState<Role>((params.role as Role) || 'farmer');
+                const [registrationStep, setRegistrationStep] = useState(0);
                 const [showPassword, setShowPassword] = useState(false);
                 const [loading, setLoading] = useState(false);
+                const [emailVerified, setEmailVerified] = useState(false);
+                const [verificationTicket, setVerificationTicket] = useState('');
+                const [showOtpModal, setShowOtpModal] = useState(false);
+                const [otpCode, setOtpCode] = useState('');
+                const [otpLoading, setOtpLoading] = useState(false);
+                const [showMatchResult, setShowMatchResult] = useState(false);
+                const [matchStatus, setMatchStatus] = useState<'checking' | 'matched' | 'failed' | 'saved'>('checking');
+                const [matchMessage, setMatchMessage] = useState('');
+                const [matchFailureKind, setMatchFailureKind] = useState<'mismatch' | 'image' | 'service' | 'registration'>('service');
+                const [faceIdVerified, setFaceIdVerified] = useState(false);
+                const [emailOtpPending, setEmailOtpPending] = useState(false);
+                const registrationSteps = role === 'technician'
+                  ? ['Account', 'Password', 'Address', 'Face Photo', 'ID Photo', 'Credentials']
+                  : ['Account', 'Password', 'Address', 'Face Photo', 'ID Photo'];
+
+                function continueRegistration() {
+                  if (registrationStep === 0) {
+                    if (!displayName.trim()) return modalAlert('Name Required', 'Enter your full name.');
+                    if (!/^[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ .'-]*$/.test(displayName.trim())) return modalAlert('Invalid Name', 'Use letters only, with spaces, apostrophes, or hyphens.');
+                    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return modalAlert('Invalid Email', 'Enter a valid email address.');
+                    if (!/^\d{11}$/.test(phoneNumber)) return modalAlert('Invalid Phone Number', 'Enter an 11-digit phone number.');
+                  } else if (registrationStep === 1) {
+                    if (!password || !confirmPassword) return modalAlert('Password Required', 'Enter and confirm your password.');
+                    if (!passwordsMatch) return modalAlert('Error', 'Passwords do not match.');
+                    if (!isStrongPassword) return modalAlert('Weak Password', 'Use at least 8 characters with uppercase and lowercase letters, a number, and a symbol.');
+                  } else if (registrationStep === 2) {
+                    if (role === 'technician' && !streetPurok.trim()) return modalAlert('Street / Purok Required', 'Enter your street or purok.');
+                    if (role === 'technician' && (!selectedAddress.region || !selectedAddress.province || !selectedAddress.municipality || !selectedAddress.barangay)) return modalAlert('Address Required', 'Please select region, province, city/municipality, and barangay.');
+                  } else if (registrationStep === 3) {
+                    if (!profilePhotoUrl) return modalAlert('Profile Photo Required', 'Please take or upload a profile photo.');
+                  } else if (registrationStep === 4) {
+                    if (!idImageUrl) return modalAlert('ID Required', 'Please capture or upload an ID with a clear face photo.');
+                  } else if (role === 'technician') {
+                    if (!specializationInput.split(',').some((item) => item.trim())) return modalAlert('Specialization Required', 'Enter at least one specialization.');
+                    if (!proofImageUrl.trim()) return modalAlert('Proof Required', 'Please upload a photo of your technician license, ID, or certificate of qualification.');
+                  }
+
+                  if (registrationStep === registrationSteps.length - 1) handleRegister();
+                  else setRegistrationStep((step) => step + 1);
+                }
 
                 const addressOptions = useMemo<AddressOption[]>(() => {
                   switch (addressPicker) {
@@ -114,21 +162,44 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                   setAddressPicker(null);
                 };
 
+                const handleVerifyEmailOtp = async () => {
+                  if (!/^\d{6}$/.test(otpCode)) {
+                    modalAlert('Invalid Code', 'Enter the 6-digit code sent to your email.');
+                    return;
+                  }
+                  setOtpLoading(true);
+                  try {
+                    const ticket = await verifyRegistrationEmailOtp(email.trim(), otpCode);
+                    console.info('[Registration] verified OTP ticket metadata', { length: ticket.length });
+                    setVerificationTicket(ticket);
+                    setEmailVerified(true);
+                    setShowOtpModal(false);
+                    setOtpCode('');
+                    await handleRegister(ticket);
+                  } catch (error: any) {
+                    modalAlert('Verification Failed', error.message || 'Check the code and try again.');
+                  } finally {
+                    setOtpLoading(false);
+                  }
+                };
+
                 // Profile Photo (required for both farmer and technician)
                 const [profilePhotoUrl, setProfilePhotoUrl] = useState('');
 
                 // Technician Specific States
-                const [selectedExpertise, setSelectedExpertise] = useState<string[]>([
-                  'Cow Healthcare & Treatment 🐄',
-                ]);
+                const [specializationInput, setSpecializationInput] = useState('');
                 const [proofImageUrl, setProofImageUrl] = useState('');
                 const [uploadingProof, setUploadingProof] = useState(false);
                 const [idImageUrl, setIdImageUrl] = useState('');
+                const [faceImageUri, setFaceImageUri] = useState('');
 
                 // Face Detection WebView state
                 const [cameraVisible, setCameraVisible] = useState(false);
                 const [sessionId] = useState(generateSessionId);
                 const webviewRef = useRef<WebView>(null);
+                const registrationScrollRef = useRef<ScrollView>(null);
+                const captureSectionY = useRef(0);
+                useEffect(() => { registrationScrollRef.current?.scrollTo({ y: 0, animated: false }); }, [registrationStep]);
 
                 const faceDetectionUrl = `https://earms.online/face-detection/${sessionId}`;
 
@@ -259,6 +330,8 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                   try {
                     const data = JSON.parse(event.nativeEvent.data);
                     if (data.type === 'photo-captured' && data.photoUri) {
+                      setFaceImageUri(data.photoUri);
+                      setFaceIdVerified(false);
                       // Immediately upload to Supabase
                       const bucket = role === 'technician' ? 'technician_profile_photo' : 'farmer_profile_photo';
                       setProfilePhotoUrl(data.photoUri); // Show preview right away
@@ -281,19 +354,6 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                     console.warn('[Register] Error parsing webview message:', error);
                   }
                 }, [role]);
-
-                // Toggle Multiple Expertise Selection
-                const toggleExpertise = (label: string) => {
-                  if (selectedExpertise.includes(label)) {
-                    if (selectedExpertise.length === 1) {
-                      modalAlert('Required', 'Please keep at least one expertise role selected.');
-                      return;
-                    }
-                    setSelectedExpertise(selectedExpertise.filter((item) => item !== label));
-                  } else {
-                    setSelectedExpertise([...selectedExpertise, label]);
-                  }
-                };
 
                 // Pick Proof Image
                 const handlePickProof = async () => {
@@ -330,7 +390,8 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                   }
                 };
 
-                const handleRegister = async () => {
+                async function handleRegister(ticket = verificationTicket) {
+                  console.info('[Registration] submit ticket metadata', { length: ticket?.length || 0 });
                   // Basic Validation
                   if (!displayName.trim() || !email.trim() || !password || !confirmPassword) {
                     modalAlert('Error', 'Please fill in all required fields.');
@@ -344,16 +405,16 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                     modalAlert('Invalid Email', 'Enter a valid email address.');
                     return;
                   }
-                  if (phoneNumber && !/^\d{11}$/.test(phoneNumber)) {
+                  if (!/^\d{11}$/.test(phoneNumber)) {
                     modalAlert('Invalid Phone Number', 'Enter an 11-digit phone number.');
                     return;
                   }
-                  if (password !== confirmPassword) {
+                  if (!passwordsMatch) {
                     modalAlert('Error', 'Passwords do not match.');
                     return;
                   }
-                  if (password.length < 6) {
-                    modalAlert('Error', 'Password must be at least 6 characters.');
+                  if (!isStrongPassword) {
+                    modalAlert('Weak Password', 'Use at least 8 characters with uppercase and lowercase letters, a number, and a symbol.');
                     return;
                   }
                   if (!profilePhotoUrl) {
@@ -362,13 +423,18 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                   }
 
                   // Technician Specific Validation
+                  const technicianExpertise = specializationInput.split(',').map((item) => item.trim()).filter(Boolean);
                   if (role === 'technician') {
+                    if (!streetPurok.trim()) {
+                      modalAlert('Street / Purok Required', 'Enter your street or purok.');
+                      return;
+                    }
                     if (!selectedAddress.region || !selectedAddress.province || !selectedAddress.municipality || !selectedAddress.barangay) {
                       modalAlert('Address Required', 'Please select region, province, city/municipality, and barangay.');
                       return;
                     }
-                    if (selectedExpertise.length === 0) {
-                      modalAlert('Error', 'Please select at least one expertise role.');
+                    if (technicianExpertise.length === 0) {
+                      modalAlert('Error', 'Enter at least one specialization.');
                       return;
                     }
                     if (!proofImageUrl.trim()) {
@@ -380,24 +446,88 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                     }
                   }
 
-                  // Farmer requires ID photo
-                  if (role === 'farmer' && !idImageUrl) {
-                    modalAlert('Error', 'Please capture or upload your valid ID for verification.');
+                  if (!idImageUrl) {
+                    modalAlert('ID Required', 'Please capture or upload your valid ID for verification.');
+                    return;
+                  }
+                  if (!faceImageUri) {
+                    modalAlert('Face Photo Required', 'Please take a clear face photo for ID matching.');
                     return;
                   }
 
                   const registrationLocation = role === 'technician'
-                    ? `${selectedAddress.barangay.description}, ${selectedAddress.municipality.description}, ${selectedAddress.province.description}`
+                    ? `${streetPurok.trim()}, ${selectedAddress.barangay?.description || ''}, ${selectedAddress.municipality?.description || ''}, ${selectedAddress.province?.description || ''}`
                     : `Purok ${farmerPurok}, Gabao, Irosin, Sorsogon`;
 
                   setLoading(true);
+                  let faceIdMatched = faceIdVerified;
+                  const faceMatchTempFiles: File[] = [];
                   try {
-                    // Upload farmer ID if provided
+                    if (!faceIdVerified) {
+                      setMatchStatus('checking');
+                      setMatchMessage('Comparing your face photo with your ID...');
+                      setShowMatchResult(true);
+                      const form = new FormData();
+                      const appendImage = async (key: string, uri: string, filename: string) => {
+                        if (uri.startsWith('data:')) {
+                          const image = uri.match(/^data:(image\/[\w.+-]+);base64,(.+)$/);
+                          if (!image) throw new Error('Captured face image is not valid. Please retake it.');
+                          const faceMatchTempFile = new File(Paths.cache, `${Date.now()}_${filename}`);
+                          faceMatchTempFile.create();
+                          faceMatchTempFile.write(new Uint8Array(base64Decode(image[2])));
+                          faceMatchTempFiles.push(faceMatchTempFile);
+                          form.append(key, faceMatchTempFile);
+                        } else {
+                          form.append(key, new File(uri));
+                        }
+                      };
+                      await appendImage('reference_image', idImageUrl, 'id.jpg');
+                      await appendImage('compare_image', faceImageUri, 'face.jpg');
+                      const response = await expoFetch('https://meet.earms.site/api/v1/match', { method: 'POST', body: form });
+                      const matchResult = await response.json().catch(() => ({}));
+                      if (!response.ok || !matchResult.match) {
+                        const detail = typeof matchResult.detail === 'string'
+                          ? matchResult.detail
+                          : Array.isArray(matchResult.detail) ? matchResult.detail.map((item: any) => item.msg).join(', ') : '';
+                        const errorMessage = detail || matchResult.message || 'The face in your photo does not match the ID. Please retake both images.';
+                        const faceHint = /exactly one detectable face|found 0/i.test(errorMessage)
+                          ? ' Retake a clear, front-facing selfie and upload an ID with one clear, unobstructed face photo.'
+                          : '';
+                        console.warn('[Face ID Match] Verification rejected', { status: response.status, detail: errorMessage });
+                        setMatchFailureKind(response.ok ? 'mismatch' : response.status === 422 ? 'image' : 'service');
+                        setMatchStatus('failed');
+                        setMatchMessage(`${response.ok ? errorMessage : detail || matchResult.message || 'Face and ID verification is unavailable. Please try again.'}${faceHint}`);
+                        return;
+                      }
+                      setFaceIdVerified(true);
+                    } else {
+                      setMatchStatus('matched');
+                      setMatchMessage('Face and ID matched. Saving your registration...');
+                      setShowMatchResult(true);
+                    }
+                    faceIdMatched = true;
+                    setMatchStatus('matched');
+                    setMatchMessage('Face and ID matched.');
+
+                    if (!ticket) {
+                      await sendRegistrationEmailOtp(email.trim());
+                      setEmailVerified(false);
+                      setVerificationTicket('');
+                      setOtpCode('');
+                      setEmailOtpPending(true);
+                      setMatchMessage('Face and ID matched. Continue to verify your email.');
+                      return;
+                    }
+                    setMatchMessage('Face and ID matched. Saving your registration...');
+
+                    // Upload ID for registration
                     let uploadedIdUrl = '';
-                    if (role === 'farmer' && idImageUrl) {
-                      const idResult = await uploadImageToSupabase(idImageUrl, 'farmers_proof');
+                    if (idImageUrl) {
+                      const idResult = await uploadImageToSupabase(idImageUrl, role === 'technician' ? 'technician_proof' : 'farmers_proof');
                       if (idResult.success && idResult.publicUrl) {
                         uploadedIdUrl = idResult.publicUrl;
+                      } else {
+                        throw new Error('Could not upload your ID. Please try again.');
                       }
                     }
 
@@ -413,10 +543,12 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                       password,
                       displayName.trim(),
                       role,
+                      ticket,
                       role === 'technician'
                         ? {
-                            expertise: selectedExpertise,
+                            expertise: technicianExpertise,
                             proofImageUrl: proofImageUrl.trim(),
+                            idImageUrl: uploadedIdUrl,
                             phoneNumber: phoneNumber.trim(),
                             location: registrationLocation,
                             photoURL: uploadedProfileUrl,
@@ -429,20 +561,11 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                           }
                     );
 
-                    modalAlert(
-                      '✅ Registration Submitted!',
-                      'Your account is pending verification by an admin. You will be notified once your account is approved.',
-                      [
-                        {
-                          text: 'Continue',
-                          onPress: () => {
-                            router.replace('/(auth)/pending-verification');
-                          },
-                        },
-                      ]
-                    );
+                    setMatchStatus('saved');
+                    setMatchMessage('Face and ID matched. Your registration has been saved.');
                   } catch (error: any) {
-                    let message = 'Registration failed. Please try again.';
+                    let message = error.message || 'Registration failed. Please try again.';
+                    if (!faceIdMatched) console.error('[Face ID Match] Verification request failed', message);
                     if (error.code === 'auth/email-already-in-use') {
                       message = 'An account with this email already exists.';
                     } else if (error.code === 'auth/invalid-email') {
@@ -450,11 +573,16 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                     } else if (error.code === 'auth/weak-password') {
                       message = 'Password is too weak. Use at least 6 characters.';
                     }
-                    modalAlert('Registration Failed', message);
+                    setMatchStatus('failed');
+                    setMatchFailureKind(faceIdMatched && ticket ? 'registration' : 'service');
+                    setMatchMessage(faceIdMatched
+                      ? ticket ? `Face and ID matched, but registration could not be saved: ${message}` : `Face and ID matched, but email verification could not continue: ${message}`
+                      : message);
                   } finally {
+                    faceMatchTempFiles.forEach((file) => { try { file.delete(); } catch {} });
                     setLoading(false);
                   }
-                };
+                }
 
                 // ─── Full-screen Face Detection WebView ───
                 if (cameraVisible) {
@@ -462,7 +590,7 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                     <View style={{ flex: 1, backgroundColor: '#000' }}>
                       <WebView
                         ref={webviewRef}
-                        style={StyleSheet.absoluteFillObject}
+                        style={StyleSheet.absoluteFill}
                         source={{ uri: faceDetectionUrl }}
                         onMessage={handleWebViewMessage}
                         javaScriptEnabled={true}
@@ -483,15 +611,40 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                   );
                 }
 
+                if (showMatchResult) {
+                  return (
+                    <IdentityVerificationResult
+                      status={matchStatus}
+                      failureKind={matchFailureKind}
+                      message={matchMessage}
+                      faceUri={faceImageUri}
+                      idUri={idImageUrl}
+                      emailOtpPending={emailOtpPending}
+                      onPrimary={() => {
+                        if (matchStatus === 'saved') router.replace('/(auth)/pending-verification');
+                        else if (emailOtpPending) { setEmailOtpPending(false); setShowMatchResult(false); setShowOtpModal(true); }
+                      }}
+                      onRetry={() => {
+                        setShowMatchResult(false);
+                        setFaceIdVerified(false);
+                        setEmailOtpPending(false);
+                        setTimeout(() => registrationScrollRef.current?.scrollTo({ y: captureSectionY.current, animated: true }), 100);
+                      }}
+                      onSupport={() => modalAlert('Contact Support', 'Please contact your AgriCare administrator for assistance.')}
+                    />
+                  );
+                }
+
                 return (
                   <KeyboardAvoidingView
                     style={styles.container}
                     behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                   >
                     <ScrollView
+                      ref={registrationScrollRef}
                       contentContainerStyle={[
                         styles.content,
-                        { paddingTop: 20, paddingBottom: insets.bottom + 20 },
+                        { paddingTop: 20, paddingBottom: insets.bottom + 104 },
                       ]}
                       showsVerticalScrollIndicator={false}
                       keyboardShouldPersistTaps="handled"
@@ -512,8 +665,15 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                         <View style={{ width: 36 }} />
                       </View>
 
+                      <View style={styles.stepProgress}>
+                        <Text style={styles.stepText}>Step {registrationStep + 1} of {registrationSteps.length} · {registrationSteps[registrationStep]}</Text>
+                        <View style={styles.stepTrack}><View style={[styles.stepFill, { width: `${((registrationStep + 1) / registrationSteps.length) * 100}%` }]} /></View>
+                      </View>
+
+                      <View style={styles.form}>
+                      {registrationStep === 0 && <>
                       {/* Role Selector */}
-                      <Text style={styles.sectionLabel}>I am registering as a:</Text>
+                      <Text style={styles.sectionLabel}>I am registering as a: <Text style={styles.required}>*</Text></Text>
                       <View style={styles.roleSelector}>
                         <TouchableOpacity
                           style={[styles.roleOption, role === 'farmer' && styles.roleOptionActive, isFromRejected && role !== 'farmer' && { opacity: 0.4 }]}
@@ -536,9 +696,8 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                       </View>
 
                       {/* Form Fields */}
-                      <View style={styles.form}>
                         {/* Full Name */}
-                        <Text style={styles.inputLabel}>Full Name *</Text>
+                        <Text style={styles.inputLabel}>Full Name <Text style={styles.required}>*</Text></Text>
                         <View style={styles.inputContainer}>
                           <Icon name="profile" size={20} color={Colors.textSecondary} />
                           <TextInput
@@ -552,7 +711,7 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                         </View>
 
                         {/* Email */}
-                        <Text style={styles.inputLabel}>Email Address *</Text>
+                        <Text style={styles.inputLabel}>Email Address <Text style={styles.required}>*</Text></Text>
                         <View style={styles.inputContainer}>
                           <Icon name="messages" size={20} color={Colors.textSecondary} />
                           <TextInput
@@ -560,17 +719,24 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                             placeholder="Enter your email address"
                             placeholderTextColor={Colors.textLight}
                             value={email}
-                            onChangeText={setEmail}
+                            onChangeText={(value) => {
+                              setEmail(value);
+                              setEmailVerified(false);
+                              setVerificationTicket('');
+                            }}
                             keyboardType="email-address"
                             autoCapitalize="none"
                             autoCorrect={false}
                           />
                         </View>
+                        <Text style={[styles.emailHint, emailVerified && styles.emailVerified]}>
+                          {emailVerified ? 'Email verified' : 'A verification code will be sent before registration.'}
+                        </Text>
 
                         {/* Phone Number */}
-                        <Text style={styles.inputLabel}>Phone Number</Text>
+                        <Text style={styles.inputLabel}>Phone Number <Text style={styles.required}>*</Text></Text>
                         <View style={styles.inputContainer}>
-                          <Icon name="tag" size={20} color={Colors.textSecondary} />
+                          <Icon name="phone" size={20} color={Colors.textSecondary} />
                           <TextInput
                             style={styles.input}
                             placeholder="09XXXXXXXXX"
@@ -581,10 +747,28 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                             maxLength={11}
                           />
                         </View>
+                      </>}
+
+                      {registrationStep === 2 && <>
+                        {role === 'technician' && (
+                          <>
+                            <Text style={styles.inputLabel}>Street / Purok <Text style={styles.required}>*</Text></Text>
+                            <View style={styles.inputContainer}>
+                              <Icon name="location" size={20} color={Colors.textSecondary} />
+                              <TextInput
+                                style={styles.input}
+                                placeholder="Enter street or purok"
+                                placeholderTextColor={Colors.textLight}
+                                value={streetPurok}
+                                onChangeText={setStreetPurok}
+                              />
+                            </View>
+                          </>
+                        )}
 
                         {role === 'farmer' ? (
                           <>
-                            <Text style={styles.inputLabel}>Purok *</Text>
+                            <Text style={styles.inputLabel}>Purok <Text style={styles.required}>*</Text></Text>
                             <TouchableOpacity style={styles.inputContainer} onPress={() => setAddressPicker('purok')}>
                               <Icon name="location" size={20} color={Colors.textSecondary} />
                               <Text style={styles.input}>Purok {farmerPurok}</Text>
@@ -599,7 +783,7 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                             { key: 'barangay', label: 'Barangay', value: selectedAddress.barangay?.description, disabled: !selectedAddress.municipality },
                           ].map((field) => (
                             <React.Fragment key={field.key}>
-                              <Text style={styles.inputLabel}>{field.label} *</Text>
+                              <Text style={styles.inputLabel}>{field.label} <Text style={styles.required}>*</Text></Text>
                               <TouchableOpacity
                                 style={[styles.inputContainer, field.disabled && styles.disabledSelect]}
                                 disabled={field.disabled}
@@ -614,14 +798,16 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                             </React.Fragment>
                           ))
                         )}
+                      </>}
 
+                      {registrationStep === 1 && <>
                         {/* Password */}
-                        <Text style={styles.inputLabel}>Password *</Text>
+                        <Text style={styles.inputLabel}>Password <Text style={styles.required}>*</Text></Text>
                         <View style={styles.inputContainer}>
                           <Icon name="lock" size={20} color={Colors.textSecondary} />
                           <TextInput
                             style={styles.input}
-                            placeholder="Create a password (min 6 chars)"
+                            placeholder="8+ chars: uppercase, lowercase, number, symbol"
                             placeholderTextColor={Colors.textLight}
                             value={password}
                             onChangeText={setPassword}
@@ -631,9 +817,14 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                             <Icon name={showPassword ? 'close-eye' : 'eye'} size={20} color={Colors.textSecondary} />
                           </TouchableOpacity>
                         </View>
+                        {password.length > 0 && !isStrongPassword ? (
+                          <Text style={styles.fieldErrorText}>Use 8+ characters with uppercase and lowercase letters, a number, and a symbol.</Text>
+                        ) : (
+                          <Text style={styles.emailHint}>8+ characters, uppercase, lowercase, number, and symbol.</Text>
+                        )}
 
                         {/* Confirm Password */}
-                        <Text style={styles.inputLabel}>Confirm Password *</Text>
+                        <Text style={styles.inputLabel}>Confirm Password <Text style={styles.required}>*</Text></Text>
                         <View style={styles.inputContainer}>
                           <Icon name="lock" size={20} color={Colors.textSecondary} />
                           <TextInput
@@ -645,12 +836,17 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                             secureTextEntry={!showPassword}
                           />
                         </View>
+                        {confirmPassword.length > 0 && !passwordsMatch && (
+                          <Text style={styles.fieldErrorText}>Passwords do not match.</Text>
+                        )}
+                      </>}
 
+                      {registrationStep === 3 && <>
                         {/* ─── PROFILE PHOTO (Required for both roles) ─── */}
-                        <View style={styles.technicianSection}>
+                        <View style={styles.technicianSection} onLayout={(event) => { captureSectionY.current = event.nativeEvent.layout.y; }}>
                           <View style={styles.techSectionHeader}>
                             <Icon name="camera" size={20} color="#15803D" />
-                            <Text style={styles.techSectionTitle}>Profile Photo *</Text>
+                            <Text style={styles.techSectionTitle}>Profile Photo <Text style={styles.required}>*</Text></Text>
                           </View>
                           <Text style={{ fontSize: 13, color: Colors.textSecondary, marginBottom: 12, lineHeight: 18 }}>
                             Take a clear selfie of yourself. This will be your profile picture.
@@ -658,9 +854,6 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                           {profilePhotoUrl ? (
                             <View style={{ alignItems: 'center', marginBottom: 12 }}>
                               <Image source={{ uri: profilePhotoUrl }} style={{ width: 120, height: 120, borderRadius: 60, borderWidth: 3, borderColor: Colors.primary }} resizeMode="cover" />
-                              <TouchableOpacity style={{ marginTop: 8 }} onPress={() => setProfilePhotoUrl('')}>
-                                <Text style={{ color: Colors.error, fontWeight: '600', fontSize: 13 }}>Retake Photo</Text>
-                              </TouchableOpacity>
                             </View>
                           ) : null}
                           <TouchableOpacity
@@ -668,26 +861,25 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                             onPress={openFaceDetection}
                           >
                             <Icon name="camera" size={18} color="#15803D" />
-                            <Text style={styles.uploadProofBtnText}>{profilePhotoUrl ? 'Retake Photo' : 'Take Photo'}</Text>
+                            <Text style={styles.uploadProofBtnText}>{profilePhotoUrl ? 'Change Photo' : 'Take Photo'}</Text>
                           </TouchableOpacity>
                         </View>
+                      </>}
 
+                      {registrationStep === 4 && <>
                         {/* ─── FARMER ID CAPTURE ─── */}
                         {role === 'farmer' && (
                           <View style={styles.technicianSection}>
                             <View style={styles.techSectionHeader}>
                               <Icon name="profile" size={20} color="#15803D" />
-                              <Text style={styles.techSectionTitle}>Valid ID Verification</Text>
+                              <Text style={styles.techSectionTitle}>Valid ID Verification <Text style={styles.required}>*</Text></Text>
                             </View>
                             <Text style={{ fontSize: 13, color: Colors.textSecondary, marginBottom: 12, lineHeight: 18 }}>
-                              Please capture or upload a valid government-issued ID for verification.
+                              Please capture or upload a valid government-issued ID. The ID must include a clear face photo for matching.
                             </Text>
                             {idImageUrl ? (
                               <View style={{ alignItems: 'center', marginBottom: 12 }}>
                                 <Image source={{ uri: idImageUrl }} style={{ width: '100%', height: 160, borderRadius: 12 }} resizeMode="cover" />
-                                <TouchableOpacity style={{ marginTop: 8 }} onPress={() => setIdImageUrl('')}>
-                                  <Text style={{ color: Colors.error, fontWeight: '600', fontSize: 13 }}>Remove</Text>
-                                </TouchableOpacity>
                               </View>
                             ) : null}
                             <TouchableOpacity
@@ -698,11 +890,11 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                                     const { status } = await ImagePicker.requestCameraPermissionsAsync();
                                     if (status !== 'granted') { modalAlert('Permission Denied', 'Camera permission is required.'); return; }
                                     const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.8 });
-                                    if (!result.canceled && result.assets?.[0]?.uri) setIdImageUrl(result.assets[0].uri);
+                                    if (!result.canceled && result.assets?.[0]?.uri) { setIdImageUrl(result.assets[0].uri); setFaceIdVerified(false); }
                                   }},
                                   { text: 'Upload from Gallery', onPress: async () => {
                                     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.8 });
-                                    if (!result.canceled && result.assets?.[0]?.uri) setIdImageUrl(result.assets[0].uri);
+                                    if (!result.canceled && result.assets?.[0]?.uri) { setIdImageUrl(result.assets[0].uri); setFaceIdVerified(false); }
                                   }},
                                   { text: 'Cancel', style: 'cancel' },
                                 ]);
@@ -714,58 +906,64 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                           </View>
                         )}
 
-                        {/* ─── TECHNICIAN SPECIFIC FIELDS ─── */}
                         {role === 'technician' && (
+                          <View style={styles.technicianSection}>
+                            <View style={styles.techSectionHeader}>
+                              <Icon name="profile" size={20} color="#15803D" />
+                              <Text style={styles.techSectionTitle}>Face and ID Verification <Text style={styles.required}>*</Text></Text>
+                            </View>
+                            <Text style={{ fontSize: 13, color: Colors.textSecondary, marginBottom: 12, lineHeight: 18 }}>
+                              Capture a clear face photo above and upload a government-issued ID that includes a clear face photo for matching.
+                            </Text>
+                            {idImageUrl ? <Image source={{ uri: idImageUrl }} style={{ width: '100%', height: 160, borderRadius: 12, marginBottom: 12 }} resizeMode="cover" /> : null}
+                            <TouchableOpacity style={styles.uploadProofBtn} onPress={() => modalAlert('Upload ID', 'Choose an option', [
+                              { text: 'Camera', onPress: async () => {
+                                const { status } = await ImagePicker.requestCameraPermissionsAsync();
+                                if (status !== 'granted') { modalAlert('Permission Denied', 'Camera permission is required.'); return; }
+                                const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.8 });
+                                if (!result.canceled && result.assets?.[0]?.uri) { setIdImageUrl(result.assets[0].uri); setFaceIdVerified(false); }
+                              } },
+                              { text: 'Upload from Gallery', onPress: async () => {
+                                const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.8 });
+                                if (!result.canceled && result.assets?.[0]?.uri) { setIdImageUrl(result.assets[0].uri); setFaceIdVerified(false); }
+                              } },
+                              { text: 'Cancel', style: 'cancel' },
+                            ])}>
+                              <Icon name="image" size={20} color={Colors.primary} />
+                              <Text style={styles.uploadProofBtnText}>
+                                {idImageUrl ? 'Change ID Photo' : 'Upload ID Photo'}{!idImageUrl && <Text style={styles.required}> *</Text>}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+                      </>}
+
+                        {/* ─── TECHNICIAN SPECIFIC FIELDS ─── */}
+                        {registrationStep === 5 && role === 'technician' && (
                           <View style={styles.technicianSection}>
                             <View style={styles.techSectionHeader}>
                               <Icon name="health-check" size={20} color="#15803D" />
                               <Text style={styles.techSectionTitle}>Technician Specializations & Proof</Text>
                             </View>
 
-                            {/* Multiple Expertise Role Selector */}
-                            <Text style={styles.inputLabel}>
-                              Expertise & Roles (Multiple Selection Allowed) *
-                            </Text>
+                            <Text style={styles.inputLabel}>Technician Specializations <Text style={styles.required}>*</Text></Text>
                             <Text style={styles.expertiseSub}>
-                              Select all areas you are qualified to service:
+                              Separate specializations with commas.
                             </Text>
-
-                            <View style={styles.expertiseContainer}>
-                              {EXPERTISE_OPTIONS.map((opt) => {
-                                const isSelected = selectedExpertise.includes(opt.label);
-                                return (
-                                  <TouchableOpacity
-                                    key={opt.id}
-                                    style={[
-                                      styles.expertiseChip,
-                                      isSelected && styles.expertiseChipSelected,
-                                    ]}
-                                    onPress={() => toggleExpertise(opt.label)}
-                                    activeOpacity={0.8}
-                                  >
-                                    <View style={styles.checkboxIconBox}>
-                                      <Icon
-                                        name={isSelected ? 'check' : 'plus'}
-                                        size={14}
-                                        color={isSelected ? Colors.white : '#64748B'}
-                                      />
-                                    </View>
-                                    <Text
-                                      style={[
-                                        styles.expertiseChipText,
-                                        isSelected && styles.expertiseChipTextSelected,
-                                      ]}
-                                    >
-                                      {opt.label}
-                                    </Text>
-                                  </TouchableOpacity>
-                                );
-                              })}
+                            <View style={styles.inputContainer}>
+                              <TextInput
+                                style={styles.input}
+                                value={specializationInput}
+                                onChangeText={setSpecializationInput}
+                                placeholder="e.g., Cattle care, vaccination, breeding"
+                                accessibilityLabel="Technician specializations, separated by commas"
+                                returnKeyType="done"
+                              />
                             </View>
 
                             {/* Upload Proof Image */}
                             <Text style={[styles.inputLabel, { marginTop: 12 }]}>
-                              Upload Proof of Technician Qualification *
+                              Upload Proof of Technician Qualification <Text style={styles.required}>*</Text>
                             </Text>
                             <Text style={styles.expertiseSub}>
                               Please attach a photo of your vet license, certificate, accreditation card, or ID.
@@ -774,12 +972,6 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                             {proofImageUrl ? (
                               <View style={styles.proofPreviewContainer}>
                                 <Image source={{ uri: proofImageUrl }} style={styles.proofPreviewImage} />
-                                <TouchableOpacity
-                                  style={styles.removeProofBtn}
-                                  onPress={() => setProofImageUrl('')}
-                                >
-                                  <Icon name="close" size={14} color={Colors.white} />
-                                </TouchableOpacity>
                               </View>
                             ) : null}
 
@@ -822,31 +1014,31 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                           </View>
                         )}
 
-                        {/* Register Button */}
-                        <TouchableOpacity
-                          style={[styles.registerButton, loading && styles.registerButtonDisabled]}
-                          onPress={handleRegister}
-                          disabled={loading || uploadingProof}
-                          activeOpacity={0.8}
-                        >
-                          {loading ? (
-                            <ActivityIndicator color={Colors.white} />
-                          ) : (
-                            <Text style={styles.registerButtonText}>
-                              {role === 'technician' ? 'Submit Technician Registration' : 'Create Farmer Account'}
-                            </Text>
-                          )}
-                        </TouchableOpacity>
                       </View>
 
                       {/* Login Link */}
-                      <View style={styles.loginContainer}>
+                      {registrationStep === 0 && <View style={styles.loginContainer}>
                         <Text style={styles.loginText}>Already have an account? </Text>
                         <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
                           <Text style={styles.loginLink}>Log In</Text>
                         </TouchableOpacity>
-                      </View>
+                      </View>}
                     </ScrollView>
+                    <View style={[styles.wizardFooter, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+                      {registrationStep > 0 && <TouchableOpacity style={styles.wizardBack} onPress={() => setRegistrationStep((step) => step - 1)} disabled={loading}>
+                        <Text style={styles.wizardBackText}>Back</Text>
+                      </TouchableOpacity>}
+                      <TouchableOpacity
+                        style={[styles.registerButton, styles.wizardNext, (loading || uploadingProof) && styles.registerButtonDisabled]}
+                        onPress={continueRegistration}
+                        disabled={loading || uploadingProof}
+                        activeOpacity={0.8}
+                      >
+                        {loading ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.registerButtonText}>
+                          {registrationStep === registrationSteps.length - 1 ? (role === 'technician' ? 'Submit Technician Registration' : 'Create Farmer Account') : 'Continue'}
+                        </Text>}
+                      </TouchableOpacity>
+                    </View>
                     <Modal
                       transparent
                       visible={!!addressPicker}
@@ -870,6 +1062,56 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                             )}
                             ListEmptyComponent={<Text style={styles.addressOptionText}>No options available.</Text>}
                           />
+                        </View>
+                      </View>
+                    </Modal>
+                    <Modal
+                      transparent
+                      visible={showOtpModal}
+                      animationType="fade"
+                      onRequestClose={() => setShowOtpModal(false)}
+                    >
+                      <View style={styles.otpModalBackdrop}>
+                        <View style={styles.otpModalCard}>
+                          <Text style={styles.otpTitle}>Verify your email</Text>
+                          <Text style={styles.otpDescription}>Enter the 6-digit code sent to {email.trim()}.</Text>
+                          <TextInput
+                            style={styles.otpInput}
+                            value={otpCode}
+                            onChangeText={(value) => setOtpCode(value.replace(/\D/g, '').slice(0, 6))}
+                            placeholder="000000"
+                            keyboardType="number-pad"
+                            maxLength={6}
+                            autoFocus
+                          />
+                          <TouchableOpacity
+                            style={[styles.registerButton, (otpLoading || otpCode.length !== 6) && styles.registerButtonDisabled]}
+                            onPress={handleVerifyEmailOtp}
+                            disabled={otpLoading || otpCode.length !== 6}
+                          >
+                            {otpLoading ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.registerButtonText}>Verify email</Text>}
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.otpResend}
+                            disabled={otpLoading}
+                            onPress={async () => {
+                              setOtpLoading(true);
+                              try {
+                                await sendRegistrationEmailOtp(email.trim());
+                                setOtpCode('');
+                                modalAlert('Code Sent', 'A new verification code was sent to your email.');
+                              } catch (error: any) {
+                                modalAlert('Could Not Send Code', error.message || 'Please try again later.');
+                              } finally {
+                                setOtpLoading(false);
+                              }
+                            }}
+                          >
+                            <Text style={styles.otpResendText}>Resend code</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={() => setShowOtpModal(false)}>
+                            <Text style={styles.otpCancel}>Cancel</Text>
+                          </TouchableOpacity>
                         </View>
                       </View>
                     </Modal>
@@ -906,6 +1148,30 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                   fontWeight: '700',
                   color: Colors.text,
                 },
+                stepProgress: { marginBottom: Spacing.xl },
+                stepText: { color: Colors.textSecondary, fontSize: FontSize.sm, fontWeight: '700', marginBottom: 8 },
+                stepTrack: { height: 6, borderRadius: 3, backgroundColor: '#E2E8F0', overflow: 'hidden' },
+                stepFill: { height: '100%', borderRadius: 3, backgroundColor: Colors.primary },
+                wizardFooter: {
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: Spacing.md,
+                  paddingHorizontal: Spacing.xl,
+                  paddingTop: Spacing.sm,
+                  backgroundColor: Colors.white,
+                  borderTopWidth: 1,
+                  borderTopColor: '#E2E8F0',
+                },
+                wizardBack: {
+                  minWidth: 84,
+                  alignItems: 'center',
+                  paddingVertical: Spacing.md,
+                  borderWidth: 1,
+                  borderColor: Colors.primary,
+                  borderRadius: BorderRadius.full,
+                },
+                wizardBackText: { color: Colors.primary, fontSize: FontSize.md, fontWeight: '700' },
+                wizardNext: { flex: 1, marginTop: 0 },
                 sectionLabel: {
                   fontSize: FontSize.md,
                   fontWeight: '700',
@@ -950,6 +1216,7 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                   color: '#334155',
                   marginBottom: 6,
                 },
+                required: { color: '#DC2626' },
                 inputContainer: {
                   flexDirection: 'row',
                   alignItems: 'center',
@@ -1005,6 +1272,41 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                   fontSize: FontSize.md,
                   color: Colors.text,
                 },
+                emailHint: {
+                  color: Colors.textSecondary,
+                  fontSize: FontSize.xs,
+                  marginTop: -Spacing.xs,
+                  marginBottom: Spacing.md,
+                },
+                emailVerified: { color: Colors.primary, fontWeight: '700' },
+                fieldErrorText: { color: Colors.error, fontSize: FontSize.xs, marginTop: Spacing.xs },
+                otpModalBackdrop: {
+                  flex: 1,
+                  justifyContent: 'center',
+                  padding: Spacing.lg,
+                  backgroundColor: 'rgba(15, 23, 42, 0.55)',
+                },
+                otpModalCard: {
+                  backgroundColor: Colors.white,
+                  borderRadius: BorderRadius.lg,
+                  padding: Spacing.lg,
+                },
+                otpTitle: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text },
+                otpDescription: { color: Colors.textSecondary, marginTop: Spacing.sm, marginBottom: Spacing.md },
+                otpInput: {
+                  borderWidth: 1,
+                  borderColor: Colors.border,
+                  borderRadius: BorderRadius.md,
+                  padding: Spacing.md,
+                  textAlign: 'center',
+                  letterSpacing: 8,
+                  fontSize: FontSize.xl,
+                  color: Colors.text,
+                  marginBottom: Spacing.md,
+                },
+                otpResend: { alignItems: 'center', padding: Spacing.md },
+                otpResendText: { color: Colors.primary, fontWeight: '700' },
+                otpCancel: { textAlign: 'center', color: Colors.textSecondary, padding: Spacing.sm },
 
                 // ─── Technician Section Styles ───
                 technicianSection: {
@@ -1031,43 +1333,6 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                   color: '#64748B',
                   marginBottom: 8,
                 },
-                expertiseContainer: {
-                  gap: 8,
-                  marginBottom: 12,
-                },
-                expertiseChip: {
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  backgroundColor: Colors.white,
-                  paddingVertical: 10,
-                  paddingHorizontal: 12,
-                  borderRadius: 14,
-                  borderWidth: 1.5,
-                  borderColor: '#CBD5E1',
-                },
-                expertiseChipSelected: {
-                  backgroundColor: '#1B5E20',
-                  borderColor: '#1B5E20',
-                },
-                checkboxIconBox: {
-                  width: 20,
-                  height: 20,
-                  borderRadius: 10,
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  marginRight: 8,
-                },
-                expertiseChipText: {
-                  fontSize: 13,
-                  fontWeight: '600',
-                  color: '#334155',
-                  flex: 1,
-                },
-                expertiseChipTextSelected: {
-                  color: Colors.white,
-                  fontWeight: '700',
-                },
-
                 // Proof Upload
                 proofUploadRow: {
                   flexDirection: 'column',
@@ -1110,17 +1375,6 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
                 proofPreviewImage: {
                   width: '100%',
                   height: '100%',
-                },
-                removeProofBtn: {
-                  position: 'absolute',
-                  top: 8,
-                  right: 8,
-                  width: 28,
-                  height: 28,
-                  borderRadius: 14,
-                  backgroundColor: 'rgba(0,0,0,0.6)',
-                  justifyContent: 'center',
-                  alignItems: 'center',
                 },
 
                 infoBox: {

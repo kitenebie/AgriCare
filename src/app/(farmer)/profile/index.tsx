@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Modal, Switch, ActivityIndicator, KeyboardAvoidingView, Platform, ImageBackground } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Modal, Switch, ActivityIndicator, KeyboardAvoidingView, Platform, ImageBackground, FlatList } from 'react-native';
 import { AppText as Text, AppTextInput as TextInput } from '@/components/ui/FontScale';
 import { modalAlert } from '@/components/ui/ModalAlert';
 import { router } from 'expo-router';
@@ -24,7 +24,8 @@ export default function FarmerProfileScreen() {
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editPhone, setEditPhone] = useState('');
-  const [editLocation, setEditLocation] = useState('');
+  const [editPurok, setEditPurok] = useState('1');
+  const [purokPickerOpen, setPurokPickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Security
@@ -50,7 +51,7 @@ export default function FarmerProfileScreen() {
             const data = doc.data();
             if (data?.photoURL) setPhotoURL(data.photoURL);
             if (data?.phoneNumber) setEditPhone(data.phoneNumber);
-            if (data?.location) setEditLocation(data.location);
+            if (data?.location) setEditPurok(data.location.match(/^Purok\s+([1-7])/i)?.[1] || '1');
           }
         } catch (e) {}
       }
@@ -80,6 +81,9 @@ export default function FarmerProfileScreen() {
   // ─── Account Settings Save ───
   const handleSaveAccount = async () => {
     if (!editName.trim()) { modalAlert('Error', 'Name cannot be empty.'); return; }
+    if (!/^[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ .'-]*$/.test(editName.trim())) { modalAlert('Invalid Name', 'Use letters only, with spaces, apostrophes, or hyphens.'); return; }
+    if (editPhone.trim() && !/^\d{11}$/.test(editPhone.trim())) { modalAlert('Invalid Phone Number', 'Enter an 11-digit phone number.'); return; }
+    if (!/^[1-7]$/.test(editPurok)) { modalAlert('Purok Required', 'Please select a valid Purok.'); return; }
     setSaving(true);
     try {
       const currentUser = auth().currentUser;
@@ -88,7 +92,7 @@ export default function FarmerProfileScreen() {
         await firestore().collection('users').doc(currentUser.uid).update({
           displayName: editName.trim(),
           phoneNumber: editPhone.trim(),
-          location: editLocation.trim()
+          location: `Purok ${editPurok}, Gabao, Irosin, Sorsogon`
         });
       }
       if (user) {
@@ -173,14 +177,34 @@ export default function FarmerProfileScreen() {
           <TextInput style={[styles.input, { color: Colors.textLight }]} value={editEmail} editable={false} />
           <Text style={{ fontSize: 11, color: Colors.textLight, marginTop: 4 }}>Email cannot be changed</Text>
           <Text style={styles.label}>Phone Number</Text>
-          <TextInput style={styles.input} value={editPhone} onChangeText={setEditPhone} placeholder="09xxxxxxxxx" placeholderTextColor={Colors.textLight} keyboardType="phone-pad" />
-          <Text style={styles.label}>Location</Text>
-          <TextInput style={styles.input} value={editLocation} onChangeText={setEditLocation} placeholder="Your location" placeholderTextColor={Colors.textLight} />
+          <TextInput style={styles.input} value={editPhone} onChangeText={(value) => setEditPhone(value.replace(/\D/g, '').slice(0, 11))} placeholder="09xxxxxxxxx" placeholderTextColor={Colors.textLight} keyboardType="number-pad" maxLength={11} />
+          <Text style={styles.label}>Purok *</Text>
+          <TouchableOpacity style={styles.input} onPress={() => setPurokPickerOpen(true)} accessibilityRole="button">
+            <Text style={{ color: Colors.text }}>Purok {editPurok}</Text>
+            <Text style={{ color: Colors.textLight }}>⌄</Text>
+          </TouchableOpacity>
+          <Text style={styles.addressExtension}>Gabao, Irosin, Sorsogon</Text>
           <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSaveAccount} disabled={saving}>
             {saving ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.saveBtnText}>Save Changes</Text>}
           </TouchableOpacity>
           </ScrollView>
         </View></View>
+        <Modal visible={purokPickerOpen} transparent animationType="slide" onRequestClose={() => setPurokPickerOpen(false)}>
+          <View style={styles.addressModalBackdrop}>
+            <View style={styles.addressModal}>
+              <Text style={styles.addressModalTitle}>Select Purok</Text>
+              <FlatList
+                data={Array.from({ length: 7 }, (_, index) => String(index + 1))}
+                keyExtractor={(item) => item}
+                renderItem={({ item }) => (
+                  <TouchableOpacity style={styles.addressOption} onPress={() => { setEditPurok(item); setPurokPickerOpen(false); }}>
+                    <Text style={styles.addressOptionText}>Purok {item}</Text>
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+          </View>
+        </Modal>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -255,6 +279,12 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },
   label: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.text, marginTop: Spacing.lg, marginBottom: Spacing.sm },
   input: { backgroundColor: Colors.surface, borderRadius: BorderRadius.lg, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, fontSize: FontSize.md, borderWidth: 1, borderColor: Colors.border, color: Colors.text },
+  addressExtension: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: Spacing.sm },
+  addressModalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+  addressModal: { maxHeight: '65%', backgroundColor: Colors.white, borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: BorderRadius.xl, padding: Spacing.lg },
+  addressModalTitle: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text, marginBottom: Spacing.md },
+  addressOption: { paddingVertical: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  addressOptionText: { fontSize: FontSize.md, color: Colors.text },
   saveBtn: { backgroundColor: Colors.primary, borderRadius: BorderRadius.full, paddingVertical: Spacing.lg, alignItems: 'center', marginTop: Spacing.xxl },
   saveBtnText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '700' },
   settingRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.lg, borderBottomWidth: 0.5, borderBottomColor: Colors.border },

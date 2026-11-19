@@ -1,4 +1,7 @@
 {
+  "functions": {
+    "source": "functions"
+  },
   "react-native": {
     "messaging_android_app": {
       "messaging_android_notification_channel_id": "default",

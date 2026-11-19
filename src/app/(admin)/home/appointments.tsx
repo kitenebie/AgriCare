@@ -13,8 +13,11 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
 export interface AppointmentRecord {
   id: string;
   serviceType: string;
+  animalType?: string;
   animalId?: string;
   animalName: string;
+  animalBreed?: string;
+  animalQuantity?: number;
   farmerId: string;
   farmerName: string;
   technicianId: string;
@@ -230,8 +233,11 @@ export default function AdminAppointmentsScreen() {
               return {
                 id: doc.id,
                 serviceType: safeStr(d.serviceType, "Health Check"),
+                animalType: safeStr(d.animalType, ""),
                 animalId: safeStr(d.animalId, ""),
                 animalName: safeStr(d.animalName, "Livestock"),
+                animalBreed: safeStr(d.animalBreed, ""),
+                animalQuantity: typeof d.animalQuantity === "number" ? d.animalQuantity : undefined,
                 farmerId: safeStr(d.farmerId, "farmer_001"),
                 farmerName: safeStr(d.farmerName, "Farmer User"),
                 technicianId: safeStr(d.technicianId, "tech_001"),
@@ -517,6 +523,7 @@ export default function AdminAppointmentsScreen() {
                   </View>
 
                   <Text style={styles.animalTitle}>{appt.animalName}</Text>
+                  {(appt.animalType || appt.animalBreed || appt.animalQuantity) ? <Text style={styles.scheduleText}>{[appt.animalType && `Type: ${appt.animalType}`, appt.animalBreed && `Breed: ${appt.animalBreed}`, appt.animalQuantity && `Quantity: ${appt.animalQuantity}`].filter(Boolean).join(" · ")}</Text> : null}
 
                   <View style={styles.scheduleRow}>
                     <Icon name="clock" size={14} color="#64748B" />
@@ -614,6 +621,7 @@ export default function AdminAppointmentsScreen() {
                   <Text style={styles.detailAnimalName}>
                     {selectedAppt.animalName}
                   </Text>
+                  {(selectedAppt.animalType || selectedAppt.animalBreed || selectedAppt.animalQuantity) ? <Text style={styles.detailMetaValue}>{[selectedAppt.animalType && `Type: ${selectedAppt.animalType}`, selectedAppt.animalBreed && `Breed: ${selectedAppt.animalBreed}`, selectedAppt.animalQuantity && `Quantity: ${selectedAppt.animalQuantity}`].filter(Boolean).join(" · ")}</Text> : null}
 
                   <View style={styles.detailMetaBox}>
                     <View style={styles.detailMetaRow}>

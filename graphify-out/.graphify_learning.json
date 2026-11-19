@@ -1,0 +1,70 @@
+{
+  "generated_at": "2026-11-09T06:48:03.893860+00:00",
+  "nodes": {
+    "src_components_locationtracker_locationtracker": {
+      "code_fingerprint": "4749351ea3037876d42e393ecd9f29eb4a2afed5bb879543b2570a3b7cf65c5d",
+      "label": "LocationTracker()",
+      "last": "2026-11-09T06:43:02.349717+00:00",
+      "provenance": [
+        {
+          "date": "2026-11-09T06:43:02.349717+00:00",
+          "outcome": "useful",
+          "q": "realtime ba naguupdate ang location ng mga users?"
+        }
+      ],
+      "score": 0.999919365,
+      "source_file": "src/components/LocationTracker.tsx",
+      "status": "tentative",
+      "uses": 1
+    },
+    "src_hooks_uselocationtracking_uselocationtracking": {
+      "code_fingerprint": "1a00104f65218771eff0cb1dcd9711a6cefcedf60f53d01f1dcd37418e010ef0",
+      "label": "useLocationTracking()",
+      "last": "2026-11-09T06:43:02.349717+00:00",
+      "provenance": [
+        {
+          "date": "2026-11-09T06:43:02.349717+00:00",
+          "outcome": "useful",
+          "q": "realtime ba naguupdate ang location ng mga users?"
+        }
+      ],
+      "score": 0.999919365,
+      "source_file": "src/hooks/useLocationTracking.ts",
+      "status": "tentative",
+      "uses": 1
+    },
+    "src_services_firebase_realtimedb": {
+      "code_fingerprint": "c8cfd62ada80c6af3e8040a28d409320e6e20a8303f75de2a81e9483f33ddc06",
+      "label": "RealtimeDB",
+      "last": "2026-11-09T06:43:02.349717+00:00",
+      "provenance": [
+        {
+          "date": "2026-11-09T06:43:02.349717+00:00",
+          "outcome": "useful",
+          "q": "realtime ba naguupdate ang location ng mga users?"
+        }
+      ],
+      "score": 0.999919365,
+      "source_file": "src/services/firebase.ts",
+      "status": "tentative",
+      "uses": 1
+    },
+    "src_services_locationservice_updatelocation": {
+      "code_fingerprint": "89fac31734ae97470a0e72a89594802ebec2f613cf3208583bf22e8460d4ede7",
+      "label": "updateLocation()",
+      "last": "2026-11-09T06:43:02.349717+00:00",
+      "provenance": [
+        {
+          "date": "2026-11-09T06:43:02.349717+00:00",
+          "outcome": "useful",
+          "q": "realtime ba naguupdate ang location ng mga users?"
+        }
+      ],
+      "score": 0.999919365,
+      "source_file": "src/services/locationService.ts",
+      "status": "tentative",
+      "uses": 1
+    }
+  },
+  "version": 1
+}

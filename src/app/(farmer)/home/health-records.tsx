@@ -3,7 +3,7 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } fro
 import { AppText as Text } from '@/components/ui/FontScale';
 import Animated from 'react-native-reanimated';
 import firestore from '@react-native-firebase/firestore';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
 import { Icon, Avatar } from '@/components/ui';
 import { useFadeInUp, useFadeIn } from '@/hooks/useAnimatedEntry';
@@ -12,7 +12,7 @@ import { getSession } from '@/services/sessionService';
 interface HealthRecord {
   id: string;
   animalId: string;
-  animalName: string;
+  animalType?: string;
   recordType: string;
   diagnosis: string;
   symptoms: string[];
@@ -49,11 +49,16 @@ const STATUS_COLORS: Record<string, { color: string; bg: string }> = {
 };
 
 export default function FarmerHealthRecordsPage() {
+  const { healthRecordId } = useLocalSearchParams<{ healthRecordId?: string }>();
   const [records, setRecords] = useState<HealthRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const headerAnim = useFadeIn(100);
   const contentAnim = useFadeInUp(200);
+
+  useEffect(() => {
+    if (healthRecordId && records.some((record) => record.id === healthRecordId)) setExpandedId(healthRecordId);
+  }, [healthRecordId, records]);
 
   useEffect(() => {
     let unsub: () => void = () => {};
@@ -65,10 +70,12 @@ export default function FarmerHealthRecordsPage() {
       unsub = firestore()
         .collection('healthRecords')
         .where('farmerId', '==', session.uid)
-        .orderBy('createdAt', 'desc')
         .onSnapshot(
           (snap) => {
-            setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() } as HealthRecord)));
+            const nextRecords = snap.docs.map(d => ({ id: d.id, ...d.data() } as HealthRecord));
+            const timestamp = (value: any) => value?.toMillis?.() ?? new Date(value || 0).getTime();
+            nextRecords.sort((a, b) => timestamp(b.createdAt || b.date) - timestamp(a.createdAt || a.date));
+            setRecords(nextRecords);
             setLoading(false);
           },
           (err) => {
@@ -129,7 +136,7 @@ export default function FarmerHealthRecordsPage() {
                       <Icon name={typeConfig.icon as any} size={20} color={typeConfig.color} />
                     </View>
                     <View style={s.cardHeaderInfo}>
-                      <Text style={s.cardAnimal}>{record.animalName}</Text>
+                      {!!record.animalType && <Text style={s.cardAnimal}>{record.animalType}</Text>}
                       <Text style={s.cardType}>{record.recordType.replace('_', ' ')}</Text>
                     </View>
                     <View style={[s.statusBadge, { backgroundColor: statusConfig.bg }]}>

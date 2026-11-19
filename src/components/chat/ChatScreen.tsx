@@ -32,6 +32,7 @@ import {
   submitRating,
 } from "@/services/ratingService";
 import { getSession } from "@/services/sessionService";
+import { listenToUserOnlineStatus } from "@/services/heartbeat";
 import { startTypingSound, stopTypingSound } from "@/services/soundService";
 import firestore from "@react-native-firebase/firestore";
 import { Image } from "expo-image";
@@ -425,6 +426,38 @@ const SwipeableMessage: React.FC<{
 // ═══════════════════════════════════════════════════════════
 // MAIN CHAT SCREEN
 // ═══════════════════════════════════════════════════════════
+const PresenceAvatar = ({
+  name,
+  imageUrl,
+  size,
+  online,
+}: {
+  name: string;
+  imageUrl?: string;
+  size: number;
+  online: boolean;
+}) => {
+  const dotSize = Math.min(14, Math.max(9, Math.round(size * 0.24)));
+  return (
+    <View style={{ position: "relative" }}>
+      <Avatar name={name} size={size} imageUrl={imageUrl} />
+      <View
+        style={{
+          position: "absolute",
+          top: 1,
+          right: 1,
+          width: dotSize,
+          height: dotSize,
+          borderRadius: dotSize / 2,
+          borderWidth: 2,
+          borderColor: Colors.white,
+          backgroundColor: online ? Colors.success : "#9CA3AF",
+        }}
+      />
+    </View>
+  );
+};
+
 export default function ChatScreen() {
   const params = useLocalSearchParams<{
     chatId: string;
@@ -442,6 +475,8 @@ export default function ChatScreen() {
   const [myName, setMyName] = useState("");
   const [myPhoto, setMyPhoto] = useState("");
   const [otherPhoto, setOtherPhoto] = useState(params.otherPhoto || "");
+  const [isOtherOnline, setIsOtherOnline] = useState(false);
+  const [isSelfOnline, setIsSelfOnline] = useState(false);
   const [isOtherTyping, setIsOtherTyping] = useState(false);
   const [userRole, setUserRole] = useState("");
   const flatListRef = useRef<FlatList>(null);
@@ -477,6 +512,18 @@ export default function ChatScreen() {
   const [otherUserRole, setOtherUserRole] = useState("");
   const [otherUserEmail, setOtherUserEmail] = useState("");
   const [otherUserPhone, setOtherUserPhone] = useState("");
+
+  useEffect(() => {
+    setIsOtherOnline(false);
+    if (!otherUserId) return;
+    return listenToUserOnlineStatus(otherUserId, setIsOtherOnline);
+  }, [otherUserId]);
+
+  useEffect(() => {
+    setIsSelfOnline(false);
+    if (!uid) return;
+    return listenToUserOnlineStatus(uid, setIsSelfOnline);
+  }, [uid]);
 
   useEffect(() => {
     if (!chatId) return;
@@ -818,10 +865,11 @@ export default function ChatScreen() {
             style={[s.messageRow, isMe ? s.messageRowRight : s.messageRowLeft]}
           >
             {!isMe && (
-              <Avatar
+              <PresenceAvatar
                 name={otherUserName || "User"}
                 size={30}
                 imageUrl={otherPhoto || undefined}
+                online={isOtherOnline}
               />
             )}
             <View style={{ maxWidth: "70%" }}>
@@ -951,10 +999,11 @@ export default function ChatScreen() {
               />
             </View>
             {isMe && (
-              <Avatar
+              <PresenceAvatar
                 name={myName || "Me"}
                 size={30}
                 imageUrl={myPhoto || undefined}
+                online={isSelfOnline}
               />
             )}
           </View>
@@ -998,10 +1047,11 @@ export default function ChatScreen() {
             onPress={() => setShowProfileModal(true)}
             activeOpacity={0.9}
           >
-            <Avatar
+            <PresenceAvatar
               name={otherUserName || "User"}
               size={48}
               imageUrl={otherPhoto || undefined}
+              online={isOtherOnline}
             />
             <View style={s.headerInfo}>
               <Text style={s.headerName} numberOfLines={1}>
@@ -1041,6 +1091,12 @@ export default function ChatScreen() {
         <View style={s.center}>
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
+      ) : messages.length === 0 ? (
+        <View style={s.emptyChat}>
+          <Icon name="messages" size={48} color={Colors.textLight} />
+          <Text style={s.emptyChatText}>No messages yet</Text>
+          <Text style={s.emptyChatSubtext}>Say hello! 👋</Text>
+        </View>
       ) : (
         <FlatList
           ref={flatListRef}
@@ -1051,13 +1107,6 @@ export default function ChatScreen() {
           extraData={uid}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={s.messagesList}
-          ListEmptyComponent={
-            <View style={s.emptyChat}>
-              <Icon name="messages" size={48} color={Colors.textLight} />
-              <Text style={s.emptyChatText}>No messages yet</Text>
-              <Text style={s.emptyChatSubtext}>Say hello! 👋</Text>
-            </View>
-          }
         />
       )}
 
@@ -1168,10 +1217,11 @@ export default function ChatScreen() {
             </TouchableOpacity>
 
             {/* Avatar */}
-            <Avatar
+            <PresenceAvatar
               name={otherUserName || "User"}
               size={80}
               imageUrl={otherPhoto || undefined}
+              online={isOtherOnline}
             />
 
             {/* Name */}
@@ -1390,9 +1440,9 @@ const s = StyleSheet.create({
   },
   sendBtnDisabled: { backgroundColor: Colors.textLight },
   emptyChat: {
+    flex: 1,
     alignItems: "center",
-    paddingTop: 100,
-    transform: [{ scaleY: -1 }],
+    justifyContent: "center",
   },
   emptyChatText: {
     fontSize: FontSize.md,

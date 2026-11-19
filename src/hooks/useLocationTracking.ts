@@ -34,10 +34,19 @@ interface UseLocationTrackingResult {
   stopTracking: () => Promise<void>;
 }
 
-// Update interval in milliseconds (every 10 seconds)
-const UPDATE_INTERVAL = 10000;
+// Keep live map positions responsive while limiting GPS polling.
+const UPDATE_INTERVAL = 5000;
+const HEARTBEAT_INTERVAL = 30000;
 // Minimum distance change to trigger update (in meters)
-const DISTANCE_FILTER = 10;
+const DISTANCE_FILTER = 5;
+
+const toLocationData = (location: Location.LocationObject): LocationData => ({
+  latitude: location.coords.latitude,
+  longitude: location.coords.longitude,
+  heading: location.coords.heading || 0,
+  speed: location.coords.speed || 0,
+  accuracy: location.coords.accuracy || 0,
+});
 
 export const useLocationTracking = (): UseLocationTrackingResult => {
   const [location, setLocation] = useState<LocationData | null>(null);
@@ -45,6 +54,8 @@ export const useLocationTracking = (): UseLocationTrackingResult => {
   const [error, setError] = useState<string | null>(null);
   const watchRef = useRef<Location.LocationSubscription | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const locationRef = useRef<LocationData | null>(null);
+  const appStateRef = useRef(AppState.currentState);
   const sessionRef = useRef<{ uid: string; role: string; displayName: string } | null>(null);
 
   // Get session on mount
@@ -80,16 +91,6 @@ export const useLocationTracking = (): UseLocationTrackingResult => {
     };
   }, []);
 
-  // Handle app state changes (background/foreground)
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'background' && sessionRef.current) {
-        clearLocation(sessionRef.current.uid);
-      }
-    });
-    return () => subscription.remove();
-  }, []);
-
   const requestPermission = async (): Promise<boolean> => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -109,7 +110,7 @@ export const useLocationTracking = (): UseLocationTrackingResult => {
     }
   };
 
-  const pushLocationToFirebase = useCallback(async (loc: LocationData) => {
+  const pushLocationToFirebase = useCallback(async (loc: LocationData, updateProfile = true) => {
     if (!sessionRef.current) return;
     try {
       await updateLocation(
@@ -122,12 +123,33 @@ export const useLocationTracking = (): UseLocationTrackingResult => {
           accuracy: loc.accuracy
         },
         sessionRef.current.role,
-        sessionRef.current.displayName
+        sessionRef.current.displayName,
+        updateProfile
       );
     } catch (e: any) {
       console.warn('Location push error:', e.message);
     }
   }, []);
+
+  // Refresh the location on return to foreground so paused GPS callbacks do not leave users offline.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextState => {
+      appStateRef.current = nextState;
+      if (nextState !== 'active' && sessionRef.current) {
+        void clearLocation(sessionRef.current.uid);
+      } else if (nextState === 'active' && sessionRef.current) {
+        void Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
+          .then(location => {
+            const current = toLocationData(location);
+            locationRef.current = current;
+            setLocation(current);
+            return pushLocationToFirebase(current);
+          })
+          .catch(error => console.warn('Location refresh error:', error.message));
+      }
+    });
+    return () => subscription.remove();
+  }, [pushLocationToFirebase]);
 
   const startTracking = useCallback(async () => {
     if (isTracking) return;
@@ -158,14 +180,9 @@ export const useLocationTracking = (): UseLocationTrackingResult => {
       const initialLoc = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High
       });
-      const initialData: LocationData = {
-        latitude: initialLoc.coords.latitude,
-        longitude: initialLoc.coords.longitude,
-        heading: initialLoc.coords.heading || 0,
-        speed: initialLoc.coords.speed || 0,
-        accuracy: initialLoc.coords.accuracy || 0
-      };
+      const initialData = toLocationData(initialLoc);
       setLocation(initialData);
+      locationRef.current = initialData;
       await pushLocationToFirebase(initialData);
 
       // Start watching position
@@ -176,20 +193,23 @@ export const useLocationTracking = (): UseLocationTrackingResult => {
           distanceInterval: DISTANCE_FILTER
         },
         (loc) => {
-          const locData: LocationData = {
-            latitude: loc.coords.latitude,
-            longitude: loc.coords.longitude,
-            heading: loc.coords.heading || 0,
-            speed: loc.coords.speed || 0,
-            accuracy: loc.coords.accuracy || 0
-          };
+          if (appStateRef.current !== 'active') return;
+          const locData = toLocationData(loc);
           setLocation(locData);
+          locationRef.current = locData;
           pushLocationToFirebase(locData);
         }
       );
+      intervalRef.current = setInterval(() => {
+        if (appStateRef.current === 'active' && locationRef.current) {
+          void pushLocationToFirebase(locationRef.current, false);
+        }
+      }, HEARTBEAT_INTERVAL);
     } catch (e: any) {
       setError(e.message || 'Failed to start tracking');
       setIsTracking(false);
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
   }, [isTracking, pushLocationToFirebase]);
 
@@ -202,6 +222,7 @@ export const useLocationTracking = (): UseLocationTrackingResult => {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
+    locationRef.current = null;
     setIsTracking(false);
 
     // Mark as inactive in Firebase

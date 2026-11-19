@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { AppText as Text } from '@/components/ui/FontScale';
 import Animated from 'react-native-reanimated';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Image } from 'expo-image';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
 import { Avatar, Card, Icon, IconName, ModernQuickAccessIcon } from '@/components/ui';
@@ -10,6 +10,10 @@ import { useFadeInUp, useFadeIn } from '@/hooks/useAnimatedEntry';
 import { getSession } from '@/services/sessionService';
 import firestore from '@react-native-firebase/firestore';
 import { Collections } from '@/services/firebase';
+import { isLocationFresh, listenToUserLocation, type UserLocation } from '@/services/locationService';
+import { listenToHeartbeatsByRole, type UserHeartbeat } from '@/services/heartbeat';
+import { getUnviewedContentCounts } from '@/services/contentViewService';
+import { getNextAvailability, type AvailabilitySlot, type TimeRange } from '@/utils/availability';
 
 interface FarmData {
   totalAnimals: number;
@@ -17,6 +21,17 @@ interface FarmData {
   upcomingVisits: number;
   healthAlerts: number;
 }
+interface OnlineTechnician { id: string; displayName: string; photoURL?: string; location?: string; specialization?: string; expertise?: string[]; latitude?: number; longitude?: number; available?: boolean; availabilitySlots?: AvailabilitySlot[]; alwaysAvailable?: TimeRange[] | TimeRange; alwaysAvailableEnabled?: boolean; }
+const hasCoordinates = (location: { latitude?: unknown; longitude?: unknown } | null | undefined): location is { latitude: number; longitude: number } =>
+  typeof location?.latitude === 'number' && Number.isFinite(location.latitude) && location.latitude >= -90 && location.latitude <= 90 &&
+  typeof location.longitude === 'number' && Number.isFinite(location.longitude) && location.longitude >= -180 && location.longitude <= 180;
+const distanceKm = (a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) => {
+  const radians = (degrees: number) => degrees * Math.PI / 180;
+  const dLat = radians(b.latitude - a.latitude);
+  const dLon = radians(b.longitude - a.longitude);
+  const haversine = Math.sin(dLat / 2) ** 2 + Math.cos(radians(a.latitude)) * Math.cos(radians(b.latitude)) * Math.sin(dLon / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+};
 
 export default function HomeScreen() {
   const headerAnim = useFadeIn(100);
@@ -26,19 +41,31 @@ export default function HomeScreen() {
 
   const [userName, setUserName] = useState('');
   const [photoURL, setPhotoURL] = useState<string | null>(null);
+  const [technicianProfiles, setTechnicianProfiles] = useState<Omit<OnlineTechnician, 'latitude' | 'longitude'>[]>([]);
+  const [technicianLocations, setTechnicianLocations] = useState<Record<string, UserHeartbeat>>({});
+  const [farmerLocation, setFarmerLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [farmData, setFarmData] = useState<FarmData>({ totalAnimals: 0, pendingServices: 0, upcomingVisits: 0, healthAlerts: 0 });
   const [notifCount, setNotifCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [badgeCounts, setBadgeCounts] = useState({
     myAnimals: 0,
-    requestService: 0,
-    appointments: 0,
     healthRecords: 0,
     technicians: 0,
     announcements: 0,
     knowledgeBase: 0,
     forum: 0,
   });
+  const onlineTechnicians = technicianProfiles.flatMap(technician => {
+    const location = technicianLocations[technician.id];
+    return location
+      ? [{ ...technician, ...(hasCoordinates(location) && isLocationFresh(location) ? { latitude: location.latitude, longitude: location.longitude } : {}) }]
+      : [];
+  }).sort((a, b) => farmerLocation
+    ? hasCoordinates(a) && hasCoordinates(b)
+      ? distanceKm(farmerLocation, a) - distanceKm(farmerLocation, b)
+      : hasCoordinates(a) ? -1 : hasCoordinates(b) ? 1 : a.displayName.localeCompare(b.displayName)
+    : a.displayName.localeCompare(b.displayName));
+  const availableTechnicianCount = technicianProfiles.filter(technician => getNextAvailability(technician) !== null).length;
 
   useEffect(() => {
     const load = async () => {
@@ -54,6 +81,7 @@ export default function HomeScreen() {
         if (userDoc.exists) {
           const data = userDoc.data();
           if (data?.photoURL) setPhotoURL(data.photoURL);
+          if (data && hasCoordinates(data)) setFarmerLocation({ latitude: data.latitude, longitude: data.longitude });
         }
 
         // Count animals owned by this farmer
@@ -84,27 +112,56 @@ export default function HomeScreen() {
         setNotifCount(notifSnap.size);
 
         // Badge counts for Quick Access
-        const techSnap = await firestore().collection(Collections.USERS).where('role', '==', 'technician').where('status', '==', 'active').get();
-        const announcementsSnap = await firestore().collection(Collections.ANNOUNCEMENTS).get();
-        const kbSnap = await firestore().collection(Collections.KNOWLEDGE_BASE).get();
-        const forumSnap = await firestore().collection(Collections.COMMUNITY_FORUM).get();
-
-        setBadgeCounts({
+        const [techSnap, healthRecordsSnap] = await Promise.all([
+          firestore().collection(Collections.USERS).where('role', '==', 'technician').where('status', '==', 'active').get(),
+          firestore().collection('healthRecords').where('farmerId', '==', uid).get(),
+        ]);
+        setBadgeCounts(current => ({
+          ...current,
           myAnimals: totalAnimals,
-          requestService: 0,
-          appointments: myAppts.length,
-          healthRecords: myAppts.filter(a => a.status === 'completed').length,
+          healthRecords: healthRecordsSnap.size,
           technicians: techSnap.size,
-          announcements: announcementsSnap.size,
-          knowledgeBase: kbSnap.size,
-          forum: forumSnap.size,
-        });
+        }));
       } catch (e) {
         console.warn('Farmer home load error:', e);
       }
       setLoading(false);
     };
     load();
+  }, []);
+
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    const refreshContentBadges = async () => {
+      const session = await getSession();
+      if (!session) return;
+      const counts = await getUnviewedContentCounts(session.uid, 'farmer');
+      if (active) setBadgeCounts(current => ({ ...current, ...counts }));
+    };
+    void refreshContentBadges().catch(error => console.warn('Farmer content badge refresh failed:', error));
+    return () => { active = false; };
+  }, []));
+
+  useEffect(() => {
+    let active = true;
+    let stopProfiles = () => {};
+    let stopLocations = () => {};
+    let stopFarmerLocation = () => {};
+    const subscribe = async () => {
+      const session = await getSession();
+      if (!active || !session) return;
+      stopProfiles = firestore().collection(Collections.USERS).where('role', '==', 'technician').onSnapshot(snapshot => {
+        if (active) setTechnicianProfiles(snapshot.docs.filter(doc => doc.data()?.status === 'active').map(doc => ({ ...doc.data(), id: doc.id } as Omit<OnlineTechnician, 'latitude' | 'longitude'>)));
+      }, error => console.warn('Online technicians load failed:', error));
+      stopLocations = listenToHeartbeatsByRole('technician', locations => { if (active) setTechnicianLocations(locations); });
+      stopFarmerLocation = listenToUserLocation(session.uid, location => {
+        if (active && location?.isActive && isLocationFresh(location) && hasCoordinates(location)) {
+          setFarmerLocation({ latitude: location.latitude, longitude: location.longitude });
+        }
+      });
+    };
+    subscribe().catch(error => console.warn('Online technicians subscription failed:', error));
+    return () => { active = false; stopProfiles(); stopLocations(); stopFarmerLocation(); };
   }, []);
 
   if (loading) return <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}><ActivityIndicator size="large" color={Colors.primary} /></View>;
@@ -122,7 +179,7 @@ export default function HomeScreen() {
         <View style={styles.headerTop}>
           <Text style={styles.greeting}></Text>
           <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.notifButton} onPress={() => router.push('/(farmer)/messages?tab=notifications')}>
+            <TouchableOpacity style={styles.notifButton} onPress={() => router.navigate({ pathname: '/(farmer)/messages', params: { tab: 'notifications' } })}>
               <Icon name="bell" size={22} color={Colors.primary} />
               {notifCount > 0 && (
                 <View style={styles.notifBadge}>
@@ -143,6 +200,18 @@ export default function HomeScreen() {
         </View>
       </Animated.View>
 
+      <Card style={styles.onlineCard}>
+        <View style={styles.cardHeading}><Icon name="technician" size={24} color={Colors.primary} /><Text style={styles.sectionTitle}>Online Technicians</Text><Text style={styles.onlineCount}>{onlineTechnicians.length} online</Text></View>
+        {onlineTechnicians.length ? <ScrollView style={styles.onlineListViewport} contentContainerStyle={styles.onlineList} nestedScrollEnabled accessibilityLabel="Online technicians">{onlineTechnicians.map(technician => <TouchableOpacity key={technician.id} style={styles.onlineTechnician} activeOpacity={0.85} accessibilityRole="button" accessibilityLabel={`${technician.displayName}, online. View profile`} onPress={() => router.push({ pathname: '/(farmer)/home/technicians', params: { technicianId: technician.id } })}>
+          <View style={styles.onlineTechDetails}>
+            <Text style={styles.onlineName} numberOfLines={1}>{technician.displayName}</Text>
+            <View style={styles.onlineTechMeta}><Icon name="location" size={14} color={Colors.textSecondary} /><Text style={styles.onlineTechLocation} numberOfLines={1}>{technician.location || 'Location not provided'}</Text></View>
+            <Text style={styles.onlineTechSpecialty} numberOfLines={1}>{technician.specialization || technician.expertise?.join(', ') || 'Veterinary technician'}</Text>
+          </View>
+          <View style={styles.onlineTechAvatar}><Avatar name={technician.displayName} imageUrl={technician.photoURL} size={58} /><View style={styles.onlineDot} /></View>
+        </TouchableOpacity>)}</ScrollView> : <Text style={styles.noOnline}>No technicians are online right now.</Text>}
+      </Card>
+
       {/* Farm Overview */}
       <Animated.View style={overviewAnim}>
         <Card style={styles.overviewCard}>
@@ -154,7 +223,7 @@ export default function HomeScreen() {
           />
           <View style={styles.overviewGrid}>
             <OverviewItem value={farmData.totalAnimals} label="Total Animals" iconName="cow" imageSource={require('../../../../assets/images/farmer/cow.png')} color="#FFB800" background="#FFF8E7" onPress={() => router.push('/(farmer)/home/my-animals')} />
-            <OverviewItem value={farmData.pendingServices} label="Pending Services" iconName="clipboard" imageSource={require('../../../../assets/images/farmer/pending.png')} color="#16B86A" background="#E9F9F0" onPress={() => router.push('/(farmer)/services')} />
+            <OverviewItem value={farmData.pendingServices} label="Pending Services" iconName="clipboard" imageSource={require('../../../../assets/images/farmer/pending.png')} color="#16B86A" background="#E9F9F0" onPress={() => router.push('/(farmer)/home/appointments')} />
             <OverviewItem value={farmData.upcomingVisits} label="Upcoming Visits" iconName="calendar" imageSource={require('../../../../assets/images/farmer/upcoming.png')} color="#258BF0" background="#EAF6FF" onPress={() => router.push('/(farmer)/home/appointments')} />
             <OverviewItem value={farmData.healthAlerts} label="Health Alerts" iconName="alert" imageSource={require('../../../../assets/images/farmer/alert.png')} color="#F04444" background="#FFF0F1" onPress={() => router.push('/(farmer)/home/health-records')} />
           </View>
@@ -170,11 +239,10 @@ export default function HomeScreen() {
         </View>
         <View style={styles.quickGrid}>
           <QuickAccessItem iconName="paw" label="My Animals" onPress={() => router.push('/(farmer)/home/my-animals')} badge={badgeCounts.myAnimals} />
-          <QuickAccessItem iconName="pencil" label={"Request\nService"} onPress={() => router.push('/(farmer)/services')} />
-          <QuickAccessItem iconName="calendar" label="Appointments" onPress={() => router.push('/(farmer)/home/appointments')} badge={badgeCounts.appointments} />
+          <QuickAccessItem iconName="calendar" label="Appointments" onPress={() => router.push('/(farmer)/home/appointments')} />
           <QuickAccessItem iconName="clipboard" label={"Health\nRecords"} onPress={() => router.push('/(farmer)/home/health-records')} badge={badgeCounts.healthRecords} />
           <QuickAccessItem iconName="farmer" label="Technicians" onPress={() => router.push('/(farmer)/home/technicians')} badge={badgeCounts.technicians} />
-          <QuickAccessItem iconName="technician" label={"Available\nTechnicians"} onPress={() => router.push('/(farmer)/home/available-technicians')} />
+          <QuickAccessItem iconName="technician" label={"Available\nTechnicians"} onPress={() => router.push('/(farmer)/home/available-technicians')} badge={availableTechnicianCount} />
           <QuickAccessItem iconName="megaphone" label={"Announcements\n& Bulletins"} onPress={() => router.push('/(farmer)/home/announcements')} badge={badgeCounts.announcements} />
           <QuickAccessItem iconName="clipboard" label={"Knowledge\nBase"} onPress={() => router.push('/(farmer)/home/knowledge-base')} badge={badgeCounts.knowledgeBase} />
           <QuickAccessItem iconName="messages" label={"Community\nForum"} onPress={() => router.push('/(farmer)/home/forum')} badge={badgeCounts.forum} />
@@ -261,6 +329,19 @@ const styles = StyleSheet.create({
   notifBadge: { position: 'absolute', top: 0, right: 0, width: 18, height: 18, borderRadius: 9, backgroundColor: Colors.error, justifyContent: 'center', alignItems: 'center' },
   notifBadgeText: { color: Colors.white, fontSize: 10, fontWeight: '700' },
   overviewCard: { marginTop: Spacing.sm, padding: Spacing.sm, borderRadius: BorderRadius.xl },
+  onlineCard: { marginTop: Spacing.md, padding: Spacing.md, borderRadius: BorderRadius.xl, backgroundColor: Colors.white },
+  onlineCount: { marginLeft: 'auto', color: Colors.success, fontSize: FontSize.xs, fontWeight: '700' },
+  onlineListViewport: { maxHeight: 3 * 94 + 2 * Spacing.sm + Spacing.xs },
+  onlineList: { gap: Spacing.sm, paddingTop: Spacing.xs },
+  onlineTechnician: { minHeight: 94, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.md, padding: Spacing.md, borderRadius: BorderRadius.lg, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.border, ...Shadow.light },
+  onlineTechDetails: { flex: 1, minWidth: 0, gap: 4 },
+  onlineTechMeta: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  onlineTechLocation: { flex: 1, color: Colors.textSecondary, fontSize: FontSize.sm },
+  onlineTechSpecialty: { color: Colors.primary, fontSize: FontSize.sm, fontWeight: '600' },
+  onlineTechAvatar: { position: 'relative', marginRight: Spacing.xs },
+  onlineDot: { position: 'absolute', right: -1, top: -1, width: 15, height: 15, borderRadius: 8, borderWidth: 2, borderColor: Colors.white, backgroundColor: Colors.success },
+  onlineName: { color: Colors.text, fontSize: FontSize.md, fontWeight: '700' },
+  noOnline: { color: Colors.textSecondary, fontSize: FontSize.sm, paddingVertical: Spacing.md },
   overviewBanner: { width: '100%', aspectRatio: 6.5, marginBottom: Spacing.sm },
   sectionTitle: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },
   cardHeading: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, marginBottom: Spacing.sm },

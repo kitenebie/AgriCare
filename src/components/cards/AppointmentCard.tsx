@@ -12,7 +12,13 @@ const serviceIconMap: Record<string, IconName> = {
   'Health Check': 'health-check',
   'Vaccination': 'vaccination',
   'Treatment': 'treatment',
+  'Iron Injection': 'vaccination',
+  'Vitamin Injection': 'vaccination',
+  'Castration': 'treatment',
+  'Deworming': 'bug',
   'De-worming': 'bug',
+  'Wound Treatment': 'health-check',
+  'Antibiotic Injection': 'vaccination',
   'Artificial Insemination': 'dna',
 };
 
@@ -43,7 +49,7 @@ export const AppointmentCard: React.FC<AppointmentCardProps> = ({ appointment, i
             </Text>
           </View>
           <Text style={styles.serviceType}>{appointment.serviceType}</Text>
-          <Text style={styles.animal}>Animal: {appointment.animalName}</Text>
+          <Text style={styles.animal}>Animal type: {appointment.animalType || '—'}</Text>
           <View style={styles.dateRow}>
             <Icon name="calendar" size={12} color={Colors.textSecondary} />
             <Text style={styles.date}>{appointment.date}</Text>

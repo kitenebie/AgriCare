@@ -5,15 +5,28 @@ import { Colors, FontSize, BorderRadius, Spacing } from '@/constants/theme';
 
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 1);
 const MINUTES = ['00', '15', '30', '45'];
+const isPastTime = (date: Date | undefined, hour: number, minute: string, period: 'AM' | 'PM') => {
+  if (!date) return false;
+  const time = new Date(date);
+  time.setHours((hour % 12) + (period === 'PM' ? 12 : 0), Number(minute), 0, 0);
+  return time.getTime() <= Date.now();
+};
+const firstFutureTime = (date?: Date) => {
+  for (const period of ['AM', 'PM'] as const) for (const hour of HOURS) for (const minute of MINUTES) {
+    if (!isPastTime(date, hour, minute, period)) return { hour, minute, period };
+  }
+  return null;
+};
 
 interface TimePickerModalProps {
   visible: boolean;
   value: string; // "09:00 AM"
+  selectedDate?: Date;
   onConfirm: (time: string) => void;
   onCancel: () => void;
 }
 
-export const TimePickerModal: React.FC<TimePickerModalProps> = ({ visible, value, onConfirm, onCancel }) => {
+export const TimePickerModal: React.FC<TimePickerModalProps> = ({ visible, value, selectedDate, onConfirm, onCancel }) => {
   // Parse initial value
   const parseTime = (v: string) => {
     const match = v.match(/(\d+):(\d+)\s*(AM|PM)/i);
@@ -22,9 +35,11 @@ export const TimePickerModal: React.FC<TimePickerModalProps> = ({ visible, value
   };
 
   const initial = parseTime(value);
-  const [hour, setHour] = useState(initial.hour);
-  const [minute, setMinute] = useState(initial.minute);
-  const [period, setPeriod] = useState<'AM' | 'PM'>(initial.period);
+  const fallback = isPastTime(selectedDate, initial.hour, initial.minute, initial.period) ? firstFutureTime(selectedDate) : null;
+  const [hour, setHour] = useState(fallback?.hour ?? initial.hour);
+  const [minute, setMinute] = useState(fallback?.minute ?? initial.minute);
+  const [period, setPeriod] = useState<'AM' | 'PM'>(fallback?.period ?? initial.period);
+  const futureTimeAvailable = !!firstFutureTime(selectedDate);
 
   const formatTime = () => `${hour.toString().padStart(2, '0')}:${minute} ${period}`;
 
@@ -37,13 +52,14 @@ export const TimePickerModal: React.FC<TimePickerModalProps> = ({ visible, value
             <Text style={s.headerLabel}>SELECT TIME</Text>
             <Text style={s.headerTime}>{formatTime()}</Text>
           </View>
+          {selectedDate && !futureTimeAvailable && <Text style={s.noFutureTimes}>No future times left for this date. Choose another date.</Text>}
 
           {/* Hour */}
           <View style={s.section}>
             <Text style={s.sectionLabel}>Hour</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.scrollRow}>
               {HOURS.map(h => (
-                <TouchableOpacity key={h} style={[s.numBtn, hour === h && s.numBtnActive]} onPress={() => setHour(h)}>
+              <TouchableOpacity key={h} disabled={MINUTES.every(m => isPastTime(selectedDate, h, m, period))} style={[s.numBtn, hour === h && s.numBtnActive, MINUTES.every(m => isPastTime(selectedDate, h, m, period)) && s.numBtnDisabled]} onPress={() => { setHour(h); if (isPastTime(selectedDate, h, minute, period)) setMinute(MINUTES.find(m => !isPastTime(selectedDate, h, m, period)) || minute); }}>
                   <Text style={[s.numText, hour === h && s.numTextActive]}>{h}</Text>
                 </TouchableOpacity>
               ))}
@@ -55,7 +71,7 @@ export const TimePickerModal: React.FC<TimePickerModalProps> = ({ visible, value
             <Text style={s.sectionLabel}>Minute</Text>
             <View style={s.row}>
               {MINUTES.map(m => (
-                <TouchableOpacity key={m} style={[s.numBtn, minute === m && s.numBtnActive]} onPress={() => setMinute(m)}>
+                <TouchableOpacity key={m} disabled={isPastTime(selectedDate, hour, m, period)} style={[s.numBtn, minute === m && s.numBtnActive, isPastTime(selectedDate, hour, m, period) && s.numBtnDisabled]} onPress={() => setMinute(m)}>
                   <Text style={[s.numText, minute === m && s.numTextActive]}>{m}</Text>
                 </TouchableOpacity>
               ))}
@@ -66,10 +82,10 @@ export const TimePickerModal: React.FC<TimePickerModalProps> = ({ visible, value
           <View style={s.section}>
             <Text style={s.sectionLabel}>Period</Text>
             <View style={s.row}>
-              <TouchableOpacity style={[s.periodBtn, period === 'AM' && s.periodBtnActive]} onPress={() => setPeriod('AM')}>
+              <TouchableOpacity disabled={HOURS.every(h => MINUTES.every(m => isPastTime(selectedDate, h, m, 'AM')))} style={[s.periodBtn, period === 'AM' && s.periodBtnActive, HOURS.every(h => MINUTES.every(m => isPastTime(selectedDate, h, m, 'AM'))) && s.numBtnDisabled]} onPress={() => { setPeriod('AM'); if (isPastTime(selectedDate, hour, minute, 'AM')) setMinute(MINUTES.find(m => !isPastTime(selectedDate, hour, m, 'AM')) || minute); }}>
                 <Text style={[s.periodText, period === 'AM' && s.periodTextActive]}>AM</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[s.periodBtn, period === 'PM' && s.periodBtnActive]} onPress={() => setPeriod('PM')}>
+              <TouchableOpacity disabled={HOURS.every(h => MINUTES.every(m => isPastTime(selectedDate, h, m, 'PM')))} style={[s.periodBtn, period === 'PM' && s.periodBtnActive, HOURS.every(h => MINUTES.every(m => isPastTime(selectedDate, h, m, 'PM'))) && s.numBtnDisabled]} onPress={() => { setPeriod('PM'); if (isPastTime(selectedDate, hour, minute, 'PM')) setMinute(MINUTES.find(m => !isPastTime(selectedDate, hour, m, 'PM')) || minute); }}>
                 <Text style={[s.periodText, period === 'PM' && s.periodTextActive]}>PM</Text>
               </TouchableOpacity>
             </View>
@@ -78,7 +94,7 @@ export const TimePickerModal: React.FC<TimePickerModalProps> = ({ visible, value
           {/* Actions */}
           <View style={s.actions}>
             <TouchableOpacity onPress={onCancel} style={s.actionBtn}><Text style={s.actionText}>CANCEL</Text></TouchableOpacity>
-            <TouchableOpacity onPress={() => onConfirm(formatTime())} style={s.actionBtn}><Text style={s.actionText}>OK</Text></TouchableOpacity>
+            <TouchableOpacity disabled={isPastTime(selectedDate, hour, minute, period)} onPress={() => onConfirm(formatTime())} style={[s.actionBtn, isPastTime(selectedDate, hour, minute, period) && s.numBtnDisabled]}><Text style={s.actionText}>OK</Text></TouchableOpacity>
           </View>
         </View>
       </View>
@@ -92,12 +108,14 @@ const s = StyleSheet.create({
   header: { backgroundColor: Colors.primary, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24 },
   headerLabel: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.7)', letterSpacing: 1, marginBottom: 6 },
   headerTime: { fontSize: 32, fontWeight: '700', color: '#fff' },
+  noFutureTimes: { color: Colors.error, fontSize: FontSize.xs, paddingHorizontal: 20, paddingTop: 12 },
   section: { paddingHorizontal: 20, paddingTop: 16 },
   sectionLabel: { fontSize: 12, fontWeight: '600', color: Colors.textSecondary, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
   scrollRow: { gap: 8, paddingBottom: 4 },
   row: { flexDirection: 'row', gap: 8 },
   numBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F1F5F9' },
   numBtnActive: { backgroundColor: Colors.primary },
+  numBtnDisabled: { opacity: 0.35 },
   numText: { fontSize: 15, fontWeight: '600', color: Colors.text },
   numTextActive: { color: '#fff' },
   periodBtn: { flex: 1, paddingVertical: 14, borderRadius: BorderRadius.lg, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F1F5F9' },

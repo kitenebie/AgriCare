@@ -40,6 +40,10 @@ export default function LivestockPreviewForm() {
   const breedList = breeds.split(',').map((b) => b.trim()).filter((b) => b.length > 0);
 
   const handleSave = async () => {
+    if (!isEditing || !params.id) {
+      modalAlert('Unavailable', 'Livestock categories can only be edited.');
+      return;
+    }
     if (!name.trim()) {
       modalAlert('Error', 'Category name is required.');
       return;
@@ -54,23 +58,11 @@ export default function LivestockPreviewForm() {
         updatedAt: firestore.FieldValue.serverTimestamp(),
       };
 
-      if (isEditing && params.id) {
-        await firestore().collection(Collections.LIVESTOCK_CATEGORIES).doc(params.id).update(data);
-        await logCrud('Category Updated', 'Updated: ' + name.trim(), 'livestockCategories', params.id);
-        modalAlert('Updated', `"${name.trim()}" has been updated.`, [
-          { text: 'OK', onPress: () => router.back() },
-        ]);
-      } else {
-        await firestore().collection(Collections.LIVESTOCK_CATEGORIES).add({
-          ...data,
-          count: 0,
-          createdAt: firestore.FieldValue.serverTimestamp(),
-        });
-        await logCrud('Category Created', 'Added: ' + name.trim(), 'livestockCategories');
-        modalAlert('Added', `"${name.trim()}" has been added.`, [
-          { text: 'OK', onPress: () => router.back() },
-        ]);
-      }
+      await firestore().collection(Collections.LIVESTOCK_CATEGORIES).doc(params.id).update(data);
+      await logCrud('Category Updated', 'Updated: ' + name.trim(), 'livestockCategories', params.id);
+      modalAlert('Updated', `"${name.trim()}" has been updated.`, [
+        { text: 'OK', onPress: () => router.back() },
+      ]);
     } catch (error: any) {
       modalAlert('Error', error.message || 'Failed to save.');
     } finally {
@@ -107,7 +99,7 @@ export default function LivestockPreviewForm() {
         <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
           <Icon name="chevron-right" size={20} color={Colors.white} strokeWidth={2.5} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{isEditing ? 'Edit Category' : 'Add Category'}</Text>
+        <Text style={styles.headerTitle}>{isEditing ? 'Edit Category' : 'Category Unavailable'}</Text>
         {isEditing ? (
           <TouchableOpacity onPress={handleDelete}>
             <Icon name="close" size={20} color="#FFCDD2" />
