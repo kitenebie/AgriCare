@@ -375,7 +375,13 @@ const profileUpdateAction = async (uid: string, body: Record<string, any>) => {
     const current = await firestoreDocument(`users/${encodeURIComponent(uid)}`, headers, transaction);
     const challenge = current?.profileUpdateChallenge;
     if (!current || current.role !== user.role || current.status !== "active") throw Object.assign(new Error("Only an active farmer or technician can update this profile."), { status: 403 });
-    if (challenge?.tokenHash !== tokenHash || challenge?.profileHash !== profileHash || Date.parse(challenge?.expiresAt || "") <= Date.now()) throw Object.assign(new Error("Verification expired or does not match these profile changes. Start again."), { status: 422 });
+    const challengeCheck = {
+      tokenMatches: challenge?.tokenHash === tokenHash,
+      profileMatches: challenge?.profileHash === profileHash,
+      expired: Date.parse(challenge?.expiresAt || "") <= Date.now(),
+    };
+    console.info("[Profile Selfie Match] Challenge check", challengeCheck);
+    if (!challengeCheck.tokenMatches || !challengeCheck.profileMatches || challengeCheck.expired) throw Object.assign(new Error("Verification expired or does not match these profile changes. Start again."), { status: 422 });
     if (Number(challenge.attempts) >= 3) throw Object.assign(new Error("Too many attempts. Start a new verification."), { status: 429 });
     if (Date.parse(challenge.lockUntil || "") > Date.now()) throw Object.assign(new Error("Verification is already in progress."), { status: 409 });
     claimedPhotoURL = current.photoURL || "";
@@ -388,7 +394,10 @@ const profileUpdateAction = async (uid: string, body: Record<string, any>) => {
     const apiKey = Deno.env.get("FACE_MATCH_API_KEY");
     if (!apiKey) throw new Error("Face matching is not configured on the server.");
     uploadedSelfie = await uploadVerifiedProfileSelfie(uid, user.role, face);
-    console.info("[Profile Selfie Match] Sending API request", { oldProfileAvailable: true, newProfileAvailable: true });
+    console.info("[Profile Selfie Match] Sending API request", {
+      old_profile_url: oldPhotoURL,
+      new_profile_url: uploadedSelfie.photoURL,
+    });
     let matched: Response;
     try {
       matched = await fetch("https://meet.earms.site/api/v1/match/urls", {
