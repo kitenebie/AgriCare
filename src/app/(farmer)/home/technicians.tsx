@@ -1,14 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { AppText as Text } from '@/components/ui/FontScale';
 import firestore from '@react-native-firebase/firestore';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Colors, Spacing, FontSize, BorderRadius, Shadow } from '@/constants/theme';
 import { Icon, Avatar } from '@/components/ui';
 import { MapUserProfileDrawer } from '@/components/map/MapUserProfileDrawer';
 import { getOrCreateChatRoom } from '@/services/chatService';
-import { Collections } from '@/services/firebase';
 import { getSession } from '@/services/sessionService';
+import { listenToHeartbeatsByRole } from '@/services/heartbeat';
+import { getRelevantTechnicians } from '@/services/technicianDiscoveryService';
+import { getTechnicianAvailability, type AvailabilitySlot, type TimeRange } from '@/utils/availability';
 
 interface TechnicianItem {
   id: string;
@@ -20,6 +22,11 @@ interface TechnicianItem {
   reviewCount?: number;
   location?: string;
   status?: string;
+  available?: boolean;
+  availabilitySlots?: AvailabilitySlot[];
+  alwaysAvailable?: TimeRange[] | TimeRange;
+  alwaysAvailableEnabled?: boolean;
+  timezone?: string;
 }
 
 export default function TechniciansPage() {
@@ -29,26 +36,33 @@ export default function TechniciansPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'all' | 'favorites'>('all');
   const [uid, setUid] = useState('');
+  const [onlineTechnicianIds, setOnlineTechnicianIds] = useState<string[]>([]);
   const [selectedTech, setSelectedTech] = useState<TechnicianItem | null>(null);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    let stopHeartbeats = () => {};
     const load = async () => {
       const session = await getSession();
       if (!session) { setLoading(false); return; }
+      if (!active) return;
       setUid(session.uid);
 
-      // Load all active technicians
-      const techSnap = await firestore().collection(Collections.PUBLIC_PROFILES).where('role', '==', 'technician').where('status', '==', 'active').get();
-      setTechnicians(techSnap.docs.map(d => ({ id: d.id, ...d.data() } as TechnicianItem)));
+      const records = await getRelevantTechnicians();
+      if (active) setTechnicians(records);
+      stopHeartbeats = listenToHeartbeatsByRole('technician', users => {
+        if (active) setOnlineTechnicianIds(Object.keys(users));
+      });
 
       // Load user's favorites
       const favSnap = await firestore().collection('favoriteTechnicians').where('farmerId', '==', session.uid).get();
-      setFavorites(favSnap.docs.map(d => d.data().technicianId as string));
+      if (active) setFavorites(favSnap.docs.map(d => d.data().technicianId as string));
 
-      setLoading(false);
+      if (active) setLoading(false);
     };
-    load();
-  }, []);
+    load().catch(error => { console.warn('Technician list load failed:', error); if (active) setLoading(false); });
+    return () => { active = false; stopHeartbeats(); };
+  }, []));
 
   const toggleFavorite = async (techId: string) => {
     if (favorites.includes(techId)) {
@@ -75,6 +89,12 @@ export default function TechniciansPage() {
       if (technician) setSelectedTech(technician);
     }
   }, [technicianId, technicians]);
+
+  useEffect(() => {
+    if (!selectedTech) return;
+    const latest = technicians.find(item => item.id === selectedTech.id);
+    if (latest && latest !== selectedTech) setSelectedTech(latest);
+  }, [selectedTech, technicians]);
 
   const handleMessage = async () => {
     if (!selectedTech || !uid) return;
@@ -119,13 +139,15 @@ export default function TechniciansPage() {
         {displayed.length === 0 && (
           <View style={s.empty}>
             <Icon name={tab === 'favorites' ? 'star' : 'profile'} size={48} color={Colors.textLight} />
-            <Text style={s.emptyText}>{tab === 'favorites' ? 'No favorite technicians yet' : 'No technicians available'}</Text>
+            <Text style={s.emptyText}>{tab === 'favorites' ? 'No favorite technicians yet' : 'No technicians match your registered animals'}</Text>
             {tab === 'favorites' && <Text style={s.emptySubtext}>Tap the ★ on a technician to add them</Text>}
           </View>
         )}
         {displayed.map(t => {
           const isFav = favorites.includes(t.id);
           const specs = t.expertise || (t.specialization ? t.specialization.split(',').map(s => s.trim()) : []);
+          const isOnline = onlineTechnicianIds.includes(t.id);
+          const availability = getTechnicianAvailability(t).status;
           return (
             <View key={t.id} style={s.card}>
               <TouchableOpacity style={s.cardBody} onPress={() => setSelectedTech(t)} accessibilityRole="button" accessibilityLabel={`View ${t.displayName} profile`}>
@@ -133,6 +155,10 @@ export default function TechniciansPage() {
                 <View style={s.cardInfo}>
                   <Text style={s.cardName}>{t.displayName}</Text>
                   {specs.length > 0 && <Text style={s.cardSpec} numberOfLines={1}>{specs.join(' • ')}</Text>}
+                  <View style={s.cardMeta}>
+                    <Text style={s.statusText}>{availability}</Text>
+                    <Text style={[s.statusText, { color: isOnline ? Colors.success : Colors.textLight }]}>{isOnline ? 'Online' : 'Offline'}</Text>
+                  </View>
                   <View style={s.cardMeta}>
                     {t.rating ? (
                       <View style={s.ratingRow}>
@@ -159,9 +185,8 @@ export default function TechniciansPage() {
         <View style={{ height: 80 }} />
       </ScrollView>
       <MapUserProfileDrawer
-        user={selectedTech}
+        user={selectedTech ? { ...selectedTech, isOnline: onlineTechnicianIds.includes(selectedTech.id) } : null}
         userType="Technician"
-        statusLabel="Active technician"
         onClose={closeProfile}
         onMessage={() => void handleMessage()}
         onRequestService={() => {
@@ -201,6 +226,7 @@ const s = StyleSheet.create({
   cardName: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
   cardSpec: { fontSize: FontSize.sm, color: Colors.primary, marginTop: 2 },
   cardMeta: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, marginTop: 4 },
+  statusText: { fontSize: 11, color: Colors.textSecondary },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   ratingText: { fontSize: 12, fontWeight: '600', color: Colors.text },
   reviewText: { fontSize: 11, color: Colors.textSecondary },

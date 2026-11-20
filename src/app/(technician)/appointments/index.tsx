@@ -10,7 +10,7 @@ import { useFadeInUp, useFadeIn } from '@/hooks/useAnimatedEntry';
 import { getSession } from '@/services/sessionService';
 import { Collections } from '@/services/firebase';
 import ServiceRequestDetailsDrawer from '@/components/technician/ServiceRequestDetailsDrawer';
-import { isRequestAvailableToTechnician, type ServiceRequest } from '@/utils/technicianRequests';
+import { isDirectRequestForTechnician, type ServiceRequest } from '@/utils/technicianRequests';
 export default function TechAppointmentsScreen() {
   const [appointments, setAppointments] = useState<ServiceRequest[]>([]);
   const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null);
@@ -27,22 +27,18 @@ export default function TechAppointmentsScreen() {
       setUid(session.uid);
       setUserName(session.displayName || 'Technician');
 
-      const pending = firestore().collection(Collections.APPOINTMENTS).where('status', '==', 'pending');
-      let eligibleSnapshot: any;
-      let assignedSnapshot: any;
-      const updateList = () => {
-        if (!eligibleSnapshot || !assignedSnapshot) return;
-        const byId = new Map<string, ServiceRequest>();
-        [...eligibleSnapshot.docs, ...assignedSnapshot.docs].forEach(doc => byId.set(doc.id, { id: doc.id, ...doc.data() } as ServiceRequest));
-        const data = [...byId.values()].filter(a => isRequestAvailableToTechnician(a, session.uid));
+      const directRequests = firestore().collection(Collections.APPOINTMENTS)
+        .where('status', '==', 'pending').where('technicianId', '==', session.uid);
+      const onError = (error: Error) => { console.error('📋 Firestore error loading appointments:', error); setLoading(false); };
+      const stopDirect = directRequests.onSnapshot(snapshot => {
+        const data = snapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() } as ServiceRequest))
+          .filter(request => isDirectRequestForTechnician(request, session.uid));
         data.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
         setAppointments(data);
         setLoading(false);
-      };
-      const onError = (error: Error) => { console.error('📋 Firestore error loading appointments:', error); setLoading(false); };
-      const stopEligible = pending.where('eligibleTechnicianIds', 'array-contains', session.uid).onSnapshot(snap => { eligibleSnapshot = snap; updateList(); }, onError);
-      const stopAssigned = pending.where('technicianId', '==', session.uid).onSnapshot(snap => { assignedSnapshot = snap; updateList(); }, onError);
-      unsub = () => { stopEligible(); stopAssigned(); };
+      }, onError);
+      unsub = stopDirect;
     };
     load();
     return () => unsub();
@@ -72,7 +68,7 @@ export default function TechAppointmentsScreen() {
         </TouchableOpacity>
         <View style={s.headerText}>
           <Text style={s.headerTitle}>Available Requests</Text>
-          <Text style={s.headerSubtitle}>{appointments.length} public or assigned request{appointments.length !== 1 ? 's' : ''}</Text>
+          <Text style={s.headerSubtitle}>{appointments.length} direct request{appointments.length !== 1 ? 's' : ''}</Text>
         </View>
       </Animated.View>
       {/* List */}
@@ -81,8 +77,8 @@ export default function TechAppointmentsScreen() {
           {appointments.length === 0 ? (
             <View style={s.empty}>
               <Icon name="check-circle" size={56} color={Colors.accent} />
-              <Text style={s.emptyText}>No pending requests</Text>
-              <Text style={s.emptySubtext}>New service requests from farmers will appear here</Text>
+              <Text style={s.emptyText}>No pending direct requests</Text>
+              <Text style={s.emptySubtext}>New requests addressed to you will appear here</Text>
             </View>
           ) : (
             appointments.map((a) => {

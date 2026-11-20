@@ -4,7 +4,7 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
               import { modalAlert } from '@/components/ui/ModalAlert';
               import { router, useLocalSearchParams } from 'expo-router';
               import { useSafeAreaInsets } from 'react-native-safe-area-context';
-              import WebView from 'react-native-webview';
+import WebView from 'react-native-webview';
               import { Colors, Spacing, FontSize, BorderRadius } from '@/constants/theme';
               import { Icon } from '@/components/ui';
 import IdentityVerificationResult from '@/components/auth/IdentityVerificationResult';
@@ -89,7 +89,7 @@ import { validateQualifications } from '../../../functions/shared/technicianServ
                 const [otpCode, setOtpCode] = useState('');
                 const [otpLoading, setOtpLoading] = useState(false);
                 const [showMatchResult, setShowMatchResult] = useState(false);
-                const [matchStatus, setMatchStatus] = useState<'checking' | 'matched' | 'failed' | 'saved'>('checking');
+                const [matchStatus, setMatchStatus] = useState<'checking' | 'matched' | 'failed'>('checking');
                 const [matchMessage, setMatchMessage] = useState('');
                 const [matchFailureKind, setMatchFailureKind] = useState<'mismatch' | 'image' | 'service' | 'registration'>('service');
                 const [faceIdVerified, setFaceIdVerified] = useState(false);
@@ -176,6 +176,7 @@ import { validateQualifications } from '../../../functions/shared/technicianServ
                     console.info('[Registration] verified OTP ticket metadata', { length: ticket.length });
                     setVerificationTicket(ticket);
                     setEmailVerified(true);
+                    setEmailOtpPending(false);
                     setShowOtpModal(false);
                     setOtpCode('');
                     await handleRegister(ticket);
@@ -193,7 +194,6 @@ import { validateQualifications } from '../../../functions/shared/technicianServ
                 const [specializationIds, setSpecializationIds] = useState<string[]>([]);
                 const [subSpecializationIds, setSubSpecializationIds] = useState<string[]>([]);
                 const [proofImageUrl, setProofImageUrl] = useState('');
-                const [uploadingProof, setUploadingProof] = useState(false);
                 const [idImageUrl, setIdImageUrl] = useState('');
                 const [faceImageUri, setFaceImageUri] = useState('');
 
@@ -369,28 +369,10 @@ import { validateQualifications } from '../../../functions/shared/technicianServ
                     });
 
                     if (!result.canceled && result.assets && result.assets[0].uri) {
-                      const localUri = result.assets[0].uri;
-                      setUploadingProof(true);
-
-                      try {
-                        const bucket = role === 'technician' ? 'technician_proof' : 'farmers_proof';
-                        const result = await uploadImageToSupabase(localUri, bucket);
-                        if (result.success && result.publicUrl) {
-                          setProofImageUrl(result.publicUrl);
-                        } else {
-                          console.warn('Supabase upload failed, using local URI:', result.error);
-                          setProofImageUrl(localUri);
-                        }
-                      } catch (uploadErr) {
-                        console.warn('Upload error, using local URI:', uploadErr);
-                        setProofImageUrl(localUri);
-                      } finally {
-                        setUploadingProof(false);
-                      }
+                      setProofImageUrl(result.assets[0].uri);
                     }
                   } catch (err: any) {
                     modalAlert('Image Error', err.message || 'Failed to pick proof image.');
-                    setUploadingProof(false);
                   }
                 };
 
@@ -526,21 +508,12 @@ import { validateQualifications } from '../../../functions/shared/technicianServ
                       setVerificationTicket('');
                       setOtpCode('');
                       setEmailOtpPending(true);
-                      setMatchMessage('Face and ID matched. Continue to verify your email.');
+                      setMatchMessage('Face and ID matched. Verify your email to finish registration.');
+                      setShowMatchResult(false);
+                      setShowOtpModal(true);
                       return;
                     }
                     setMatchMessage('Face and ID matched. Saving your registration...');
-
-                    // Upload ID for registration
-                    let uploadedIdUrl = '';
-                    if (idImageUrl) {
-                      const idResult = await uploadImageToSupabase(idImageUrl, role === 'technician' ? 'technician_proof' : 'farmers_proof');
-                      if (idResult.success && idResult.publicUrl) {
-                        uploadedIdUrl = idResult.publicUrl;
-                      } else {
-                        throw new Error('Could not upload your ID. Please try again.');
-                      }
-                    }
 
                     // Upload profile photo
                     let uploadedProfileUrl = '';
@@ -560,8 +533,8 @@ import { validateQualifications } from '../../../functions/shared/technicianServ
                             expertise: technicianExpertise,
                             specializationIds,
                             subSpecializationIds,
-                            proofImageUrl: proofImageUrl.trim(),
-                            idImageUrl: uploadedIdUrl,
+                            proofImageLocalUri: proofImageUrl,
+                            idImageLocalUri: idImageUrl,
                             phoneNumber: phoneNumber.trim(),
                             location: registrationLocation,
                             photoURL: uploadedProfileUrl,
@@ -569,14 +542,14 @@ import { validateQualifications } from '../../../functions/shared/technicianServ
                         : {
                             phoneNumber: phoneNumber.trim(),
                             location: registrationLocation,
-                            idImageUrl: uploadedIdUrl,
+                            idImageLocalUri: idImageUrl,
                             photoURL: uploadedProfileUrl,
                           }
                     );
 
-                    setMatchStatus('saved');
-                    setMatchMessage('Face and ID matched. Your registration has been saved.');
+                    setShowMatchResult(false);
                     if (role === 'farmer') router.replace('/(farmer)/home' as any);
+                    else router.replace('/(auth)/pending-verification');
                   } catch (error: any) {
                     let message = error.message || 'Registration failed. Please try again.';
                     if (!faceIdMatched) console.error('[Face ID Match] Verification request failed', message);
@@ -635,8 +608,7 @@ import { validateQualifications } from '../../../functions/shared/technicianServ
                       idUri={idImageUrl}
                       emailOtpPending={emailOtpPending}
                       onPrimary={() => {
-                        if (matchStatus === 'saved') router.replace('/(auth)/pending-verification');
-                        else if (emailOtpPending) { setEmailOtpPending(false); setShowMatchResult(false); setShowOtpModal(true); }
+                        if (emailOtpPending) { setEmailOtpPending(false); setShowMatchResult(false); setShowOtpModal(true); }
                       }}
                       onRetry={() => {
                         setShowMatchResult(false);
@@ -988,19 +960,12 @@ import { validateQualifications } from '../../../functions/shared/technicianServ
                               <TouchableOpacity
                                 style={styles.uploadProofBtn}
                                 onPress={handlePickProof}
-                                disabled={uploadingProof}
                                 activeOpacity={0.8}
                               >
-                                {uploadingProof ? (
-                                  <ActivityIndicator size="small" color={Colors.primary} />
-                                ) : (
-                                  <>
-                                    <Icon name="image" size={20} color={Colors.primary} />
-                                    <Text style={styles.uploadProofBtnText}>
-                                      {proofImageUrl ? 'Change Proof Photo' : 'Upload Proof Image'}
-                                    </Text>
-                                  </>
-                                )}
+                                <Icon name="image" size={20} color={Colors.primary} />
+                                <Text style={styles.uploadProofBtnText}>
+                                  {proofImageUrl ? 'Change Proof Photo' : 'Upload Proof Image'}
+                                </Text>
                               </TouchableOpacity>
 
                               <TextInput
@@ -1031,9 +996,9 @@ import { validateQualifications } from '../../../functions/shared/technicianServ
                         <Text style={styles.wizardBackText}>Back</Text>
                       </TouchableOpacity>}
                       <TouchableOpacity
-                        style={[styles.registerButton, styles.wizardNext, (loading || uploadingProof) && styles.registerButtonDisabled]}
+                        style={[styles.registerButton, styles.wizardNext, loading && styles.registerButtonDisabled]}
                         onPress={continueRegistration}
-                        disabled={loading || uploadingProof}
+                        disabled={loading}
                         activeOpacity={0.8}
                       >
                         {loading ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.registerButtonText}>

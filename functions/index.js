@@ -20,10 +20,13 @@ initializeApp();
 const resendApiKey = defineSecret("RESEND_API_KEY");
 const emailFrom = defineString("EMAIL_FROM");
 const emailOtpSecret = defineSecret("REGISTRATION_OTP_SECRET");
+const faceMatchApiKey = defineSecret("FACE_MATCH_API_KEY");
+const supabaseUrl = defineString("SUPABASE_URL", { default: process.env.EXPO_PUBLIC_SUPABASE_URL || "" });
 const crypto = require("node:crypto");
 const serviceCatalog = require("./shared/technicianServiceCatalog.json");
 const { normalizeAnimalTypeId, qualificationKey, validateQualifications, eligibleTechnicians, canAcceptServiceRequest } = require("./shared/technicianServiceMatching");
 const { toPublicProfile } = require("./shared/publicProfile");
+const { normalizeFarmerProfileUpdate, hashFarmerProfileUpdate, parseLiveFaceImage } = require("./shared/farmerProfileUpdate");
 
 const otpCollection = "registrationEmailOtps";
 const otpHash = (email, salt, code) =>
@@ -49,6 +52,136 @@ const authenticatedUser = async (req) => {
   if (!token) throw new Error("Authentication required.");
   return getAuth().verifyIdToken(token, true);
 };
+
+const farmerIdImageUrl = (value) => {
+  let url;
+  let origin;
+  try { url = new URL(value); origin = new URL(supabaseUrl.value()).origin; }
+  catch { throw Object.assign(new Error("Your original registration ID is unavailable."), { statusCode: 422 }); }
+  if (url.protocol !== "https:" || url.origin !== origin || !url.pathname.startsWith("/storage/v1/object/public/farmers_proof/") || url.username || url.password || url.search || url.hash) {
+    throw Object.assign(new Error("Your original registration ID is unavailable."), { statusCode: 422 });
+  }
+  return url;
+};
+
+const profileUpdateChallengeRef = (db, uid) => db.collection("users").doc(uid);
+const challengeTokenHash = token => crypto.createHash("sha256").update(token).digest("hex");
+const requestError = (message, statusCode = 422) => Object.assign(new Error(message), { statusCode });
+
+exports.startFarmerProfileVerification = onRequest({ cors: true }, async (req, res) => {
+  setOtpCors(res);
+  if (req.method === "OPTIONS") return res.status(204).send("");
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed." });
+  try {
+    const decoded = await authenticatedUser(req);
+    const patch = normalizeFarmerProfileUpdate(req.body?.profile);
+    const db = getFirestore();
+    const userRef = profileUpdateChallengeRef(db, decoded.uid);
+    const userSnapshot = await userRef.get();
+    const user = userSnapshot.data();
+    if (!userSnapshot.exists || user?.role !== "farmer" || user.status !== "active") throw requestError("Only an active farmer can update this profile.", 403);
+    farmerIdImageUrl(user.idImageUrl);
+    const challengeToken = crypto.randomBytes(32).toString("base64url");
+    const expiresAt = Timestamp.fromMillis(Date.now() + 5 * 60 * 1000);
+    await userRef.update({ profileUpdateChallenge: {
+      tokenHash: challengeTokenHash(challengeToken),
+      profileHash: hashFarmerProfileUpdate(patch),
+      expiresAt,
+      attempts: 0,
+    } });
+    return res.status(200).json({ challengeToken, expiresAt: expiresAt.toMillis() });
+  } catch (error) {
+    return res.status(error.statusCode || (error.code?.startsWith("auth/") || error.message === "Authentication required." ? 401 : 500))
+      .json({ error: error.message || "Could not start identity verification." });
+  }
+});
+
+exports.completeFarmerProfileVerification = onRequest({ cors: true, secrets: [faceMatchApiKey] }, async (req, res) => {
+  setOtpCors(res);
+  if (req.method === "OPTIONS") return res.status(204).send("");
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed." });
+  let userRef;
+  let lockId;
+  try {
+    const decoded = await authenticatedUser(req);
+    const patch = normalizeFarmerProfileUpdate(req.body?.profile);
+    const face = parseLiveFaceImage(req.body?.faceImage);
+    const token = req.body?.challengeToken;
+    if (typeof token !== "string" || token.length < 32 || token.length > 128) throw requestError("Start a new identity verification and try again.");
+    const db = getFirestore();
+    userRef = profileUpdateChallengeRef(db, decoded.uid);
+    lockId = crypto.randomUUID();
+    const profileHash = hashFarmerProfileUpdate(patch);
+    const claim = await db.runTransaction(async transaction => {
+      const snapshot = await transaction.get(userRef);
+      const user = snapshot.data();
+      const challenge = user?.profileUpdateChallenge;
+      if (!snapshot.exists || user?.role !== "farmer" || user.status !== "active") throw requestError("Only an active farmer can update this profile.", 403);
+      if (!challenge || challenge.tokenHash !== challengeTokenHash(token) || challenge.profileHash !== profileHash) throw requestError("Verification expired or does not match these profile changes. Start again.");
+      const expiresAt = challenge.expiresAt?.toMillis?.() || 0;
+      if (expiresAt <= Date.now()) throw requestError("Verification expired. Start again.");
+      if ((Number(challenge.attempts) || 0) >= 3) throw requestError("Too many attempts. Start a new verification.", 429);
+      if ((challenge.lockUntil?.toMillis?.() || 0) > Date.now()) throw requestError("Verification is already in progress.", 409);
+      farmerIdImageUrl(user.idImageUrl);
+      transaction.update(userRef, {
+        "profileUpdateChallenge.attempts": (Number(challenge.attempts) || 0) + 1,
+        "profileUpdateChallenge.lockId": lockId,
+        "profileUpdateChallenge.lockUntil": Timestamp.fromMillis(Date.now() + 2 * 60 * 1000),
+      });
+      return { originalIdUrl: user.idImageUrl };
+    });
+
+    const idResponse = await fetch(farmerIdImageUrl(claim.originalIdUrl), { redirect: "error" });
+    if (!idResponse.ok) throw requestError("Your original registration ID could not be loaded. Contact support.", 422);
+    const idContentType = idResponse.headers.get("content-type")?.split(";")[0] || "";
+    const allowedIdTypes = ["image/jpeg", "image/png", "image/webp"];
+    const idBytes = Buffer.from(await idResponse.arrayBuffer());
+    if (!allowedIdTypes.includes(idContentType) || !idBytes.length || idBytes.length > 8 * 1024 * 1024) throw requestError("Your original registration ID could not be loaded. Contact support.", 422);
+
+    const form = new FormData();
+    form.append("reference_image", new Blob([idBytes], { type: idContentType }), "registration-id.jpg");
+    form.append("compare_image", new Blob([face.bytes], { type: face.mimeType }), "live-face.jpg");
+    const matchResponse = await fetch("https://meet.earms.site/api/v1/match", {
+      method: "POST",
+      headers: { Accept: "*/*", "X-API-Key": faceMatchApiKey.value() },
+      body: form,
+    });
+    const matchResult = await matchResponse.json().catch(() => ({}));
+    if (!matchResponse.ok || matchResult.match !== true) {
+      const detail = typeof matchResult.detail === "string" ? matchResult.detail : "Your live face did not match the original registration ID.";
+      throw requestError(detail, matchResponse.status >= 500 ? 503 : 422);
+    }
+
+    await db.runTransaction(async transaction => {
+      const snapshot = await transaction.get(userRef);
+      const user = snapshot.data();
+      const challenge = user?.profileUpdateChallenge;
+      if (!snapshot.exists || user?.role !== "farmer" || user.status !== "active" ||
+          challenge?.tokenHash !== challengeTokenHash(token) || challenge?.profileHash !== profileHash || challenge?.lockId !== lockId ||
+          (challenge.expiresAt?.toMillis?.() || 0) <= Date.now() || user.idImageUrl !== claim.originalIdUrl) {
+        throw requestError("Verification expired or the source ID changed. Start again.");
+      }
+      transaction.update(userRef, { ...patch, profileUpdatedAt: FieldValue.serverTimestamp(), profileUpdateChallenge: FieldValue.delete() });
+    });
+    await getAuth().updateUser(decoded.uid, { displayName: patch.displayName }).catch(() => {});
+    return res.status(200).json({ verified: true, message: "Identity verified and profile updated." });
+  } catch (error) {
+    if (userRef && lockId) {
+      await getFirestore().runTransaction(async transaction => {
+        const snapshot = await transaction.get(userRef);
+        if (snapshot.data()?.profileUpdateChallenge?.lockId === lockId) {
+          transaction.update(userRef, {
+            "profileUpdateChallenge.lockId": FieldValue.delete(),
+            "profileUpdateChallenge.lockUntil": FieldValue.delete(),
+          });
+        }
+      }).catch(() => {});
+    }
+    console.error("[Farmer Profile Verification] Request failed", error.statusCode || error.code || "unknown");
+    return res.status(error.statusCode || (error.code?.startsWith("auth/") || error.message === "Authentication required." ? 401 : 503))
+      .json({ error: error.message || "Identity verification could not be completed." });
+  }
+});
 
 const seedServiceCatalog = async () => {
   const db = getFirestore();
@@ -79,7 +212,7 @@ const timeInRange = (time, start, end) => {
   const minutes = timeMinutes(time);
   const startMinutes = timeMinutes(start);
   const endMinutes = timeMinutes(end);
-  return minutes !== null && startMinutes !== null && endMinutes !== null && startMinutes < endMinutes && minutes >= startMinutes && minutes < endMinutes;
+  return minutes !== null && startMinutes !== null && endMinutes !== null && startMinutes !== endMinutes && (startMinutes < endMinutes ? minutes >= startMinutes && minutes < endMinutes : minutes >= startMinutes || minutes < endMinutes);
 };
 const timeConflict = (date, time, appointment) => {
   const requested = timeMinutes(time);
@@ -93,11 +226,20 @@ const isAppointmentActive = (appointment) => appointment.status === "confirmed" 
   (appointment.status === "pending" && (appointment.responseDeadlineAt?.toMillis?.() ?? Infinity) > Date.now());
 const scheduledAt = (technician, date, time) => {
   const dayOfWeek = new Date(`${date}T12:00:00Z`).getUTCDay();
+  const previousDate = new Date(`${date}T12:00:00Z`);
+  previousDate.setUTCDate(previousDate.getUTCDate() - 1);
+  const previousDateKey = previousDate.toISOString().slice(0, 10);
   const hasSlot = technician.availabilitySlots?.some(slot => {
     const dateMatches = slot.date ? slot.date === date : slot.dayOfWeek === dayOfWeek;
-    return dateMatches && (slot.startTime && slot.endTime
+    const previousDateMatches = slot.date ? slot.date === previousDateKey : slot.dayOfWeek === (dayOfWeek + 6) % 7;
+    const start = timeMinutes(slot.startTime);
+    const end = timeMinutes(slot.endTime);
+    const requested = timeMinutes(time);
+    const continuesOvernight = start !== null && end !== null && requested !== null && start > end && requested < end;
+    return (dateMatches && (slot.startTime && slot.endTime
       ? timeInRange(time, slot.startTime, slot.endTime)
-      : typeof slot.time === "string" && slot.time.trim().toUpperCase() === time.trim().toUpperCase());
+      : typeof slot.time === "string" && slot.time.trim().toUpperCase() === time.trim().toUpperCase())) ||
+      (previousDateMatches && continuesOvernight);
   });
   const ranges = Array.isArray(technician.alwaysAvailable) ? technician.alwaysAvailable : technician.alwaysAvailable ? [technician.alwaysAvailable] : [];
   return !!hasSlot || (technician.alwaysAvailableEnabled !== false && ranges.some(range => timeInRange(time, range.startTime, range.endTime)));
@@ -370,7 +512,7 @@ exports.acceptServiceRequest = onRequest({ cors: true }, async (req, res) => {
       const previousTechnicianId = appointment.technicianId || "";
       const deadline = appointment.responseDeadlineAt?.toMillis?.();
       const expired = typeof deadline === "number" && deadline <= Date.now();
-      if (previousTechnicianId === decoded.uid && expired) throw new Error("The response window expired. The request is being shared with other qualified technicians.");
+      if (previousTechnicianId === decoded.uid && expired && appointment.requestMode !== "direct") throw new Error("The response window expired. The request is being shared with other qualified technicians.");
       if (previousTechnicianId && previousTechnicianId !== decoded.uid && !expired) throw new Error("This request is reserved for another technician.");
       if (appointment.animalTypeId && appointment.serviceTypeId) {
         if (!canAcceptServiceRequest(appointment, decoded.uid, technician)) {
@@ -526,7 +668,6 @@ exports.createServiceRequest = onRequest({ cors: true }, async (req, res) => {
       appointmentLocationAccuracy: body.appointmentLocationAccuracy,
       createdAt: timestamp,
       updatedAt: timestamp,
-      ...(selectedTechnician ? { responseDeadlineAt: Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000) } : {}),
     };
     await appointmentRef.set(appointmentData);
 

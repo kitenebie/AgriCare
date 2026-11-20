@@ -20,7 +20,7 @@
  */
 
 import { router } from 'expo-router';
-import { getSession } from './sessionService';
+import { getSession } from './sessionService';import firestore from '@react-native-firebase/firestore';import { Collections } from './firebase';import { isDirectRequestForTechnician, isGlobalRequestForTechnician } from '../../functions/shared/technicianServiceMatching';import type { ServiceRequest } from '@/utils/technicianRequests';
 
 type NotificationData = Record<string, string | undefined>;
 
@@ -125,7 +125,7 @@ export const handleNotificationNavigation = async (data: NotificationData): Prom
         router.push({ pathname: `${prefix}/home/announcements` as any, params: data.announcementId ? { announcementId: data.announcementId } : {} } as any);
       }
       break;
-    }
+    }    case 'service_request': {      if (role !== 'technician') break;      const dashboard = '/(technician)/dashboard' as any;      try {        const appointmentId = data.appointmentId;        if (!appointmentId) { router.push(dashboard); break; }        const [requestSnapshot, technicianSnapshot] = await Promise.all([          firestore().collection(Collections.APPOINTMENTS).doc(appointmentId).get(),          firestore().collection(Collections.USERS).doc(session.uid).get(),        ]);        const request = { id: requestSnapshot.id, ...requestSnapshot.data() } as ServiceRequest;        const technician = technicianSnapshot.data();        if (requestSnapshot.exists && isDirectRequestForTechnician(request, session.uid)) {          router.push('/(technician)/appointments' as any);        } else if (requestSnapshot.exists && isGlobalRequestForTechnician(request, session.uid, technician)) {          router.push(dashboard);        } else if (requestSnapshot.exists && request.technicianId === session.uid && ['confirmed', 'upcoming'].includes(request.status)) {          router.push('/(technician)/schedule' as any);        } else {          router.push(dashboard);        }      } catch (error) {        console.warn('Service request notification is no longer available:', error);        router.push(dashboard);      }      break;    }
 
     // ─── Knowledge base → knowledge base screen ───
     case 'knowledge_base': {

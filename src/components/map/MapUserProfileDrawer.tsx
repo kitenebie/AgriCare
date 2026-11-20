@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText as Text } from '@/components/ui/FontScale';
 import { Avatar, Icon, type IconName } from '@/components/ui';
 import { BorderRadius, Colors, FontSize, Shadow, Spacing } from '@/constants/theme';
+import { getTechnicianAvailability, type AvailabilitySlot, type TimeRange } from '@/utils/availability';
 
 export interface MapProfileUser {
   id: string;
@@ -15,6 +16,12 @@ export interface MapProfileUser {
   expertise?: string[];
   rating?: number;
   reviewCount?: number;
+  isOnline?: boolean;
+  available?: boolean;
+  availabilitySlots?: AvailabilitySlot[];
+  alwaysAvailable?: TimeRange[] | TimeRange;
+  alwaysAvailableEnabled?: boolean;
+  timezone?: string;
 }
 
 interface MapUserProfileDrawerProps {
@@ -41,6 +48,7 @@ export const MapUserProfileDrawer: React.FC<MapUserProfileDrawerProps> = ({ user
   const specializations = user?.expertise?.length
     ? user.expertise
     : user?.specialization?.split(',').map(item => item.trim()).filter(Boolean) || [];
+  const availability = userType === 'Technician' && user ? getTechnicianAvailability(user) : null;
 
   return (
     <Modal visible={!!user} transparent animationType="slide" statusBarTranslucent onRequestClose={onClose}>
@@ -62,7 +70,7 @@ export const MapUserProfileDrawer: React.FC<MapUserProfileDrawerProps> = ({ user
                 <View style={s.profileCard}>
                   <View style={s.avatarFrame}><Avatar name={user.displayName} imageUrl={user.photoURL} size={82} /></View>
                   <Text style={s.name}>{user.displayName}</Text>
-                  <View style={s.onlineBadge}><View style={s.onlineDot} /><Text style={s.onlineText}>{statusLabel}</Text></View>
+                <View style={[s.onlineBadge, user.isOnline === false && s.offlineBadge]}><View style={[s.onlineDot, user.isOnline === false && s.offlineDot]} /><Text style={[s.onlineText, user.isOnline === false && s.offlineText]}>{user.isOnline === undefined ? statusLabel : user.isOnline ? 'Online' : 'Offline'}</Text></View>
                 </View>
                 <DetailCard icon="profile" label="Account type" value={userType} />
                 {!!user.location && <DetailCard icon="location" label="Location" value={user.location} />}
@@ -73,6 +81,27 @@ export const MapUserProfileDrawer: React.FC<MapUserProfileDrawerProps> = ({ user
                     <View style={s.detailCopy}>
                       <Text style={s.detailLabel}>Specializations</Text>
                       <View style={s.tagList}>{specializations.map((item, index) => <View key={`${item}-${index}`} style={s.tag}><Text style={s.tagText}>{item}</Text></View>)}</View>
+                    </View>
+                  </View>
+                )}
+                {availability && (
+                  <View style={[s.detailCard, s.scheduleCard]}>
+                    <View style={s.detailIcon}><Icon name="calendar" size={18} color={Colors.primary} /></View>
+                    <View style={s.detailCopy}>
+                      <Text style={s.detailLabel}>Service availability</Text>
+                      <Text style={s.availabilityStatus}>{availability.status}</Text>
+                      <Text style={s.timezone}>Times shown in {availability.timezone}</Text>
+                      {availability.schedule.map(({ day, isToday, ranges }) => (
+                        <View key={day} style={[s.scheduleRow, isToday && s.todayRow]}>
+                          <Text style={[s.scheduleDay, isToday && s.todayText]}>{day}{isToday ? ' · Today' : ''}</Text>
+                          <Text style={s.scheduleHours}>{ranges.length ? ranges.map(range => `${range.startTime}–${range.endTime}`).join(', ') : 'Unavailable'}</Text>
+                        </View>
+                      ))}
+                      {availability.datedSlots.map((slot, index) => (
+                        <Text key={`${slot.date}-${index}`} style={s.scheduleHours}>
+                          {slot.date}: {slot.startTime && slot.endTime ? `${slot.startTime}–${slot.endTime}` : slot.time || 'Available'}
+                        </Text>
+                      ))}
                     </View>
                   </View>
                 )}
@@ -119,7 +148,18 @@ const s = StyleSheet.create({
   onlineBadge: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: Spacing.sm, paddingHorizontal: Spacing.md, paddingVertical: 7, borderRadius: BorderRadius.full, backgroundColor: '#E8F5E9' },
   onlineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.success },
   onlineText: { color: Colors.primaryDark, fontSize: FontSize.xs, fontWeight: '700' },
+  offlineBadge: { backgroundColor: '#F1F5F9' },
+  offlineDot: { backgroundColor: Colors.textLight },
+  offlineText: { color: Colors.textSecondary },
   detailCard: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.md, backgroundColor: Colors.white, borderRadius: BorderRadius.lg, padding: Spacing.lg, ...Shadow.light },
+  scheduleCard: { marginTop: 0 },
+  availabilityStatus: { color: Colors.primaryDark, fontSize: FontSize.md, fontWeight: '700' },
+  timezone: { color: Colors.textSecondary, fontSize: FontSize.xs, marginBottom: Spacing.xs },
+  scheduleRow: { flexDirection: 'row', justifyContent: 'space-between', gap: Spacing.sm, paddingVertical: 5, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
+  todayRow: { backgroundColor: '#E8F5E9', borderRadius: BorderRadius.sm, paddingHorizontal: Spacing.xs },
+  scheduleDay: { color: Colors.textSecondary, fontSize: FontSize.xs, fontWeight: '600' },
+  todayText: { color: Colors.primaryDark, fontWeight: '800' },
+  scheduleHours: { color: Colors.text, fontSize: FontSize.xs, flexShrink: 1, textAlign: 'right' },
   detailIcon: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E8F5E9' },
   detailCopy: { flex: 1, gap: 4 },
   detailLabel: { color: Colors.textSecondary, fontSize: FontSize.xs, fontWeight: '700' },

@@ -40,6 +40,13 @@ const isTechnicianQualified = (technician, animalTypeId, serviceTypeId) => {
     technician.qualificationKeys.includes(qualificationKey(typeId, serviceTypeId));
 };
 
+const hasSpecializationForAnyAnimal = (technician, animalTypeIds) => {
+  if (technician?.role !== 'technician' || technician.status !== 'active' ||
+      technician.qualificationVerified !== true || !Array.isArray(technician.qualificationKeys)) return false;
+  const animalTypes = new Set((animalTypeIds || []).map(normalizeAnimalTypeId).filter(Boolean));
+  return technician.qualificationKeys.some(key => animalTypes.has(String(key).split(':')[0]));
+};
+
 const isBreedValid = (breedId, animalTypeId) => {
   const typeId = normalizeAnimalTypeId(animalTypeId);
   return catalog.breeds.some(breed => breed.id === breedId && breed.animalTypeId === typeId);
@@ -49,15 +56,29 @@ const eligibleTechnicians = (technicians, animalTypeId, serviceTypeId) =>
   technicians.filter(technician => technician.role === 'technician' && technician.status === 'active' &&
     technician.available !== false && isTechnicianQualified(technician, animalTypeId, serviceTypeId));
 
+const isDirectRequestForTechnician = (request, technicianId) => request?.status === 'pending' &&
+  request.technicianId === technicianId && (request.requestMode === 'direct' || !request.requestMode);
+
+const isGlobalRequestForTechnician = (request, technicianId, technician) => {
+  if (request?.status !== 'pending' || request.technicianId ||
+      !['global', 'general', undefined, null].includes(request.requestMode) ||
+      request.eligibleTechnicianIds?.includes(technicianId) !== true ||
+      request.declinedByTechnicianIds?.includes(technicianId) ||
+      !request.animalTypeId || !request.serviceTypeId) return false;
+  if (!technician) return true;
+  if (technician.role !== 'technician' || technician.status !== 'active' || technician.available === false || technician.qualificationVerified !== true) return false;
+  return isTechnicianQualified(technician, request.animalTypeId, request.serviceTypeId);
+};
+
 const isRequestAvailableToTechnician = (request, technicianId) => request?.status === 'pending' &&
   !request.declinedByTechnicianIds?.includes(technicianId) &&
   (request.eligibleTechnicianIds?.includes(technicianId) === true ||
     ((!request.animalTypeId || !request.serviceTypeId) && request.technicianId === technicianId));
 
 const canAcceptServiceRequest = (request, technicianId, technician) => {
-  if (!isRequestAvailableToTechnician(request, technicianId)) return false;
-  return !request.animalTypeId || !request.serviceTypeId ||
-    isTechnicianQualified(technician, request.animalTypeId, request.serviceTypeId);
+  if (!isRequestAvailableToTechnician(request, technicianId) || !request.animalTypeId || !request.serviceTypeId) return false;
+  if (request.requestMode === 'direct' && request.technicianId !== technicianId) return false;
+  return isTechnicianQualified(technician, request.animalTypeId, request.serviceTypeId);
 };
 
-module.exports = { catalog, normalizeAnimalTypeId, qualificationKey, validateQualifications, isTechnicianQualified, isBreedValid, eligibleTechnicians, isRequestAvailableToTechnician, canAcceptServiceRequest };
+module.exports = { catalog, normalizeAnimalTypeId, qualificationKey, validateQualifications, isTechnicianQualified, hasSpecializationForAnyAnimal, isBreedValid, eligibleTechnicians, isDirectRequestForTechnician, isGlobalRequestForTechnician, isRequestAvailableToTechnician, canAcceptServiceRequest };

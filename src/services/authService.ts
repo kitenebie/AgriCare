@@ -10,6 +10,8 @@ import { saveSession, clearSession } from './sessionService';
 import { logAuth, logError } from './logService';
 import { completeRegistrationEmailVerification } from './emailVerificationService';
 import { updateTechnicianQualifications } from './technicianQualificationService';
+import { callBackend } from './backendApi';
+import { uploadRegistrationDocuments } from './storage';
 
 export type AuthUser = any;
 
@@ -40,8 +42,8 @@ export const signUp = async (
     expertise?: string[];
     specializationIds?: string[];
     subSpecializationIds?: string[];
-    proofImageUrl?: string;
-    idImageUrl?: string;
+    idImageLocalUri?: string;
+    proofImageLocalUri?: string;
     phoneNumber?: string;
     location?: string;
     photoURL?: string;
@@ -75,8 +77,8 @@ export const signUp = async (
       phoneNumber: extraData?.phoneNumber || '',
       location: extraData?.location || '',
       photoURL: extraData?.photoURL || '',
-      proofImageUrl: extraData?.proofImageUrl || '',
-      idImageUrl: extraData?.idImageUrl || '',
+      proofImageUrl: '',
+      idImageUrl: '',
       expertise: extraData?.expertise || [],
       specialization: specializationStr,
       specializationIds: [],
@@ -94,24 +96,26 @@ export const signUp = async (
         await user.getIdToken(),
       );
     }
+    if (!extraData?.idImageLocalUri) throw new Error('Your registration ID is required.');
+    if (role === 'technician' && !extraData.proofImageLocalUri) throw new Error('Your qualification proof is required.');
+    const documents = await uploadRegistrationDocuments(extraData.idImageLocalUri, extraData.proofImageLocalUri);
+    if (!documents.identityPath || (role === 'technician' && !documents.proofPath)) throw new Error(documents.error || 'Could not securely upload your registration documents.');
   } catch (error) {
     await userRef.delete().catch(cleanupError => console.warn('Failed to remove incomplete registration:', cleanupError));
     await user.delete().catch(cleanupError => console.warn('Failed to remove incomplete auth account:', cleanupError));
     throw error;
   }
 
-  await registerFCM(user.uid);
-
-  // Log activity
-  await logAuth('User Registration', `New ${role} registered: ${displayName} (${email})`, user.uid, displayName);
-
-  // Save session for auto-login
+  // Save the session before optional notification and activity logging work.
   await saveSession({
     uid: user.uid,
     email,
     displayName,
     role,
   });
+
+  void registerFCM(user.uid);
+  void logAuth('User Registration', `New ${role} registered: ${displayName} (${email})`, user.uid, displayName);
 
   return user;
 };

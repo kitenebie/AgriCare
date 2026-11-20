@@ -18,7 +18,7 @@ import { useFadeIn, useFadeInUp } from "@/hooks/useAnimatedEntry";
 import { Collections } from "@/services/firebase";
 import { getSession } from "@/services/sessionService";
 import { getUnviewedContentCounts } from "@/services/contentViewService";
-import { isRequestAvailableToTechnician, type ServiceRequest } from "@/utils/technicianRequests";
+import { isDirectRequestForTechnician, isGlobalRequestForTechnician, type ServiceRequest } from "@/utils/technicianRequests";
 import firestore from "@react-native-firebase/firestore";
 import { isTimeInAnyRange, normalizeTimeRanges } from "@/utils/availability";
 import { router, useFocusEffect } from "expo-router";
@@ -85,6 +85,7 @@ export default function TechDashboardScreen() {
         .collection(Collections.USERS)
         .doc(uid)
         .get();
+      const technicianProfile = userDoc.data();
       if (userDoc.exists) {
         const data = userDoc.data();
         if (data?.photoURL) setPhotoURL(data.photoURL);
@@ -107,7 +108,8 @@ export default function TechDashboardScreen() {
       const byId = new Map<string, ServiceRequest>();
       [...eligibleSnap.docs, ...assignedSnap.docs].forEach(doc => byId.set(doc.id, { id: doc.id, ...doc.data() } as ServiceRequest));
       const allAppts = [...byId.values()];
-      const pendingRequests = allAppts.filter(appointment => isRequestAvailableToTechnician(appointment, uid)).length;
+      const pendingRequests = allAppts.filter(appointment => isGlobalRequestForTechnician(appointment, uid, technicianProfile)).length;
+      const directPendingRequests = allAppts.filter(appointment => isDirectRequestForTechnician(appointment, uid)).length;
       const myAppts = allAppts.filter(a => a.technicianId === uid);
       const acceptedRequests = myAppts.filter(
         (a) => a.status === "confirmed",
@@ -157,7 +159,7 @@ export default function TechDashboardScreen() {
       const appointments = myAppts.filter(
         (a) => a.status === "confirmed",
       ).length;
-      const availableRequests = pendingRequests;
+      const availableRequests = directPendingRequests;
 
       const healthSnap = await firestore()
         .collection("healthRecords")
@@ -187,23 +189,38 @@ export default function TechDashboardScreen() {
     let unsubscribe = () => {};
     getSession().then(session => {
       if (!active || !session) return;
-      let eligibleSnapshot: any;
-      let assignedSnapshot: any;
+      let technicianProfile: any;
+      let requestSnapshot: any;
       const updateRequests = () => {
-        if (!eligibleSnapshot || !assignedSnapshot) return;
-        const byId = new Map<string, ServiceRequest>();
-        [...eligibleSnapshot.docs, ...assignedSnapshot.docs].forEach(doc => byId.set(doc.id, { ...doc.data(), id: doc.id } as ServiceRequest));
-        const requests = [...byId.values()].filter(request => isRequestAvailableToTechnician(request, session.uid)).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+        if (!requestSnapshot || !technicianProfile) return;
+        const eligibleRequests = requestSnapshot.docs
+          .map((doc: any) => ({ ...doc.data(), id: doc.id } as ServiceRequest))
+          .filter((request: ServiceRequest) => isGlobalRequestForTechnician(request, session.uid, technicianProfile))
+          .sort((a: ServiceRequest, b: ServiceRequest) => (a.date || '').localeCompare(b.date || ''));
         if (active) {
-          setFarmerRequests(requests);
-          setBadgeCounts(current => ({ ...current, availableRequests: requests.length }));
+          setFarmerRequests(eligibleRequests);
+          setDashData(current => ({ ...current, pendingRequests: eligibleRequests.length }));
         }
       };
-      const onError = (error: Error) => console.warn('Farmer request services load error:', error);
-      const requests = firestore().collection(Collections.APPOINTMENTS).where('status', '==', 'pending');
-      const stopEligible = requests.where('eligibleTechnicianIds', 'array-contains', session.uid).onSnapshot(snapshot => { eligibleSnapshot = snapshot; updateRequests(); }, onError);
-      const stopAssigned = requests.where('technicianId', '==', session.uid).onSnapshot(snapshot => { assignedSnapshot = snapshot; updateRequests(); }, onError);
-      unsubscribe = () => { stopEligible(); stopAssigned(); };
+      const requests = firestore().collection(Collections.APPOINTMENTS)
+        .where('status', '==', 'pending').where('eligibleTechnicianIds', 'array-contains', session.uid);
+      const unsubscribeRequests = requests.onSnapshot(snapshot => {
+        requestSnapshot = snapshot;
+        updateRequests();
+      }, error => console.warn('Farmer request services load error:', error));
+      const unsubscribeTechnician = firestore().collection(Collections.USERS).doc(session.uid).onSnapshot(snapshot => {
+        technicianProfile = snapshot.data();
+        updateRequests();
+      }, error => console.warn('Technician qualifications subscription failed:', error));
+      const unsubscribeDirectRequests = firestore().collection(Collections.APPOINTMENTS)
+        .where('technicianId', '==', session.uid)
+        .onSnapshot(snapshot => {
+          const directCount = snapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() } as ServiceRequest))
+            .filter(request => isDirectRequestForTechnician(request, session.uid)).length;
+          if (active) setBadgeCounts(current => ({ ...current, availableRequests: directCount }));
+        }, error => console.warn('Direct request counter subscription failed:', error));
+      unsubscribe = () => { unsubscribeRequests(); unsubscribeTechnician(); unsubscribeDirectRequests(); };
     }).catch(error => console.warn('Farmer request services subscription failed:', error));
     return () => { active = false; unsubscribe(); };
   }, []);
@@ -226,8 +243,7 @@ export default function TechDashboardScreen() {
         <Image
           source={require("../../../../assets/images/technician/Home/header_banner.png")}
           style={styles.headerBanner}
-          resizeMode="fit"
-          pointerEvents="none"
+          resizeMode="contain"
         />
         <View style={styles.headerTop}>
           <Text style={styles.greeting}></Text>
@@ -274,7 +290,6 @@ export default function TechDashboardScreen() {
             source={require("../../../../assets/images/technician/Home/dashboard_header_banner.png")}
             style={{ width: screenWidth, height: (screenWidth * 441) / 2172, marginBottom: Spacing.md }}
             resizeMode="contain"
-            pointerEvents="none"
           />
           <Card style={styles.overviewCard}>
             <View style={styles.overviewGrid}>
@@ -489,7 +504,6 @@ const OverviewItem: React.FC<OverviewItemProps> = ({
         source={artwork}
         style={styles.statArtwork}
         resizeMode="contain"
-        pointerEvents="none"
       />
       <View style={[styles.statIcon, tone.icon]}>
         <Icon name={iconName} size={20} color={Colors.white} />

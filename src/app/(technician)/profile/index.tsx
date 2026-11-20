@@ -6,8 +6,11 @@ import {
   useFontScale,
 } from "@/components/ui/FontScale";
 import { modalAlert } from "@/components/ui/ModalAlert";
+import IdentityVerificationResult from "@/components/auth/IdentityVerificationResult";
+import LiveFaceCapture from "@/components/auth/LiveFaceCapture";
 import TechnicianQualificationPicker from "@/components/technician/TechnicianQualificationPicker";
 import { BorderRadius, Colors, FontSize, Spacing } from "@/constants/theme";
+import { callBackend } from "@/services/backendApi";
 import { updateTechnicianQualifications as saveTechnicianQualifications } from "@/services/technicianQualificationService";
 import { validateQualifications } from "../../../../functions/shared/technicianServiceMatching";
 import {
@@ -25,6 +28,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   ImageBackground,
   KeyboardAvoidingView,
   Modal,
@@ -43,6 +47,7 @@ import barangays from "../../../../assets/addresses/barangay.json";
 const BIOMETRICS_KEY = "@agricare_biometrics_enabled";
 type AddressPicker = "region" | "province" | "municipality" | "barangay" | null;
 type AddressOption = { value: string; label: string };
+type ProfileChanges = { displayName: string; phoneNumber: string; location: string };
 
 const getInitialAddress = (address = "") => {
   const parts = address.split(",").map((part) => part.trim());
@@ -81,6 +86,15 @@ export default function TechnicianProfileScreen() {
   const [selectedAddress, setSelectedAddress] = useState(getInitialAddress);
   const [addressPicker, setAddressPicker] = useState<AddressPicker>(null);
   const [saving, setSaving] = useState(false);
+  const [comparisonPhotoUri, setComparisonPhotoUri] = useState("");
+  const [pendingProfile, setPendingProfile] = useState<ProfileChanges | null>(null);
+  const [challengeToken, setChallengeToken] = useState("");
+  const [faceUri, setFaceUri] = useState("");
+  const [showCapture, setShowCapture] = useState(false);
+  const [showResult, setShowResult] = useState(false);
+  const [matchStatus, setMatchStatus] = useState<"checking" | "matched" | "failed">("checking");
+  const [matchFailureKind, setMatchFailureKind] = useState<"mismatch" | "image" | "service" | "registration">("service");
+  const [matchMessage, setMatchMessage] = useState("");
   const [qualificationModal, setQualificationModal] = useState(false);
   const [qualificationSaving, setQualificationSaving] = useState(false);
   const [specializationIds, setSpecializationIds] = useState<string[]>([]);
@@ -144,7 +158,10 @@ export default function TechnicianProfileScreen() {
           const doc = await firestore().collection("users").doc(uid).get();
           if (doc.exists) {
             const data = doc.data();
-            if (data?.photoURL) setPhotoURL(data.photoURL);
+            if (data?.photoURL) {
+              setPhotoURL(data.photoURL);
+              setComparisonPhotoUri(data.photoURL);
+            }
             setSpecializationIds(Array.isArray(data?.specializationIds) ? data.specializationIds : []);
             setSubSpecializationIds(Array.isArray(data?.subSpecializationIds) ? data.subSpecializationIds : []);
             if (data?.phoneNumber) setEditPhone(data.phoneNumber);
@@ -190,8 +207,8 @@ export default function TechnicianProfileScreen() {
       modalAlert("Invalid Name", "Use letters only, with spaces, apostrophes, or hyphens.");
       return;
     }
-    if (editPhone.trim() && !/^\d{11}$/.test(editPhone.trim())) {
-      modalAlert("Invalid Phone Number", "Enter an 11-digit phone number.");
+    if (!/^09\d{9}$/.test(editPhone.trim())) {
+      modalAlert("Invalid Phone Number", "Enter an 11-digit phone number beginning with 09.");
       return;
     }
     if (!editStreetPurok.trim()) {
@@ -202,29 +219,72 @@ export default function TechnicianProfileScreen() {
       modalAlert("Address Required", "Please select region, province, city/municipality, and barangay.");
       return;
     }
+    if (!comparisonPhotoUri) {
+      modalAlert("Profile Photo Required", "Add a current profile photo before updating your profile.");
+      return;
+    }
+    const profile: ProfileChanges = {
+      displayName: editName.trim(),
+      phoneNumber: editPhone.trim(),
+      location: `${editStreetPurok.trim()}, ${selectedAddress.barangay.description}, ${selectedAddress.municipality.description}, ${selectedAddress.province.description}`,
+    };
     setSaving(true);
     try {
-      const currentUser = auth().currentUser;
-      if (currentUser) {
-        await currentUser.updateProfile({ displayName: editName.trim() });
-        await firestore().collection("users").doc(currentUser.uid).update({
-          displayName: editName.trim(),
-          phoneNumber: editPhone.trim(),
-          location: `${editStreetPurok.trim()}, ${selectedAddress.barangay.description}, ${selectedAddress.municipality.description}, ${selectedAddress.province.description}`,
-        });
-      }
-      if (user) {
-        const updated: UserSession = { ...user, displayName: editName.trim() };
-        await saveSession(updated);
-        setUser(updated);
-      }
-      modalAlert("Success", "Profile updated.");
+      const challenge = await callBackend<{ challengeToken: string }>("startFarmerProfileVerification", { profile });
+      setPendingProfile(profile);
+      setChallengeToken(challenge.challengeToken);
+      setFaceUri("");
+      setComparisonPhotoUri(photoURL);
       setAccountModal(false);
-    } catch (e: any) {
-      modalAlert("Error", e.message);
+      setShowResult(false);
+      setShowCapture(true);
+    } catch (error: any) {
+      modalAlert("Unable to Start Verification", error.message || "Please try again.");
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleFaceCapture = async (uri: string) => {
+    setShowCapture(false);
+    setFaceUri(uri);
+    setMatchStatus("checking");
+    setMatchMessage("Comparing your new selfie with your current profile photo.");
+    setShowResult(true);
+    setSaving(true);
+    try {
+      if (!pendingProfile || !challengeToken) throw new Error("Verification expired. Start again.");
+      console.info("[Profile Selfie Match] Sending technician update request", { capturedDataUri: uri.startsWith("data:image/") });
+      const savedProfile = await callBackend<{ photoURL: string }>("completeFarmerProfileVerification", { profile: pendingProfile, challengeToken, faceImage: uri });
+      setMatchStatus("matched");
+      setMatchMessage("Your new selfie matched your current profile photo. Your changes and new profile selfie are saved.");
+      setPhotoURL(savedProfile.photoURL);
+      try {
+        if (user) {
+          const updated: UserSession = { ...user, displayName: pendingProfile.displayName };
+          await saveSession(updated);
+          setUser(updated);
+        }
+        await auth().currentUser?.updateProfile({ displayName: pendingProfile.displayName, photoURL: savedProfile.photoURL });
+      } catch (error) {
+        console.warn("[Profile] Saved verified technician profile, but local session refresh failed", error);
+      }
+    } catch (error: any) {
+      const detail = error.message || "Profile photo verification could not be completed.";
+      console.warn("[Profile Photo Match] Technician profile verification rejected", detail);
+      setMatchFailureKind(/detect|image|readable|clear|photo|selfie/i.test(detail) ? "image" : /match|face|ID/i.test(detail) ? "mismatch" : "service");
+      setMatchStatus("failed");
+      setMatchMessage(detail);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const retryVerification = () => {
+    if (!pendingProfile || !challengeToken) return;
+    setFaceUri("");
+    setShowResult(false);
+    setShowCapture(true);
   };
 
   const handleSaveQualifications = async () => {
@@ -286,6 +346,26 @@ export default function TechnicianProfileScreen() {
         <ActivityIndicator size="large" color={Colors.primary} />
       </View>
     );
+
+  if (showCapture) return <LiveFaceCapture onCapture={handleFaceCapture} onClose={() => { setShowCapture(false); setPendingProfile(null); setChallengeToken(""); }} />;
+  if (showResult) return (
+    <IdentityVerificationResult
+      status={matchStatus}
+      failureKind={matchFailureKind}
+      message={matchMessage}
+      faceUri={comparisonPhotoUri}
+      idUri={faceUri}
+      profileComparison
+      emailOtpPending={false}
+      successTitle="Profile Updated Successfully"
+      successMessage="Your new selfie matched your current profile photo. Your profile has been updated."
+      primaryLabel="Back to Profile"
+      onPrimary={() => { setShowResult(false); setPendingProfile(null); setChallengeToken(""); }}
+      onRetry={retryVerification}
+      onCancel={() => { setShowResult(false); setPendingProfile(null); setChallengeToken(""); }}
+      onSupport={() => modalAlert("Contact Support", "Please contact your AgriCare administrator for assistance.")}
+    />
+  );
 
   return (
     <KeyboardAvoidingView
@@ -434,7 +514,7 @@ export default function TechnicianProfileScreen() {
                   >
                     Email cannot be changed
                   </Text>
-                  <Text style={styles.label}>Phone Number</Text>
+                  <Text style={styles.label}>Phone Number *</Text>
                   <TextInput
                     style={styles.input}
                     value={editPhone}
@@ -444,6 +524,9 @@ export default function TechnicianProfileScreen() {
                     keyboardType="number-pad"
                     maxLength={11}
                   />
+                  <Text style={{ color: Colors.textLight, fontSize: 12, marginTop: 5 }}>
+                    Your current profile photo and a newly captured selfie are compared before account changes are saved.
+                  </Text>
                   <Text style={styles.label}>Street / Purok *</Text>
                   <TextInput
                     style={styles.input}

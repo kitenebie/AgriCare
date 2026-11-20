@@ -25,6 +25,7 @@ const getMonthCells = (date: Date) => {
 };
 
 export default function TechnicianAvailabilityPage() {
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Manila';
   const [available, setAvailable] = useState(true);
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
   const [alwaysAvailable, setAlwaysAvailable] = useState<TimeRange[]>([]);
@@ -107,7 +108,7 @@ export default function TechnicianAvailabilityPage() {
 
   const addAlwaysAvailableRange = async () => {
     if (!rangeStart || !rangeEnd || !isTimeRangeValid(rangeStart, rangeEnd)) {
-      modalAlert('Time range required', 'Choose a start and end time. The end time must be later than the start time.');
+      modalAlert('Time range required', 'Choose different start and end times. The range may continue overnight.');
       return;
     }
     if (hasTimeRangeConflict(rangeStart, rangeEnd, { everyDay: true }, availabilitySlots, alwaysAvailable)) {
@@ -119,7 +120,7 @@ export default function TechnicianAvailabilityPage() {
       if (!session) return;
       if (alwaysAvailable.some(range => range.startTime === rangeStart && range.endTime === rangeEnd)) return;
       const ranges = [...alwaysAvailable, { startTime: rangeStart, endTime: rangeEnd }];
-      await firestore().collection(Collections.USERS).doc(session.uid).update({ alwaysAvailable: ranges, alwaysAvailableEnabled: true });
+      await firestore().collection(Collections.USERS).doc(session.uid).update({ alwaysAvailable: ranges, alwaysAvailableEnabled: true, timezone });
       setAlwaysAvailable(ranges);
       setAlwaysAvailableEnabled(true);
       setRangeStart('');
@@ -134,7 +135,7 @@ export default function TechnicianAvailabilityPage() {
     try {
       const session = await getSession();
       if (!session) return;
-      await firestore().collection(Collections.USERS).doc(session.uid).update({ alwaysAvailableEnabled: enabled });
+      await firestore().collection(Collections.USERS).doc(session.uid).update({ alwaysAvailableEnabled: enabled, timezone });
       setAlwaysAvailableEnabled(enabled);
     } catch (error) {
       console.warn('Always available update error:', error);
@@ -147,7 +148,7 @@ export default function TechnicianAvailabilityPage() {
       if (!session) return;
       const ranges = alwaysAvailable.filter((_, rangeIndex) => rangeIndex !== index);
       const enabled = ranges.length > 0 && alwaysAvailableEnabled;
-      await firestore().collection(Collections.USERS).doc(session.uid).update({ alwaysAvailable: ranges.length ? ranges : null, alwaysAvailableEnabled: enabled });
+      await firestore().collection(Collections.USERS).doc(session.uid).update({ alwaysAvailable: ranges.length ? ranges : null, alwaysAvailableEnabled: enabled, timezone });
       setAlwaysAvailable(ranges);
       setAlwaysAvailableEnabled(enabled);
     } catch (error) {
@@ -157,7 +158,7 @@ export default function TechnicianAvailabilityPage() {
 
   const addAvailabilityRange = async (date: Date, startTime: string, endTime: string) => {
     if (!isTimeRangeValid(startTime, endTime)) {
-      modalAlert('Invalid time range', 'The end time must be later than the start time.');
+      modalAlert('Invalid time range', 'Choose different start and end times. The range may continue overnight.');
       return;
     }
     if (hasTimeRangeConflict(startTime, endTime, { date: dateKey(date) }, availabilitySlots, alwaysAvailableEnabled ? alwaysAvailable : [])) {
@@ -171,6 +172,7 @@ export default function TechnicianAvailabilityPage() {
       if (availabilitySlots.some(item => item.date === slot.date && item.startTime === startTime && item.endTime === endTime)) return;
       await firestore().collection(Collections.USERS).doc(session.uid).update({
         availabilitySlots: firestore.FieldValue.arrayUnion(slot),
+        timezone,
       });
       setAvailabilitySlots(current => [...current, slot]);
       setOneTimeStart('');
@@ -193,6 +195,7 @@ export default function TechnicianAvailabilityPage() {
       }
       await firestore().collection(Collections.USERS).doc(session.uid).update({
         availabilitySlots: firestore.FieldValue.arrayUnion(...newSlots),
+        timezone,
       });
       setAvailabilitySlots(current => [...current, ...newSlots]);
     } catch (error) {
@@ -206,6 +209,7 @@ export default function TechnicianAvailabilityPage() {
       if (!session) return;
       await firestore().collection(Collections.USERS).doc(session.uid).update({
         availabilitySlots: firestore.FieldValue.arrayRemove(slot),
+        timezone,
       });
       setAvailabilitySlots(current => current.filter(item => item.date !== slot.date || item.dayOfWeek !== slot.dayOfWeek || item.time !== slot.time || item.startTime !== slot.startTime || item.endTime !== slot.endTime));
     } catch (error) {
@@ -396,7 +400,7 @@ const styles = StyleSheet.create({
   setupButton: { flexDirection: 'row', minHeight: 52, alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, borderRadius: BorderRadius.md, backgroundColor: Colors.primary, marginTop: Spacing.sm, marginBottom: Spacing.md },
   setupButtonText: { color: Colors.white, fontSize: FontSize.md, fontWeight: '700' },
   choiceOverlay: { flex: 1, justifyContent: 'flex-end' },
-  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.62)' },
+  modalBackdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0,0,0,0.62)' },
   choiceSheet: { width: '100%', backgroundColor: Colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: Spacing.lg, paddingTop: Spacing.sm, paddingBottom: Spacing.md, shadowColor: '#000', shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.22, shadowRadius: 16, elevation: 24 },
   choiceHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, marginBottom: Spacing.sm },
   choiceOptions: { paddingBottom: Spacing.md },
@@ -409,7 +413,7 @@ const styles = StyleSheet.create({
   choiceTitle: { color: Colors.text, fontSize: FontSize.md, fontWeight: '700' },
   choiceDescription: { color: Colors.textSecondary, fontSize: FontSize.xs, marginTop: 3 },
   drawerOverlay: { flex: 1, justifyContent: 'flex-end' },
-  drawerBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  drawerBackdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0,0,0,0.45)' },
   setupDrawer: { width: '100%', backgroundColor: Colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: Spacing.sm, shadowColor: '#000', shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.22, shadowRadius: 16, elevation: 24 },
   drawerHandle: { width: 38, height: 4, borderRadius: 2, alignSelf: 'center', backgroundColor: Colors.border, marginBottom: Spacing.md },
   drawerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.md, paddingHorizontal: Spacing.lg, paddingBottom: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.border },

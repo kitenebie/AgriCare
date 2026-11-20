@@ -6,7 +6,10 @@
 
 import { decode as base64Decode } from "base64-arraybuffer";
 import * as ImagePicker from "expo-image-picker";
+import { fetch as expoFetch } from "expo/fetch";
+import { File } from "expo-file-system";
 import firestore from "@react-native-firebase/firestore";
+import { authInstance } from "./firebase";
 import { supabase } from "../../utils/supabase";
 import { Collections } from "./firebase";
 import { logCrud } from "./logService";
@@ -16,9 +19,7 @@ import { logCrud } from "./logService";
 export type StorageBucket =
   | "animals"
   | "technician_profile_photo"
-  | "technician_proof"
-  | "farmer_profile_photo"
-  | "farmers_proof";
+  | "farmer_profile_photo";
 
 // ─── Data Interfaces ───
 
@@ -35,6 +36,38 @@ export interface UploadResult {
   publicUrl?: string;
   error?: string;
 }
+
+export const uploadRegistrationDocuments = async (identityUri: string, proofUri?: string): Promise<{ identityPath?: string; proofPath?: string; error?: string }> => {
+  try {
+    const user = authInstance.currentUser;
+    const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+    const apiKey = process.env.EXPO_PUBLIC_SUPABASE_KEY;
+    if (!user || !baseUrl || !apiKey || !identityUri.startsWith("file://") || (proofUri && !proofUri.startsWith("file://"))) throw new Error("Could not securely upload your registration documents. Select the images again and retry.");
+    console.info("[Registration ID] Upload started", { proofIncluded: Boolean(proofUri) });
+    const appendFile = (form: FormData, field: string, uri: string) => {
+      form.append(field, new File(uri));
+    };
+    const form = new FormData();
+    form.append("action", "upload_registration_documents");
+    appendFile(form, "identity", identityUri);
+    if (proofUri) appendFile(form, "proof", proofUri);
+    const response = await expoFetch(`${baseUrl}/functions/v1/registration-email-otp`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${await user.getIdToken()}`, apikey: apiKey },
+      body: form,
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || typeof result.identityPath !== "string" || (proofUri && typeof result.proofPath !== "string")) {
+      console.error("[Registration ID] Upload failed", { status: response.status, detail: result.error || "Missing storage path." });
+      throw new Error(result.error || "Could not securely upload your registration documents.");
+    }
+    console.info("[Registration ID] Upload complete", { identityPath: result.identityPath, proofPath: result.proofPath || null });
+    return { identityPath: result.identityPath, ...(typeof result.proofPath === "string" ? { proofPath: result.proofPath } : {}) };
+  } catch (error: any) {
+    console.error("[Registration ID] Upload request failed", error.message || error);
+    return { error: error.message || "Could not securely upload your registration documents." };
+  }
+};
 
 export interface SaveResult {
   success: boolean;
@@ -127,22 +160,10 @@ export const uploadTechnicianProfilePhoto = async (
   return uploadImageToSupabase(localUri, "technician_profile_photo");
 };
 
-export const uploadTechnicianProof = async (
-  localUri: string
-): Promise<UploadResult> => {
-  return uploadImageToSupabase(localUri, "technician_proof");
-};
-
 export const uploadFarmerProfilePhoto = async (
   localUri: string
 ): Promise<UploadResult> => {
   return uploadImageToSupabase(localUri, "farmer_profile_photo");
-};
-
-export const uploadFarmerProof = async (
-  localUri: string
-): Promise<UploadResult> => {
-  return uploadImageToSupabase(localUri, "farmers_proof");
 };
 
 // ─── Save Animal to Firestore ───

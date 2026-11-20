@@ -196,7 +196,7 @@ export const declineAppointment = async (params: {
       throw new Error('This request is reserved for another technician.');
     }
 
-    const isPublicRequest = !previousTechnicianId || (appointment.technicianName || '').toLowerCase() === 'unassigned' || expired;
+    const isPublicRequest = appointment.requestMode !== 'direct' && (!previousTechnicianId || (appointment.technicianName || '').toLowerCase() === 'unassigned' || expired);
     transaction.update(appointmentRef, isPublicRequest ? {
       status: 'pending',
       technicianId: '',

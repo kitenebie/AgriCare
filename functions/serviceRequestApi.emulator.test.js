@@ -156,6 +156,9 @@ test('service request APIs create eligible requests and allow only one qualified
   ]);
   assert.equal([claimA, claimB].filter(result => result.status === 200).length, 1, JSON.stringify([claimA, claimB]));
   assert.equal([claimA, claimB].filter(result => result.status === 422).length, 1, JSON.stringify([claimA, claimB]));
+  const acceptedGlobal = await fetch(`${firestoreUrl}/appointments/${appointmentId}`, { headers: { Authorization: 'Bearer owner' } }).then(response => response.json());
+  assert.equal(acceptedGlobal.fields.requestMode.stringValue, 'general');
+  assert.equal([claimA, claimB].find(result => result.status === 200).body.alreadyAccepted, false);
 
   const next = await call('createServiceRequest', farmer, { ...commonRequest, time: '12:00 PM' });
   assert.equal(next.status, 201, JSON.stringify(next.body));
@@ -169,6 +172,11 @@ test('service request APIs create eligible requests and allow only one qualified
   const directStored = await fetch(`${firestoreUrl}/appointments/${direct.body.appointmentId}`, { headers: { Authorization: 'Bearer owner' } }).then(response => response.json());
   assert.deepEqual(directStored.fields.eligibleTechnicianIds.arrayValue.values.map(value => value.stringValue), [pigTechA.localId]);
   assert.equal(directStored.fields.requestMode.stringValue, 'direct');
+  assert.equal(directStored.fields.responseDeadlineAt, undefined);
+  const directClaim = await call('acceptServiceRequest', pigTechA, { appointmentId: direct.body.appointmentId });
+  assert.equal(directClaim.status, 200, JSON.stringify(directClaim.body));
+  const acceptedDirect = await fetch(`${firestoreUrl}/appointments/${direct.body.appointmentId}`, { headers: { Authorization: 'Bearer owner' } }).then(response => response.json());
+  assert.equal(acceptedDirect.fields.requestMode.stringValue, 'direct');
 
   const invalidDirect = await call('createServiceRequest', farmer, { ...commonRequest, technicianId: cattleTech.localId, time: '03:00 PM' });
   assert.equal(invalidDirect.status, 422);

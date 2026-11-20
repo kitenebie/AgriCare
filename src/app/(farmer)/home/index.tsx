@@ -13,7 +13,9 @@ import { Collections } from '@/services/firebase';
 import { isLocationFresh, listenToUserLocation, type UserLocation } from '@/services/locationService';
 import { listenToHeartbeatsByRole, type UserHeartbeat } from '@/services/heartbeat';
 import { getUnviewedContentCounts } from '@/services/contentViewService';
+import { getRelevantTechnicians } from '@/services/technicianDiscoveryService';
 import { getNextAvailability, type AvailabilitySlot, type TimeRange } from '@/utils/availability';
+import { hasSpecializationForAnyAnimal, normalizeAnimalTypeId } from '../../../../functions/shared/technicianServiceMatching';
 
 interface FarmData {
   totalAnimals: number;
@@ -21,7 +23,7 @@ interface FarmData {
   upcomingVisits: number;
   healthAlerts: number;
 }
-interface OnlineTechnician { id: string; displayName: string; photoURL?: string; location?: string; specialization?: string; expertise?: string[]; latitude?: number; longitude?: number; available?: boolean; availabilitySlots?: AvailabilitySlot[]; alwaysAvailable?: TimeRange[] | TimeRange; alwaysAvailableEnabled?: boolean; }
+interface OnlineTechnician { id: string; displayName: string; photoURL?: string; location?: string; specialization?: string; expertise?: string[]; qualificationKeys?: string[]; qualificationVerified?: boolean; role?: string; status?: string; latitude?: number; longitude?: number; available?: boolean; availabilitySlots?: AvailabilitySlot[]; alwaysAvailable?: TimeRange[] | TimeRange; alwaysAvailableEnabled?: boolean; }
 const hasCoordinates = (location: { latitude?: unknown; longitude?: unknown } | null | undefined): location is { latitude: number; longitude: number } =>
   typeof location?.latitude === 'number' && Number.isFinite(location.latitude) && location.latitude >= -90 && location.latitude <= 90 &&
   typeof location.longitude === 'number' && Number.isFinite(location.longitude) && location.longitude >= -180 && location.longitude <= 180;
@@ -43,6 +45,8 @@ export default function HomeScreen() {
   const [photoURL, setPhotoURL] = useState<string | null>(null);
   const [technicianProfiles, setTechnicianProfiles] = useState<Omit<OnlineTechnician, 'latitude' | 'longitude'>[]>([]);
   const [technicianLocations, setTechnicianLocations] = useState<Record<string, UserHeartbeat>>({});
+  const [farmerAnimalTypeIds, setFarmerAnimalTypeIds] = useState<string[]>([]);
+  const [animalsLoading, setAnimalsLoading] = useState(true);
   const [farmerLocation, setFarmerLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [farmData, setFarmData] = useState<FarmData>({ totalAnimals: 0, pendingServices: 0, upcomingVisits: 0, healthAlerts: 0 });
   const [notifCount, setNotifCount] = useState(0);
@@ -55,7 +59,8 @@ export default function HomeScreen() {
     knowledgeBase: 0,
     forum: 0,
   });
-  const onlineTechnicians = technicianProfiles.flatMap(technician => {
+  const relevantTechnicians = technicianProfiles.filter(technician => hasSpecializationForAnyAnimal(technician, farmerAnimalTypeIds));
+  const onlineTechnicians = relevantTechnicians.flatMap(technician => {
     const location = technicianLocations[technician.id];
     return location
       ? [{ ...technician, ...(hasCoordinates(location) && isLocationFresh(location) ? { latitude: location.latitude, longitude: location.longitude } : {}) }]
@@ -85,9 +90,6 @@ export default function HomeScreen() {
         }
 
         // Count animals owned by this farmer
-        const animalsSnap = await firestore().collection('animals').where('ownerId', '==', uid).get();
-        const totalAnimals = animalsSnap.size;
-
         // Single-field query + client-side filter to avoid composite index
         const apptSnap = await firestore().collection(Collections.APPOINTMENTS)
           .where('farmerId', '==', uid)
@@ -102,7 +104,7 @@ export default function HomeScreen() {
           .get();
         const healthAlerts = alertsSnap.docs.filter(d => d.data().status === 'active').length;
 
-        setFarmData({ totalAnimals, pendingServices, upcomingVisits, healthAlerts });
+        setFarmData(current => ({ ...current, pendingServices, upcomingVisits, healthAlerts }));
 
         // Notification count
         const notifSnap = await firestore().collection(Collections.NOTIFICATIONS)
@@ -118,7 +120,6 @@ export default function HomeScreen() {
         ]);
         setBadgeCounts(current => ({
           ...current,
-          myAnimals: totalAnimals,
           healthRecords: healthRecordsSnap.size,
           technicians: techSnap.size,
         }));
@@ -132,36 +133,78 @@ export default function HomeScreen() {
 
   useFocusEffect(useCallback(() => {
     let active = true;
+    const refreshTechnicians = async () => {
+      if (!farmerAnimalTypeIds.length) { setTechnicianProfiles([]); return; }
+      const records = await getRelevantTechnicians();
+      if (active) setTechnicianProfiles(records);
+    };
     const refreshContentBadges = async () => {
       const session = await getSession();
       if (!session) return;
       const counts = await getUnviewedContentCounts(session.uid, 'farmer');
       if (active) setBadgeCounts(current => ({ ...current, ...counts }));
     };
+    void refreshTechnicians().catch(error => console.warn('Online technicians refresh failed:', error));
     void refreshContentBadges().catch(error => console.warn('Farmer content badge refresh failed:', error));
     return () => { active = false; };
-  }, []));
+  }, [farmerAnimalTypeIds]));
+
+  useEffect(() => {
+    let active = true;
+    let unsubscribe = () => {};
+    getSession().then(session => {
+      if (!session || !active) { if (active) setAnimalsLoading(false); return; }
+      unsubscribe = firestore().collection('animals').where('ownerId', '==', session.uid).onSnapshot(snapshot => {
+        if (!active) return;
+        setFarmData(current => ({ ...current, totalAnimals: snapshot.size }));
+        setBadgeCounts(current => ({ ...current, myAnimals: snapshot.size }));
+        setFarmerAnimalTypeIds([...new Set(snapshot.docs.map(doc => normalizeAnimalTypeId(doc.data().type || doc.data().name)).filter(Boolean))]);
+        setAnimalsLoading(false);
+      }, error => {
+        console.warn('Farmer animals subscription failed:', error);
+        if (active) setAnimalsLoading(false);
+      });
+    }).catch(error => { console.warn('Farmer animals subscription failed:', error); if (active) setAnimalsLoading(false); });
+    return () => { active = false; unsubscribe(); };
+  }, []);
 
   useEffect(() => {
     let active = true;
     let stopProfiles = () => {};
-    let stopLocations = () => {};
-    let stopFarmerLocation = () => {};
     const subscribe = async () => {
       const session = await getSession();
-      if (!active || !session) return;
-      stopProfiles = firestore().collection(Collections.PUBLIC_PROFILES).where('role', '==', 'technician').onSnapshot(snapshot => {
-        if (active) setTechnicianProfiles(snapshot.docs.filter(doc => doc.data()?.status === 'active').map(doc => ({ ...doc.data(), id: doc.id } as Omit<OnlineTechnician, 'latitude' | 'longitude'>)));
+      if (!active || !session || farmerAnimalTypeIds.length === 0) { if (active) setTechnicianProfiles([]); return; }
+      let initialSnapshot = true;
+      stopProfiles = firestore().collection(Collections.PUBLIC_PROFILES)
+        .where('role', '==', 'technician')
+        .onSnapshot(snapshot => {
+        if (initialSnapshot) { initialSnapshot = false; if (!snapshot.empty && active) setTechnicianProfiles(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Omit<OnlineTechnician, 'latitude' | 'longitude'>))); return; }
+        if (snapshot.empty) {
+          const session = getSession();
+          void session.then(current => current && getRelevantTechnicians().then(records => {
+            if (active) setTechnicianProfiles(records);
+          })).catch(error => console.warn('Online technicians refresh failed:', error));
+        } else if (active) setTechnicianProfiles(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Omit<OnlineTechnician, 'latitude' | 'longitude'>)));
       }, error => console.warn('Online technicians load failed:', error));
-      stopLocations = listenToHeartbeatsByRole('technician', locations => { if (active) setTechnicianLocations(locations); });
+    };
+    subscribe().catch(error => console.warn('Online technicians subscription failed:', error));
+    return () => { active = false; stopProfiles(); };
+  }, [farmerAnimalTypeIds]);
+
+  useEffect(() => {
+    let active = true;
+    let stopFarmerLocation = () => {};
+    const stopLocations = listenToHeartbeatsByRole('technician', locations => { if (active) setTechnicianLocations(locations); });
+    getSession().then(session => {
+      if (!active || !session) return;
       stopFarmerLocation = listenToUserLocation(session.uid, location => {
         if (active && location?.isActive && isLocationFresh(location) && hasCoordinates(location)) {
           setFarmerLocation({ latitude: location.latitude, longitude: location.longitude });
         }
       });
-    };
-    subscribe().catch(error => console.warn('Online technicians subscription failed:', error));
-    return () => { active = false; stopProfiles(); stopLocations(); stopFarmerLocation(); };
+      if (!active) stopFarmerLocation();
+    }).catch(error => console.warn('Farmer location subscription failed:', error));
+    return () => { active = false; stopLocations(); stopFarmerLocation(); };
   }, []);
 
   if (loading) return <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}><ActivityIndicator size="large" color={Colors.primary} /></View>;
@@ -202,14 +245,14 @@ export default function HomeScreen() {
 
       <Card style={styles.onlineCard}>
         <View style={styles.cardHeading}><Icon name="technician" size={24} color={Colors.primary} /><Text style={styles.sectionTitle}>Online Technicians</Text><Text style={styles.onlineCount}>{onlineTechnicians.length} online</Text></View>
-        {onlineTechnicians.length ? <ScrollView style={styles.onlineListViewport} contentContainerStyle={styles.onlineList} nestedScrollEnabled accessibilityLabel="Online technicians">{onlineTechnicians.map(technician => <TouchableOpacity key={technician.id} style={styles.onlineTechnician} activeOpacity={0.85} accessibilityRole="button" accessibilityLabel={`${technician.displayName}, online. View profile`} onPress={() => router.push({ pathname: '/(farmer)/home/technicians', params: { technicianId: technician.id } })}>
+        {animalsLoading ? <ActivityIndicator color={Colors.primary} /> : farmerAnimalTypeIds.length === 0 ? <Text style={styles.noOnline}>Register your animals to discover technicians specializing in their healthcare needs.</Text> : onlineTechnicians.length ? <ScrollView style={styles.onlineListViewport} contentContainerStyle={styles.onlineList} nestedScrollEnabled accessibilityLabel="Online technicians">{onlineTechnicians.map(technician => <TouchableOpacity key={technician.id} style={styles.onlineTechnician} activeOpacity={0.85} accessibilityRole="button" accessibilityLabel={`${technician.displayName}, online. View profile`} onPress={() => router.push({ pathname: '/(farmer)/home/technicians', params: { technicianId: technician.id } })}>
           <View style={styles.onlineTechDetails}>
             <Text style={styles.onlineName} numberOfLines={1}>{technician.displayName}</Text>
             <View style={styles.onlineTechMeta}><Icon name="location" size={14} color={Colors.textSecondary} /><Text style={styles.onlineTechLocation} numberOfLines={1}>{technician.location || 'Location not provided'}</Text></View>
             <Text style={styles.onlineTechSpecialty} numberOfLines={1}>{technician.specialization || technician.expertise?.join(', ') || 'Veterinary technician'}</Text>
           </View>
           <View style={styles.onlineTechAvatar}><Avatar name={technician.displayName} imageUrl={technician.photoURL} size={58} /><View style={styles.onlineDot} /></View>
-        </TouchableOpacity>)}</ScrollView> : <Text style={styles.noOnline}>No technicians are online right now.</Text>}
+        </TouchableOpacity>)}</ScrollView> : <Text style={styles.noOnline}>No online technicians are currently available for your registered animals.</Text>}
       </Card>
 
       {/* Farm Overview */}

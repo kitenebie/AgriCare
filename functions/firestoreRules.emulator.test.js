@@ -76,7 +76,17 @@ test('Firestore rules restrict service requests to farmers and eligible technici
     method: 'PATCH', headers: { Authorization: `Bearer ${farmer.idToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ fields: { displayName: { stringValue: 'Updated farmer' } } }),
   });
-  assert.equal(updateFarmerProfile.status, 200, await updateFarmerProfile.clone().text());
+  assert.equal(updateFarmerProfile.status, 403);
+  const replaceFarmerId = await fetch(`${firestoreUrl}/users/${farmer.localId}?updateMask.fieldPaths=idImageUrl`, {
+    method: 'PATCH', headers: { Authorization: `Bearer ${farmer.idToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields: { idImageUrl: { stringValue: 'https://example.test/forged-id.jpg' } } }),
+  });
+  assert.equal(replaceFarmerId.status, 403);
+  const forgeProfileChallenge = await fetch(`${firestoreUrl}/users/${farmer.localId}?updateMask.fieldPaths=profileUpdateChallenge`, {
+    method: 'PATCH', headers: { Authorization: `Bearer ${farmer.idToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields: { profileUpdateChallenge: { mapValue: { fields: { tokenHash: { stringValue: 'forged' } } } } } }),
+  });
+  assert.equal(forgeProfileChallenge.status, 403);
   const elevateFarmerRole = await fetch(`${firestoreUrl}/users/${farmer.localId}?updateMask.fieldPaths=role`, {
     method: 'PATCH', headers: { Authorization: `Bearer ${farmer.idToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ fields: { role: { stringValue: 'admin' } } }),

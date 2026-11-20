@@ -1,12 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { router } from 'expo-router';
-import firestore from '@react-native-firebase/firestore';
+import { router, useFocusEffect } from 'expo-router';
 import { AppText as Text } from '@/components/ui/FontScale';
 import { Avatar, Icon } from '@/components/ui';
 import { BorderRadius, Colors, FontSize, Shadow, Spacing } from '@/constants/theme';
-import { Collections } from '@/services/firebase';
-import { getNextAvailability, type AvailabilitySlot, type TimeRange } from '@/utils/availability';
+import { getRelevantTechnicians } from '@/services/technicianDiscoveryService';
+import { getNextAvailability, getTechnicianAvailability, type AvailabilitySlot, type TimeRange } from '@/utils/availability';
 
 interface Technician {
   id: string;
@@ -25,22 +24,31 @@ export default function AvailableTechniciansPage() {
   const [technicians, setTechnicians] = useState<(Technician & { nextAvailability: string })[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [now, setNow] = useState(() => new Date());
 
-  useEffect(() => {
-    firestore().collection(Collections.PUBLIC_PROFILES).where('role', '==', 'technician').where('status', '==', 'active').get()
-      .then(snapshot => {
-        setTechnicians(snapshot.docs.flatMap(doc => {
-          const tech = { id: doc.id, ...doc.data() } as Technician;
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    const clock = setInterval(() => setNow(new Date()), 30_000);
+    setNow(new Date());
+    setLoading(true);
+    setLoadFailed(false);
+    getRelevantTechnicians()
+      .then(records => {
+        if (!active) return;
+        setTechnicians((records || []).flatMap(tech => {
           const nextAvailability = getNextAvailability(tech);
           return nextAvailability ? [{ ...tech, nextAvailability }] : [];
         }));
       })
       .catch(error => {
         console.warn('Available technicians load failed:', error);
-        setLoadFailed(true);
+        if (active) setLoadFailed(true);
       })
-      .finally(() => setLoading(false));
-  }, []);
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; clearInterval(clock); };
+  }, []));
+
+  const currentlyAvailable = technicians.filter(tech => getTechnicianAvailability(tech, now).status === 'Available Now');
 
   return (
     <View style={s.container}>
@@ -54,12 +62,12 @@ export default function AvailableTechniciansPage() {
 
       {loading ? <View style={s.center}><ActivityIndicator size="large" color={Colors.primary} /></View> : (
         <ScrollView contentContainerStyle={s.list} showsVerticalScrollIndicator={false}>
-          {technicians.length === 0 ? (
+          {currentlyAvailable.length === 0 ? (
             <View style={s.empty}>
               <Icon name="technician" size={42} color={Colors.textLight} />
-              <Text style={s.emptyText}>{loadFailed ? 'Unable to load technicians' : 'No technicians with upcoming availability'}</Text>
+              <Text style={s.emptyText}>{loadFailed ? 'Unable to load technicians' : 'No technicians available right now'}</Text>
             </View>
-          ) : technicians.map(tech => (
+          ) : currentlyAvailable.map(tech => (
             <TouchableOpacity
               key={tech.id}
               style={s.card}

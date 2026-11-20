@@ -1,11 +1,12 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 import { StatusBar } from 'expo-status-bar';
 
 type Props = {
-  status: 'checking' | 'matched' | 'failed' | 'saved';
+  status: 'checking' | 'matched' | 'failed';
   failureKind: 'mismatch' | 'image' | 'service' | 'registration';
   message: string;
   faceUri: string;
@@ -14,17 +15,22 @@ type Props = {
   onPrimary: () => void;
   onRetry: () => void;
   onSupport: () => void;
+  onCancel?: () => void;
+  successTitle?: string;
+  successMessage?: string;
+  primaryLabel?: string;
+  profileComparison?: boolean;
 };
 
 const AImage = Animated.createAnimatedComponent(Image);
 
-export default function IdentityVerificationResult({ status, failureKind, message, faceUri, idUri, emailOtpPending, onPrimary, onRetry, onSupport }: Props) {
+export default function IdentityVerificationResult({ status, failureKind, message, faceUri, idUri, emailOtpPending, onPrimary, onRetry, onSupport, onCancel, successTitle, successMessage, primaryLabel, profileComparison }: Props) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const enter = useRef(new Animated.Value(0)).current;
   const indicator = useRef(new Animated.Value(0)).current;
   const failed = status === 'failed';
-  const success = status === 'matched' || status === 'saved';
+  const success = status === 'matched';
   const previewWidth = Math.min((width - 58) / 2, 220);
   const detailTitle = failureKind === 'mismatch' ? 'Face Match' : failureKind === 'image' ? 'Image Check' : failureKind === 'registration' ? 'Registration' : 'Verification Service';
   const detailCopy = failureKind === 'mismatch'
@@ -72,7 +78,7 @@ export default function IdentityVerificationResult({ status, failureKind, messag
           <Path d="M0 157C86 118 146 144 224 158C302 173 368 153 420 132V190H0Z" fill="#F7FBFA" />
         </Svg>
         <View style={s.navRow}>
-          <Pressable onPress={status === 'saved' ? onPrimary : onRetry} style={s.backButton} accessibilityRole="button" accessibilityLabel="Back to registration">
+          <Pressable onPress={onCancel || onRetry} style={s.backButton} accessibilityRole="button" accessibilityLabel={onCancel ? 'Cancel verification and return to editing' : 'Back to registration'}>
             <Svg width={25} height={25} viewBox="0 0 24 24"><Path d="M19 12H5m0 0 7 7m-7-7 7-7" fill="none" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" /></Svg>
           </Pressable>
           <View style={s.headerText}>
@@ -88,41 +94,41 @@ export default function IdentityVerificationResult({ status, failureKind, messag
           <View style={s.checking}>
             <ActivityIndicator size="large" color="#07875B" />
             <Text style={s.checkingTitle}>Checking your identity</Text>
-            <Text style={s.copy}>We’re comparing the face photo with the ID you provided.</Text>
-            <PhotoPair faceUri={faceUri} idUri={idUri} width={previewWidth} checking />
+              <Text style={s.copy}>{profileComparison ? 'We’re comparing your current profile photo with your new selfie.' : 'We’re comparing the face photo with the ID you provided.'}</Text>
+              <PhotoPair faceUri={faceUri} idUri={idUri} width={previewWidth} checking profileComparison={profileComparison} />
           </View>
         ) : success ? (
           <Animated.View style={[s.resultContent, { opacity: enter, transform: [{ translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }]}>
             <Animated.View style={[s.heroWrap, { transform: [{ scale: pop }] }]}>
               <AImage source={require('../../../assets/images/identity-verification/success-shield.png')} style={s.shield} resizeMode="contain" />
             </Animated.View>
-            <Text style={s.successTitle}>Verification Successful!</Text>
-            <Text style={s.copy}>Your face and ID have been matched and verified.</Text>
-            <PhotoPair faceUri={faceUri} idUri={idUri} width={previewWidth} passed />
+            <Text style={s.successTitle}>{successTitle || 'Verification Successful!'}</Text>
+            <Text style={s.copy}>{successMessage || 'Your face and ID have been matched and verified.'}</Text>
+            <PhotoPair faceUri={faceUri} idUri={idUri} width={previewWidth} passed profileComparison={profileComparison} />
             <View style={s.successInfo}>
               <SealIcon small />
-              <View style={s.infoText}><Text style={s.infoTitle}>Face and ID Match</Text><Text style={s.infoCopy}>{status === 'saved' ? 'Your registration has been saved.' : 'Your identity has been successfully verified.'}</Text></View>
+              <View style={s.infoText}><Text style={s.infoTitle}>{profileComparison ? 'Profile Photo Match' : 'Face and ID Match'}</Text><Text style={s.infoCopy}>{profileComparison ? 'Your current profile photo matches your new selfie.' : 'Your identity has been successfully verified.'}</Text></View>
             </View>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={status === 'saved' ? 'Continue registration' : 'Continue to email verification'}
-              disabled={status !== 'saved' && !emailOtpPending}
+              accessibilityLabel={primaryLabel || 'Continue to email verification'}
+              disabled={!emailOtpPending && !primaryLabel}
               onPress={onPrimary}
-              style={({ pressed }) => [s.primaryButton, (status !== 'saved' && !emailOtpPending) && s.disabledButton, pressed && s.pressed]}
+              style={({ pressed }) => [s.primaryButton, !emailOtpPending && !primaryLabel && s.disabledButton, pressed && s.pressed]}
             >
-              {status !== 'saved' && !emailOtpPending ? <ActivityIndicator color="#fff" /> : <Text style={s.primaryText}>{status === 'saved' ? 'Continue' : 'Continue to Email Verification  →'}</Text>}
+              {emailOtpPending ? <Text style={s.primaryText}>Continue to Email Verification  →</Text> : primaryLabel ? <Text style={s.primaryText}>{primaryLabel}</Text> : <ActivityIndicator color="#fff" />}
             </Pressable>
           </Animated.View>
         ) : (
           <Animated.View style={[s.resultContent, { opacity: enter, transform: [{ translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }]}>
             <Animated.View style={[s.failureHero, { transform: [{ translateX: shift }, { scale: pop }] }]}><FailureMark /></Animated.View>
             <Text style={s.failureTitle}>{failureKind === 'service' ? 'Verification Unavailable' : failureKind === 'registration' ? 'Registration Not Saved' : <Text style={s.failureTitle}>Verification <Text style={s.failureTitleRed}>Not Successful</Text></Text>}</Text>
-            <Text style={s.copy}>{failureKind === 'mismatch' ? 'We couldn’t match your face with the ID you provided. Don’t worry, you can try again.' : failureKind === 'image' ? 'We couldn’t detect a clear face in each image. You can retake or upload clearer photos.' : failureKind === 'registration' ? 'Your identity was verified, but registration could not be completed.' : 'We couldn’t complete the face and ID verification. Please try again.'}</Text>
-            <PhotoPair faceUri={faceUri} idUri={idUri} width={previewWidth} failed />
+            <Text style={s.copy}>{failureKind === 'mismatch' ? profileComparison ? 'We couldn’t match your new selfie with your saved profile photo. Please try again.' : 'We couldn’t match your face with the ID you provided. Don’t worry, you can try again.' : failureKind === 'image' ? 'We couldn’t detect a clear face in each image. You can retake or upload clearer photos.' : failureKind === 'registration' ? 'Your identity was verified, but registration could not be completed.' : 'We couldn’t complete the face and ID verification. Please try again.'}</Text>
+            <PhotoPair faceUri={faceUri} idUri={idUri} width={previewWidth} failed profileComparison={profileComparison} />
             <View style={s.failureInfo}>
-              <StatusRow title={failureKind === 'registration' ? 'Face Match' : detailTitle} detail={failureKind === 'registration' ? 'Your face matches the photo on your ID.' : detailCopy} passed={failureKind === 'registration'} />
+              <StatusRow title={failureKind === 'registration' ? 'Face Match' : profileComparison ? failureKind === 'mismatch' ? 'Profile Photo Match' : failureKind === 'image' ? 'Image Check' : 'Verification Service' : detailTitle} detail={failureKind === 'registration' ? 'Your face matches the photo on your ID.' : profileComparison && failureKind === 'mismatch' ? 'Your new selfie does not match your saved profile photo.' : profileComparison ? message : detailCopy} passed={failureKind === 'registration'} />
               <View style={s.divider} />
-              <StatusRow title={failureKind === 'mismatch' || failureKind === 'registration' ? 'ID Readable' : 'Verification details'} detail={failureKind === 'mismatch' ? 'Your ID was detected and is clear.' : message} passed={failureKind === 'mismatch' || failureKind === 'registration'} />
+              <StatusRow title={profileComparison ? 'Saved Profile Photo' : failureKind === 'mismatch' || failureKind === 'registration' ? 'ID Readable' : 'Verification details'} detail={profileComparison ? 'Your current profile photo was used for comparison.' : failureKind === 'mismatch' ? 'Your ID was detected and is clear.' : message} passed={profileComparison || failureKind === 'mismatch' || failureKind === 'registration'} />
             </View>
             <Pressable accessibilityRole="button" accessibilityLabel="Try face and ID verification again" onPress={onRetry} style={({ pressed }) => [s.primaryButton, pressed && s.pressed]}><RefreshIcon /><Text style={s.primaryText}>Try Again</Text></Pressable>
           </Animated.View>
@@ -135,18 +141,20 @@ export default function IdentityVerificationResult({ status, failureKind, messag
   );
 }
 
-function PhotoPair({ faceUri, idUri, width, passed = false, failed = false, checking = false }: { faceUri: string; idUri: string; width: number; passed?: boolean; failed?: boolean; checking?: boolean }) {
+function PhotoPair({ faceUri, idUri, width, passed = false, failed = false, checking = false, profileComparison = false }: { faceUri: string; idUri: string; width: number; passed?: boolean; failed?: boolean; checking?: boolean; profileComparison?: boolean }) {
+  const [idPreviewFailed, setIdPreviewFailed] = useState(false);
+  useEffect(() => setIdPreviewFailed(false), [idUri]);
   const tone = failed ? '#FB7D83' : passed ? '#42C878' : '#77D8B0';
   return (
     <View style={s.pairWrap}>
       <View style={[s.photoCard, { width, borderColor: tone }]}>
         <Image source={{ uri: faceUri }} style={s.facePhoto} resizeMode="cover" accessibilityLabel="Captured face photo" />
-        <View style={s.photoLabel}><FacePhotoIcon /><Text style={s.photoLabelText}>Your Face</Text></View>
+        <View style={s.photoLabel}><FacePhotoIcon /><Text style={s.photoLabelText}>{profileComparison ? 'Current Profile' : 'Your Face'}</Text></View>
         {passed && <View style={s.photoBadge}><CheckIcon /></View>}
       </View>
-      <View style={[s.photoCard, { width, borderColor: tone }]}>
-        <View style={s.idPhotoWrap}><Image source={{ uri: idUri }} style={s.idPhoto} resizeMode="contain" accessibilityLabel="Uploaded identification photo" /></View>
-        <View style={s.photoLabel}><IdPhotoIcon /><Text style={s.photoLabelText}>ID Photo</Text></View>
+        <View style={[s.photoCard, { width, borderColor: tone }]}>
+        <View style={s.idPhotoWrap}>{idUri && !idPreviewFailed ? <ExpoImage source={{ uri: idUri }} style={s.idPhoto} contentFit="cover" cachePolicy="none" accessibilityLabel={profileComparison ? 'New selfie' : 'Uploaded identification photo'} onError={({ error }) => { console.warn(profileComparison ? '[Profile Photo Match] New selfie preview failed to load' : '[Face ID Match] ID preview failed to load', error); setIdPreviewFailed(true); }} /> : <Text style={s.idPreviewError}>{profileComparison ? 'Selfie unavailable' : 'ID photo unavailable'}</Text>}</View>
+        <View style={s.photoLabel}>{profileComparison ? <FacePhotoIcon /> : <IdPhotoIcon />}<Text style={s.photoLabelText}>{profileComparison ? 'New Selfie' : 'ID Photo'}</Text></View>
         {passed && <View style={s.photoBadge}><CheckIcon /></View>}
       </View>
       <View style={[s.centerBadge, { backgroundColor: failed ? '#EF4444' : '#13A773' }]}>{checking ? <ShieldStatusIcon /> : failed ? <XIcon /> : <ShieldStatusIcon />}</View>
@@ -200,6 +208,7 @@ const s = StyleSheet.create({
   facePhoto: { width: '100%', height: 98, borderRadius: 12, backgroundColor: '#E5F2ED' },
   idPhotoWrap: { width: '100%', height: 98, borderRadius: 12, backgroundColor: '#F0F4F2', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   idPhoto: { width: '100%', height: '100%' },
+  idPreviewError: { fontSize: 10, color: '#64748B', textAlign: 'center', paddingHorizontal: 8 },
   photoLabel: { position: 'absolute', left: 4, right: 4, bottom: 4, height: 32, borderBottomLeftRadius: 12, borderBottomRightRadius: 12, backgroundColor: 'rgba(16,35,51,.78)', flexDirection: 'row', gap: 5, alignItems: 'center', justifyContent: 'center' },
   photoLabelText: { color: '#fff', fontSize: 12, fontWeight: '800' },
   photoBadge: { position: 'absolute', right: 6, top: 70, width: 26, height: 26, borderRadius: 13, backgroundColor: '#16A66A', borderWidth: 2, borderColor: '#fff', alignItems: 'center', justifyContent: 'center' },

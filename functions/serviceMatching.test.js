@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { catalog, normalizeAnimalTypeId, validateQualifications, isTechnicianQualified, isBreedValid, eligibleTechnicians, isRequestAvailableToTechnician, canAcceptServiceRequest } = require('./shared/technicianServiceMatching');
+const { catalog, normalizeAnimalTypeId, validateQualifications, isTechnicianQualified, hasSpecializationForAnyAnimal, isBreedValid, eligibleTechnicians, isDirectRequestForTechnician, isGlobalRequestForTechnician, isRequestAvailableToTechnician, canAcceptServiceRequest } = require('./shared/technicianServiceMatching');
 
 test('normalizes Swine and Pig to the same animal type', () => {
   assert.equal(normalizeAnimalTypeId('Swine'), 'pig');
@@ -41,6 +41,14 @@ test('matches exact animal and service IDs and requires server-verified qualific
   assert.equal(isTechnicianQualified({ ...technician, qualificationVerified: false }, 'pig', '2'), false);
 });
 
+test('farmer discovery matches any registered animal category only for approved qualified technicians', () => {
+  const technician = { role: 'technician', status: 'active', qualificationVerified: true, qualificationKeys: ['pig:2', 'cattle:4'] };
+  assert.equal(hasSpecializationForAnyAnimal(technician, ['Swine']), true);
+  assert.equal(hasSpecializationForAnyAnimal(technician, ['goat']), false);
+  assert.equal(hasSpecializationForAnyAnimal({ ...technician, status: 'pending' }, ['pig']), false);
+  assert.equal(hasSpecializationForAnyAnimal({ ...technician, qualificationVerified: false }, ['pig']), false);
+});
+
 test('validates breed IDs against their animal type', () => {
   assert.equal(isBreedValid('pig-duroc', 'swine'), true);
   assert.equal(isBreedValid('pig-duroc', 'cattle'), false);
@@ -79,6 +87,21 @@ test('request visibility requires explicit eligibility for new requests and pres
   assert.equal(isRequestAvailableToTechnician({ status: 'pending', technicianId: 'legacy-tech' }, 'legacy-tech'), true);
 });
 
+test('direct and global pending request lists are disjoint and recheck current qualification', () => {
+  const technician = { role: 'technician', status: 'active', available: true, qualificationVerified: true, qualificationKeys: ['pig:2'] };
+  const global = { status: 'pending', requestMode: 'general', technicianId: '', animalTypeId: 'pig', serviceTypeId: '2', eligibleTechnicianIds: ['tech'] };
+  const direct = { status: 'pending', requestMode: 'direct', technicianId: 'tech', animalTypeId: 'pig', serviceTypeId: '2', eligibleTechnicianIds: ['tech'] };
+  assert.equal(isGlobalRequestForTechnician(global, 'tech', technician), true);
+  assert.equal(isDirectRequestForTechnician(global, 'tech'), false);
+  assert.equal(isDirectRequestForTechnician(direct, 'tech'), true);
+  assert.equal(isGlobalRequestForTechnician(direct, 'tech', technician), false);
+  assert.equal(isGlobalRequestForTechnician(global, 'tech', { ...technician, qualificationKeys: ['pig:4'] }), false);
+  assert.equal(isGlobalRequestForTechnician(global, 'tech', { ...technician, available: false }), false);
+  assert.equal(isGlobalRequestForTechnician({ ...global, animalTypeId: undefined }, 'tech', technician), false);
+  assert.equal(isGlobalRequestForTechnician({ ...global, serviceTypeId: undefined }, 'tech', technician), false);
+  assert.equal(isGlobalRequestForTechnician({ ...global, serviceTypeId: undefined }, 'tech'), false);
+});
+
 test('acceptance requires both explicit request eligibility and an exact verified qualification', () => {
   const request = { status: 'pending', animalTypeId: 'pig', serviceTypeId: '2', eligibleTechnicianIds: ['qualified'] };
   const tech = { role: 'technician', status: 'active', qualificationVerified: true, qualificationKeys: ['pig:2'] };
@@ -86,4 +109,7 @@ test('acceptance requires both explicit request eligibility and an exact verifie
   assert.equal(canAcceptServiceRequest(request, 'other', tech), false);
   assert.equal(canAcceptServiceRequest({ ...request, animalTypeId: 'cattle' }, 'qualified', tech), false);
   assert.equal(canAcceptServiceRequest(request, 'qualified', { ...tech, qualificationVerified: false }), false);
+  assert.equal(canAcceptServiceRequest({ ...request, requestMode: 'direct', technicianId: 'other' }, 'qualified', tech), false);
+  assert.equal(canAcceptServiceRequest({ ...request, animalTypeId: undefined }, 'qualified', tech), false);
+  assert.equal(canAcceptServiceRequest({ ...request, serviceTypeId: undefined }, 'qualified', tech), false);
 });

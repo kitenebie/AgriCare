@@ -2,7 +2,7 @@ const publicFields = [
   'displayName', 'role', 'status', 'photoURL', 'specialization', 'expertise',
   'specializationIds', 'subSpecializationIds', 'qualificationKeys',
   'qualificationVerified', 'available', 'availabilitySlots', 'alwaysAvailable',
-  'alwaysAvailableEnabled', 'rating', 'ratingCount', 'reviewCount',
+  'alwaysAvailableEnabled', 'timezone', 'rating', 'ratingCount', 'reviewCount',
 ];
 
 const toPublicProfile = (uid, user) => user?.status === 'active'

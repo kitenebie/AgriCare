@@ -1,4 +1,9 @@
-import { isRequestAvailableToTechnician as matchesRequestForTechnician } from '../../functions/shared/technicianServiceMatching';
+import {
+  isDirectRequestForTechnician as matchesDirectRequest,
+  isGlobalRequestForTechnician as matchesGlobalRequest,
+  isRequestAvailableToTechnician as matchesRequestForTechnician,
+  type TechnicianMatchingProfile,
+} from '../../functions/shared/technicianServiceMatching';
 
 export interface ServiceRequest {
   id: string;
@@ -12,6 +17,7 @@ export interface ServiceRequest {
   date: string;
   time: string;
   status: string;
+  requestMode?: string;
   description: string;
   technicianId: string;
   technicianName: string;
@@ -29,3 +35,9 @@ export interface ServiceRequest {
 export const isRequestAvailableToTechnician = (request: ServiceRequest, technicianId: string) => {
   return matchesRequestForTechnician(request, technicianId);
 };
+
+export const isDirectRequestForTechnician = (request: ServiceRequest, technicianId: string) =>
+  matchesDirectRequest(request, technicianId);
+
+export const isGlobalRequestForTechnician = (request: ServiceRequest, technicianId: string, technician?: TechnicianMatchingProfile) =>
+  matchesGlobalRequest(request, technicianId, technician);

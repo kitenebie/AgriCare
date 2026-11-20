@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Modal, Switch, ActivityIndicator, KeyboardAvoidingView, Platform, ImageBackground, FlatList } from 'react-native';
-import { AppText as Text, AppTextInput as TextInput } from '@/components/ui/FontScale';
+import React, { useCallback, useState } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Modal, Switch, ActivityIndicator, ImageBackground, KeyboardAvoidingView, Platform } from 'react-native';
+import { AppText as Text } from '@/components/ui/FontScale';
 import { modalAlert } from '@/components/ui/ModalAlert';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Colors, Spacing, FontSize, BorderRadius } from '@/constants/theme';
 import { Icon, Avatar } from '@/components/ui';
-import { clearSession, getSession, saveSession, UserSession } from '@/services/sessionService';
+import { clearSession, getSession, UserSession } from '@/services/sessionService';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -19,15 +19,6 @@ export default function FarmerProfileScreen() {
   const [photoURL, setPhotoURL] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
 
-  // Account Settings
-  const [accountModal, setAccountModal] = useState(false);
-  const [editName, setEditName] = useState('');
-  const [editEmail, setEditEmail] = useState('');
-  const [editPhone, setEditPhone] = useState('');
-  const [editPurok, setEditPurok] = useState('1');
-  const [purokPickerOpen, setPurokPickerOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-
   // Security
   const [securityModal, setSecurityModal] = useState(false);
   const [biometrics, setBiometrics] = useState(false);
@@ -37,30 +28,27 @@ export default function FarmerProfileScreen() {
   const [fontSizeModal, setFontSizeModal] = useState(false);
   const { choice: fontSizeChoice, setChoice: setFontSizeChoice } = useFontScale();
 
-  useEffect(() => {
-    const load = async () => {
+  const load = useCallback(async () => {
+      setLoading(true);
       const session = await getSession();
       setUser(session);
       if (session) {
-        setEditName(session.displayName);
-        setEditEmail(session.email);
         try {
           const uid = auth().currentUser?.uid || session.uid;
           const doc = await firestore().collection('users').doc(uid).get();
           if (doc.exists) {
             const data = doc.data();
             if (data?.photoURL) setPhotoURL(data.photoURL);
-            if (data?.phoneNumber) setEditPhone(data.phoneNumber);
-            if (data?.location) setEditPurok(data.location.match(/^Purok\s+([1-7])/i)?.[1] || '1');
+            setUser({ ...session, displayName: data?.displayName || session.displayName });
           }
         } catch (e) {}
       }
       const bio = await AsyncStorage.getItem(BIOMETRICS_KEY);
       setBiometrics(bio === 'true');
       setLoading(false);
-    };
-    load();
   }, []);
+
+  useFocusEffect(useCallback(() => { void load(); }, [load]));
 
   // ─── Logout ───
   const handleLogout = () => {
@@ -76,34 +64,6 @@ export default function FarmerProfileScreen() {
         }
       },
     ]);
-  };
-
-  // ─── Account Settings Save ───
-  const handleSaveAccount = async () => {
-    if (!editName.trim()) { modalAlert('Error', 'Name cannot be empty.'); return; }
-    if (!/^[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ .'-]*$/.test(editName.trim())) { modalAlert('Invalid Name', 'Use letters only, with spaces, apostrophes, or hyphens.'); return; }
-    if (editPhone.trim() && !/^\d{11}$/.test(editPhone.trim())) { modalAlert('Invalid Phone Number', 'Enter an 11-digit phone number.'); return; }
-    if (!/^[1-7]$/.test(editPurok)) { modalAlert('Purok Required', 'Please select a valid Purok.'); return; }
-    setSaving(true);
-    try {
-      const currentUser = auth().currentUser;
-      if (currentUser) {
-        await currentUser.updateProfile({ displayName: editName.trim() });
-        await firestore().collection('users').doc(currentUser.uid).update({
-          displayName: editName.trim(),
-          phoneNumber: editPhone.trim(),
-          location: `Purok ${editPurok}, Gabao, Irosin, Sorsogon`
-        });
-      }
-      if (user) {
-        const updated: UserSession = { ...user, displayName: editName.trim() };
-        await saveSession(updated);
-        setUser(updated);
-      }
-      modalAlert('Success', 'Profile updated.');
-      setAccountModal(false);
-    } catch (e: any) { modalAlert('Error', e.message); }
-    finally { setSaving(false); }
   };
 
   // ─── Security ───
@@ -138,7 +98,7 @@ export default function FarmerProfileScreen() {
         <View style={styles.statusPill}><View style={styles.statusDot} /><Text style={styles.statusText}>Online</Text></View>
       </ImageBackground>
       <View style={styles.menu}>
-        <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => setAccountModal(true)}>
+        <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => router.push('/(farmer)/profile/edit' as any)}>
           <View style={[styles.menuIcon, styles.accountIcon]}><Icon name="profile" size={30} color="#34B866" /></View>
           <View style={styles.menuCopy}><Text style={styles.menuLabel}>Account Settings</Text><Text style={styles.menuDescription}>Manage your personal information</Text></View>
           <Icon name="chevron-right" size={18} color={Colors.textLight} />
@@ -165,49 +125,6 @@ export default function FarmerProfileScreen() {
         </TouchableOpacity>
       </View>
       <View style={{ height: 30 }} />
-      {/* Account Settings Modal */}
-      <Modal visible={accountModal} transparent animationType="slide">
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <View style={styles.overlay}><View style={[styles.modal, { maxHeight: '85%' }]}>
-          <View style={styles.modalHead}><Text style={styles.modalTitle}>Account Settings</Text><TouchableOpacity onPress={() => setAccountModal(false)}><Icon name="close" size={22} color={Colors.text} /></TouchableOpacity></View>
-          <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
-          <Text style={styles.label}>Display Name</Text>
-          <TextInput style={styles.input} value={editName} onChangeText={setEditName} placeholder="Your name" placeholderTextColor={Colors.textLight} />
-          <Text style={styles.label}>Email</Text>
-          <TextInput style={[styles.input, { color: Colors.textLight }]} value={editEmail} editable={false} />
-          <Text style={{ fontSize: 11, color: Colors.textLight, marginTop: 4 }}>Email cannot be changed</Text>
-          <Text style={styles.label}>Phone Number</Text>
-          <TextInput style={styles.input} value={editPhone} onChangeText={(value) => setEditPhone(value.replace(/\D/g, '').slice(0, 11))} placeholder="09xxxxxxxxx" placeholderTextColor={Colors.textLight} keyboardType="number-pad" maxLength={11} />
-          <Text style={styles.label}>Purok *</Text>
-          <TouchableOpacity style={styles.input} onPress={() => setPurokPickerOpen(true)} accessibilityRole="button">
-            <Text style={{ color: Colors.text }}>Purok {editPurok}</Text>
-            <Text style={{ color: Colors.textLight }}>⌄</Text>
-          </TouchableOpacity>
-          <Text style={styles.addressExtension}>Gabao, Irosin, Sorsogon</Text>
-          <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSaveAccount} disabled={saving}>
-            {saving ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.saveBtnText}>Save Changes</Text>}
-          </TouchableOpacity>
-          </ScrollView>
-        </View></View>
-        <Modal visible={purokPickerOpen} transparent animationType="slide" onRequestClose={() => setPurokPickerOpen(false)}>
-          <View style={styles.addressModalBackdrop}>
-            <View style={styles.addressModal}>
-              <Text style={styles.addressModalTitle}>Select Purok</Text>
-              <FlatList
-                data={Array.from({ length: 7 }, (_, index) => String(index + 1))}
-                keyExtractor={(item) => item}
-                renderItem={({ item }) => (
-                  <TouchableOpacity style={styles.addressOption} onPress={() => { setEditPurok(item); setPurokPickerOpen(false); }}>
-                    <Text style={styles.addressOptionText}>Purok {item}</Text>
-                  </TouchableOpacity>
-                )}
-              />
-            </View>
-          </View>
-        </Modal>
-        </KeyboardAvoidingView>
-      </Modal>
-
       {/* Security Modal */}
       <Modal visible={securityModal} transparent animationType="slide">
         <View style={styles.overlay}><View style={styles.modal}>

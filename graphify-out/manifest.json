@@ -42,15 +42,15 @@
     "semantic_hash": ""
   },
   "functions/index.js": {
-    "mtime": 1795137422.5936468,
-    "seen": 1795138163.2522862,
-    "ast_hash": "b57845d8219243b78b179e85182a967a",
+    "mtime": 1795180131.5889506,
+    "seen": 1795180373.002593,
+    "ast_hash": "36335a10b489b6ca26e6ecc7becf7921",
     "semantic_hash": ""
   },
   "functions/package.json": {
-    "mtime": 1795074409.838687,
-    "seen": 1795074517.125908,
-    "ast_hash": "3f89695608c20f11a60ea84cf85db9be",
+    "mtime": 1795157210.6199708,
+    "seen": 1795162072.3870795,
+    "ast_hash": "fc3eb44b5bc0c46b7b1c0c3feb23217e",
     "semantic_hash": ""
   },
   "google-services.json": {
@@ -156,9 +156,9 @@
     "semantic_hash": ""
   },
   "src/app/(admin)/home/users.tsx": {
-    "mtime": 1794195160.023177,
-    "seen": 1794878433.9519873,
-    "ast_hash": "5830a96119cb43fb0c7badfc5f4064b0",
+    "mtime": 1795176203.2504618,
+    "seen": 1795176774.067933,
+    "ast_hash": "d2a9531600c84e1dd8d1d8bfe52fea5e",
     "semantic_hash": ""
   },
   "src/app/(admin)/livestock/_layout.tsx": {
@@ -222,15 +222,15 @@
     "semantic_hash": ""
   },
   "src/app/(auth)/pending-verification.tsx": {
-    "mtime": 1792463261.4653504,
-    "seen": 1794878433.9529886,
-    "ast_hash": "32a2dbfd2edff1e8b2c636121cc1f397",
+    "mtime": 1795154518.6830926,
+    "seen": 1795154701.9063187,
+    "ast_hash": "b9ba5378384405f2394ddc5b9261e132",
     "semantic_hash": ""
   },
   "src/app/(auth)/register.tsx": {
-    "mtime": 1795143479.9801302,
-    "seen": 1795143545.96912,
-    "ast_hash": "96859cbb688f1fa70a01baa878da3a71",
+    "mtime": 1795176314.289387,
+    "seen": 1795176774.069946,
+    "ast_hash": "fd7691de70625ac0908109dffa712ea9",
     "semantic_hash": ""
   },
   "src/app/(auth)/rejected.tsx": {
@@ -282,9 +282,9 @@
     "semantic_hash": ""
   },
   "src/app/(farmer)/home/index.tsx": {
-    "mtime": 1795090278.1408684,
-    "seen": 1795091209.108252,
-    "ast_hash": "6b32597ed8d542c286fff1634222ac09",
+    "mtime": 1795177170.9610636,
+    "seen": 1795177292.9163067,
+    "ast_hash": "b67e9edbb0190fda1d0476b0f64aa1a3",
     "semantic_hash": ""
   },
   "src/app/(farmer)/home/knowledge-base-view.tsx": {
@@ -300,15 +300,15 @@
     "semantic_hash": ""
   },
   "src/app/(farmer)/home/my-animals.tsx": {
-    "mtime": 1795138314.053417,
-    "seen": 1795138347.918331,
-    "ast_hash": "e8b5b85c5bfe7f5a0fdaef5f85b09ba6",
+    "mtime": 1795155868.39835,
+    "seen": 1795155998.2476747,
+    "ast_hash": "5f0747cba72e65be0593ffd07f6f040d",
     "semantic_hash": ""
   },
   "src/app/(farmer)/home/technicians.tsx": {
-    "mtime": 1795090278.10682,
-    "seen": 1795091209.1088018,
-    "ast_hash": "725cc262e9b48e6402a2e369f2f3650a",
+    "mtime": 1795176631.1333897,
+    "seen": 1795176774.0729573,
+    "ast_hash": "18c4a1d7a64ff7ab208e75125cff33e3",
     "semantic_hash": ""
   },
   "src/app/(farmer)/map/_layout.tsx": {
@@ -318,9 +318,9 @@
     "semantic_hash": ""
   },
   "src/app/(farmer)/map/index.tsx": {
-    "mtime": 1795090278.1600783,
-    "seen": 1795091209.1093428,
-    "ast_hash": "4aa64862e2ad7aab0941f51f2b279e31",
+    "mtime": 1795155693.7336173,
+    "seen": 1795155998.2491992,
+    "ast_hash": "323a0d764e3bfb1f14f8cc1c1d6dcc64",
     "semantic_hash": ""
   },
   "src/app/(farmer)/messages/_layout.tsx": {
@@ -348,9 +348,9 @@
     "semantic_hash": ""
   },
   "src/app/(farmer)/profile/index.tsx": {
-    "mtime": 1792542215.989557,
-    "seen": 1794878433.9621892,
-    "ast_hash": "a98e95324404e7b008e732d4379f395c",
+    "mtime": 1795156753.830417,
+    "seen": 1795162072.3980463,
+    "ast_hash": "b8d412a5f6455ea013946e7d7aeb6fbf",
     "semantic_hash": ""
   },
   "src/app/(farmer)/services/_layout.tsx": {
@@ -384,9 +384,9 @@
     "semantic_hash": ""
   },
   "src/app/(technician)/appointments/index.tsx": {
-    "mtime": 1795070617.0741594,
-    "seen": 1795073415.800248,
-    "ast_hash": "7c3c3f3513ed8fb7d469b4588437d2d7",
+    "mtime": 1795176689.031362,
+    "seen": 1795176774.0779586,
+    "ast_hash": "289ab49305c00cf94cd5aee1cf21a19a",
     "semantic_hash": ""
   },
   "src/app/(technician)/dashboard/_layout.tsx": {
@@ -426,9 +426,9 @@
     "semantic_hash": ""
   },
   "src/app/(technician)/dashboard/index.tsx": {
-    "mtime": 1795070872.216062,
-    "seen": 1795073415.8012087,
-    "ast_hash": "3d1a63cc1e7878164783075adc942a36",
+    "mtime": 1795177313.9490318,
+    "seen": 1795177342.7670543,
+    "ast_hash": "b0e7b5da586e2abe1cbdda77c5711553",
     "semantic_hash": ""
   },
   "src/app/(technician)/dashboard/knowledge-base-view.tsx": {
@@ -480,9 +480,9 @@
     "semantic_hash": ""
   },
   "src/app/(technician)/profile/index.tsx": {
-    "mtime": 1795145405.769652,
-    "seen": 1795145653.624331,
-    "ast_hash": "1cf87d576237b9ecd771ac91a672995a",
+    "mtime": 1795190125.382128,
+    "seen": 1795190234.2601252,
+    "ast_hash": "8b689f34cacc43b2eb0b26186029be8d",
     "semantic_hash": ""
   },
   "src/app/(technician)/schedule/_layout.tsx": {
@@ -708,15 +708,15 @@
     "semantic_hash": ""
   },
   "src/services/appointmentService.ts": {
-    "mtime": 1795071164.2154267,
-    "seen": 1795073415.811779,
-    "ast_hash": "e65171b74b62f53ab896d1080a2f4494",
+    "mtime": 1795176973.1365328,
+    "seen": 1795177020.4724927,
+    "ast_hash": "c3c3b4f7aa83d5d776165751d9d91be2",
     "semantic_hash": ""
   },
   "src/services/authService.ts": {
-    "mtime": 1795145405.7615938,
-    "seen": 1795145653.6404686,
-    "ast_hash": "fae259726b214299e5747b0597aa16ba",
+    "mtime": 1795176209.3644147,
+    "seen": 1795176774.1065392,
+    "ast_hash": "75e0723007c413dccb19c2ecd77bd508",
     "semantic_hash": ""
   },
   "src/services/calendarService.ts": {
@@ -768,9 +768,9 @@
     "semantic_hash": ""
   },
   "src/services/notificationNavigator.ts": {
-    "mtime": 1794632696.699641,
-    "seen": 1794878433.9880667,
-    "ast_hash": "cf5511081e1088d2981460e4a1590636",
+    "mtime": 1795157539.9518144,
+    "seen": 1795162072.4165325,
+    "ast_hash": "8caf500598c59fd2e8c1c2890cb86973",
     "semantic_hash": ""
   },
   "src/services/notificationService.ts": {
@@ -822,9 +822,9 @@
     "semantic_hash": ""
   },
   "src/services/storage.ts": {
-    "mtime": 1786242556.9644933,
-    "seen": 1792110272.0443847,
-    "ast_hash": "e367bcb20cf5d548da3147dc4d62d3ba",
+    "mtime": 1795187471.6136773,
+    "seen": 1795187658.765735,
+    "ast_hash": "96e9778c52bc57e153bd95dc5d883039",
     "semantic_hash": ""
   },
   "src/services/storageService.ts": {
@@ -1518,15 +1518,15 @@
     "semantic_hash": ""
   },
   "src/app/(farmer)/home/available-technicians.tsx": {
-    "mtime": 1795090278.1118662,
-    "seen": 1795091209.107154,
-    "ast_hash": "77113ec19657cfa1d987e23847aec6b3",
+    "mtime": 1795179879.9155698,
+    "seen": 1795179918.1406832,
+    "ast_hash": "83d38942b837b9eaa6e8899db9e98679",
     "semantic_hash": ""
   },
   "src/app/(technician)/dashboard/availability.tsx": {
-    "mtime": 1794541120.5531003,
-    "seen": 1794878433.9667637,
-    "ast_hash": "125ab39c4ab435de39f9d8961f3c99bc",
+    "mtime": 1795180193.7868097,
+    "seen": 1795180373.037177,
+    "ast_hash": "cabcc05bd0e5e4e050c4553bf3fdd91b",
     "semantic_hash": ""
   },
   "src/components/HeartbeatTracker.tsx": {
@@ -1542,9 +1542,9 @@
     "semantic_hash": ""
   },
   "src/components/map/MapUserProfileDrawer.tsx": {
-    "mtime": 1794359760.1757946,
-    "seen": 1794878433.9756532,
-    "ast_hash": "2979b7826ec1be0a9806d01f36be7bd1",
+    "mtime": 1795155652.860987,
+    "seen": 1795155998.3562026,
+    "ast_hash": "179fdc12aef529efbc7c76a2220fe1aa",
     "semantic_hash": ""
   },
   "src/components/technician/ServiceRequestDetailsDrawer.tsx": {
@@ -1590,21 +1590,21 @@
     "semantic_hash": ""
   },
   "src/utils/availability.ts": {
-    "mtime": 1794622662.739481,
-    "seen": 1794878433.9950917,
-    "ast_hash": "267c3862a41f24effdb061d650945375",
+    "mtime": 1795180066.1876097,
+    "seen": 1795180373.0759606,
+    "ast_hash": "22e81d41671f3595b0bf9068af3dae6c",
     "semantic_hash": ""
   },
   "src/utils/technicianRequests.ts": {
-    "mtime": 1795073973.701443,
-    "seen": 1795074019.1940427,
-    "ast_hash": "f44bf240f83e0e6c06f709374f063bb4",
+    "mtime": 1795157424.9422078,
+    "seen": 1795162072.4195323,
+    "ast_hash": "bf324aa1567b50e798dd622ac0659799",
     "semantic_hash": ""
   },
   "supabase/functions/registration-email-otp/index.ts": {
-    "mtime": 1795145851.4969637,
-    "seen": 1795146054.4161363,
-    "ast_hash": "6677e64873ca7480225a16fd403fea23",
+    "mtime": 1795192290.7205584,
+    "seen": 1795192339.4259992,
+    "ast_hash": "d22cb03d7f72d0310b44b523c351cb4d",
     "semantic_hash": ""
   },
   "tmp/admin-category-export/metadata.json": {
@@ -2220,9 +2220,9 @@
     "semantic_hash": ""
   },
   "assets/images/technician/Home/header_banner.png": {
-    "mtime": 1792466209.293065,
-    "seen": 1794878434.0572581,
-    "ast_hash": "c1885eda6d826c3c6288c41825ba50fd",
+    "mtime": 1795156414.8107178,
+    "seen": 1795156531.1331131,
+    "ast_hash": "7d0de92de97ddc537f4df33e75161ddc",
     "semantic_hash": ""
   },
   "assets/images/technician/Home/hospital_illustration.png": {
@@ -3642,9 +3642,9 @@
     "semantic_hash": ""
   },
   "src/components/auth/IdentityVerificationResult.tsx": {
-    "mtime": 1795066105.603125,
-    "seen": 1795067138.8468268,
-    "ast_hash": "545b70d33a2a331bc83fe985c12c6003",
+    "mtime": 1795189521.1528518,
+    "seen": 1795189565.1645844,
+    "ast_hash": "1bdcdc6922b54d092a5a19ad9ff6c2b6",
     "semantic_hash": ""
   },
   "assets/images/identity-verification/farm-landscape.png": {
@@ -3660,9 +3660,9 @@
     "semantic_hash": ""
   },
   "functions/serviceMatching.test.js": {
-    "mtime": 1795075023.3261404,
-    "seen": 1795075260.1018803,
-    "ast_hash": "59df2efa88ebadfcbdd657bf52173731",
+    "mtime": 1795162037.884572,
+    "seen": 1795162072.3870795,
+    "ast_hash": "5f111e40fbbd98ca606d47736004827c",
     "semantic_hash": ""
   },
   "functions/shared/technicianServiceCatalog.json": {
@@ -3672,15 +3672,15 @@
     "semantic_hash": ""
   },
   "functions/shared/technicianServiceMatching.d.ts": {
-    "mtime": 1795072048.2181835,
-    "seen": 1795073415.7896469,
-    "ast_hash": "8bed2cd5c9dcf2858e5f77238ab95704",
+    "mtime": 1795155380.2932277,
+    "seen": 1795155998.1497095,
+    "ast_hash": "81dd1f1c9a500b4888d41d943d1936ce",
     "semantic_hash": ""
   },
   "functions/shared/technicianServiceMatching.js": {
-    "mtime": 1795072047.6205838,
-    "seen": 1795073415.7896469,
-    "ast_hash": "afe75858f0e03a5d2871c119a426cf1a",
+    "mtime": 1795162037.8560576,
+    "seen": 1795162072.388078,
+    "ast_hash": "3530f97f57d84e7ecff7e22f3f839510",
     "semantic_hash": ""
   },
   "src/components/technician/TechnicianQualificationPicker.tsx": {
@@ -3690,9 +3690,9 @@
     "semantic_hash": ""
   },
   "src/services/backendApi.ts": {
-    "mtime": 1795069621.318705,
-    "seen": 1795070392.174435,
-    "ast_hash": "f26666edb6aa1f7935ab4cc1cc9125e6",
+    "mtime": 1795190125.3843758,
+    "seen": 1795190234.2838056,
+    "ast_hash": "42719c5a4d3fc85a01f552db3e5cf1dc",
     "semantic_hash": ""
   },
   "firestore.indexes.json": {
@@ -3702,15 +3702,15 @@
     "semantic_hash": ""
   },
   "functions/firestoreRules.emulator.test.js": {
-    "mtime": 1795090768.4174216,
-    "seen": 1795091209.0909576,
-    "ast_hash": "daa36dcadaa563b73c3ebda600b2dabb",
+    "mtime": 1795156715.3086922,
+    "seen": 1795162072.3870795,
+    "ast_hash": "8bd34c130c4deb511a1e643b050de192",
     "semantic_hash": ""
   },
   "functions/serviceRequestApi.emulator.test.js": {
-    "mtime": 1795137441.9269893,
-    "seen": 1795138163.2545974,
-    "ast_hash": "29029cdacaa9382d485129ace2d5cc05",
+    "mtime": 1795176973.1390538,
+    "seen": 1795177020.4282253,
+    "ast_hash": "3e79dde6e45ee1120bcbbd7a8bb3b9d6",
     "semantic_hash": ""
   },
   "assets/images/animals/files/download_images.py": {
@@ -4092,9 +4092,9 @@
     "semantic_hash": ""
   },
   "functions/shared/publicProfile.js": {
-    "mtime": 1795090164.9995556,
-    "seen": 1795091209.0919583,
-    "ast_hash": "3ddab4b682d68a1137b378bc3df80604",
+    "mtime": 1795155693.7290387,
+    "seen": 1795155998.147958,
+    "ast_hash": "a171b75ee638e8370b67425d8cb38b50",
     "semantic_hash": ""
   },
   "functions/publicProfileMigration.emulator.test.js": {
@@ -4401,6 +4401,558 @@
     "mtime": 1795146141.8847065,
     "seen": 1795146435.4530394,
     "ast_hash": "7789926eebe25c88b706a6b391cbb56a",
+    "semantic_hash": ""
+  },
+  "assets/images/identity-verification/pending-verification.png": {
+    "mtime": 1795152799.8464775,
+    "seen": 1795153044.8225229,
+    "ast_hash": "b78dc04525cab4144cd0207a36e9b5b5",
+    "semantic_hash": ""
+  },
+  "src/components/auth/VerificationProgressCard.tsx": {
+    "mtime": 1795153799.8576922,
+    "seen": 1795154035.5496492,
+    "ast_hash": "c031129fd6e63b8fdd1fc10d5a7085b4",
+    "semantic_hash": ""
+  },
+  "tmp/pending-after-1.png": {
+    "mtime": 1795153367.5541103,
+    "seen": 1795153415.6037683,
+    "ast_hash": "e385b9629453274bffb8a1963f142a63",
+    "semantic_hash": ""
+  },
+  "tmp/pending-before.png": {
+    "mtime": 1795153172.5361903,
+    "seen": 1795153415.6037683,
+    "ast_hash": "7be48340ab59ee871be2b4d689cee774",
+    "semantic_hash": ""
+  },
+  "tmp/pending-320.png": {
+    "mtime": 1795153865.8683295,
+    "seen": 1795154035.8383114,
+    "ast_hash": "882f0901db63a87809490cae14f75d46",
+    "semantic_hash": ""
+  },
+  "tmp/pending-360-verified.png": {
+    "mtime": 1795153929.3215566,
+    "seen": 1795154035.8383114,
+    "ast_hash": "c6cf482304e4b89d9d94fa0471a4e452",
+    "semantic_hash": ""
+  },
+  "tmp/pending-360.png": {
+    "mtime": 1795153867.6781974,
+    "seen": 1795154035.8383114,
+    "ast_hash": "882f0901db63a87809490cae14f75d46",
+    "semantic_hash": ""
+  },
+  "tmp/pending-375.png": {
+    "mtime": 1795153870.695673,
+    "seen": 1795154035.8383114,
+    "ast_hash": "af1f8b3211d06f79793d3e9205449301",
+    "semantic_hash": ""
+  },
+  "tmp/pending-390-verified.png": {
+    "mtime": 1795153937.821811,
+    "seen": 1795154035.8383114,
+    "ast_hash": "3c99e97841ac5b76e6579990366b983a",
+    "semantic_hash": ""
+  },
+  "tmp/pending-390.png": {
+    "mtime": 1795153874.1211667,
+    "seen": 1795154035.8383114,
+    "ast_hash": "af1f8b3211d06f79793d3e9205449301",
+    "semantic_hash": ""
+  },
+  "tmp/pending-412.png": {
+    "mtime": 1795153877.5585847,
+    "seen": 1795154035.8383114,
+    "ast_hash": "c3f0a8aa145ac24e9d20cb883434ac15",
+    "semantic_hash": ""
+  },
+  "tmp/pending-430.png": {
+    "mtime": 1795153879.6959467,
+    "seen": 1795154035.8383114,
+    "ast_hash": "c94466b0d4135efa3cc2ec7fe7de4093",
+    "semantic_hash": ""
+  },
+  "tmp/pending-after-2.png": {
+    "mtime": 1795153487.3812,
+    "seen": 1795154035.8393242,
+    "ast_hash": "e4daac963c4693c2e8322fc71e2b4cdb",
+    "semantic_hash": ""
+  },
+  "tmp/pending-after-3.png": {
+    "mtime": 1795153550.6615293,
+    "seen": 1795154035.8393242,
+    "ast_hash": "fcf2940c045d3665dec20d5d0a24da1b",
+    "semantic_hash": ""
+  },
+  "tmp/pending-after-4.png": {
+    "mtime": 1795153570.9232256,
+    "seen": 1795154035.8393242,
+    "ast_hash": "586fa9b53c5a165a0d690a32b8a5b210",
+    "semantic_hash": ""
+  },
+  "tmp/pending-after-5.png": {
+    "mtime": 1795153610.5519395,
+    "seen": 1795154035.8393242,
+    "ast_hash": "b4a664e16d3823dc438b60b9a07d959e",
+    "semantic_hash": ""
+  },
+  "tmp/pending-after-6.png": {
+    "mtime": 1795153629.4655466,
+    "seen": 1795154035.8393242,
+    "ast_hash": "63770168be0ca35a2b7731f45cd74ada",
+    "semantic_hash": ""
+  },
+  "tmp/pending-after-7.png": {
+    "mtime": 1795153743.5600648,
+    "seen": 1795154035.8393242,
+    "ast_hash": "0a279280d9513b9e84028f1e8837b01c",
+    "semantic_hash": ""
+  },
+  "tmp/pending-after-8.png": {
+    "mtime": 1795153812.5784636,
+    "seen": 1795154035.8393242,
+    "ast_hash": "d523a4803a2935458080995efbf0d2d6",
+    "semantic_hash": ""
+  },
+  "tmp/pending-320-scroll.png": {
+    "mtime": 1795154040.6930816,
+    "seen": 1795154173.1825943,
+    "ast_hash": "dde8228482ac04e542404c81f8fb531c",
+    "semantic_hash": ""
+  },
+  "tmp/pending-verification-final.png": {
+    "mtime": 1795154593.643774,
+    "seen": 1795154702.8771024,
+    "ast_hash": "d46c577df6643a77c45f009558ed2a5c",
+    "semantic_hash": ""
+  },
+  "assets/images/farmer/carabao.png": {
+    "mtime": 1795155789.6228225,
+    "seen": 1795155998.7589605,
+    "ast_hash": "4818aff620c53ed04fa3835909f1c1e6",
+    "semantic_hash": ""
+  },
+  "assets/images/farmer/goat.png": {
+    "mtime": 1795155826.0433507,
+    "seen": 1795155998.7665477,
+    "ast_hash": "2873f3f0bfd209ddf76a128492c5e2b2",
+    "semantic_hash": ""
+  },
+  "assets/images/farmer/horse.png": {
+    "mtime": 1795155753.2839801,
+    "seen": 1795155998.7665477,
+    "ast_hash": "8b50c6e2252ae125e471174732abc67e",
+    "semantic_hash": ""
+  },
+  "src/components/auth/LiveFaceCapture.tsx": {
+    "mtime": 1795157656.6137354,
+    "seen": 1795162072.4035742,
+    "ast_hash": "cb006554f2e0a27d624ef2f716324d04",
+    "semantic_hash": ""
+  },
+  "functions/farmerProfileUpdate.test.js": {
+    "mtime": 1795156060.9753478,
+    "seen": 1795156530.6092014,
+    "ast_hash": "58fecab8e40583d83965400a0b41bbfc",
+    "semantic_hash": ""
+  },
+  "functions/shared/farmerProfileUpdate.js": {
+    "mtime": 1795156060.9740245,
+    "seen": 1795156530.6132357,
+    "ast_hash": "318bf78e513a958417daae759da38a3f",
+    "semantic_hash": ""
+  },
+  "src/app/(farmer)/profile/edit.tsx": {
+    "mtime": 1795190125.3798108,
+    "seen": 1795190234.2485702,
+    "ast_hash": "6bc7735113ed2d38419ccbd078580d5d",
+    "semantic_hash": ""
+  },
+  "functions/farmerProfileVerification.emulator.test.js": {
+    "mtime": 1795157335.9523883,
+    "seen": 1795162072.3870795,
+    "ast_hash": "3b60e19f302c75c4928b75fc4b0f4651",
+    "semantic_hash": ""
+  },
+  "tmp/current-app-review.png": {
+    "mtime": 1795169992.7796922,
+    "seen": 1795170657.7705832,
+    "ast_hash": "4cf7a4da1f90aafc58febe4054512683",
+    "semantic_hash": ""
+  },
+  "output/pdf/AgriCare_Global_Service_Request_Test_Report.pdf": {
+    "mtime": 1795172727.2058854,
+    "seen": 1795172836.6002111,
+    "ast_hash": "54c6ccf7fa3434f4b75d2011db5d4eb9",
+    "semantic_hash": ""
+  },
+  "output/pdf/agricare-service-request-evidence/farmer-home-after-request.png": {
+    "mtime": 1795171662.4626248,
+    "seen": 1795172083.7884881,
+    "ast_hash": "fe7d5fbced1a3fd728197dbd83f638c6",
+    "semantic_hash": ""
+  },
+  "output/pdf/agricare-service-request-evidence/global-request-submitted.png": {
+    "mtime": 1795171624.674899,
+    "seen": 1795172083.7884881,
+    "ast_hash": "5b746ea302159e1ce6b28b3b1201aa26",
+    "semantic_hash": ""
+  },
+  "output/pdf/agricare-service-request-evidence/technician-global-request.png": {
+    "mtime": 1795172274.2083724,
+    "seen": 1795172836.6228857,
+    "ast_hash": "09ae51565544f21861d06b7ad1d64204",
+    "semantic_hash": ""
+  },
+  "tmp/current-request-after-build.png": {
+    "mtime": 1795171624.674899,
+    "seen": 1795172083.9027054,
+    "ast_hash": "5b746ea302159e1ce6b28b3b1201aa26",
+    "semantic_hash": ""
+  },
+  "tmp/pdfs/agricare-report-1.png": {
+    "mtime": 1795172727.387346,
+    "seen": 1795172836.657017,
+    "ast_hash": "e08d4810d21b8bc04bd30651b717c3c4",
+    "semantic_hash": ""
+  },
+  "tmp/pdfs/agricare-report-2.png": {
+    "mtime": 1795172727.6073475,
+    "seen": 1795172836.657017,
+    "ast_hash": "59a6165e1fd17e0a5e3d9364677b90e4",
+    "semantic_hash": ""
+  },
+  "tmp/technician-global-request.png": {
+    "mtime": 1795172274.2083724,
+    "seen": 1795172836.6716568,
+    "ast_hash": "09ae51565544f21861d06b7ad1d64204",
+    "semantic_hash": ""
+  },
+  "tmp/technician-request-details.png": {
+    "mtime": 1795172292.057821,
+    "seen": 1795172836.6716568,
+    "ast_hash": "a226d874ff0aeb4f352df141e412265d",
+    "semantic_hash": ""
+  },
+  "tmp/technician-switch.png": {
+    "mtime": 1795171886.935633,
+    "seen": 1795172083.9514513,
+    "ast_hash": "505ba13801d2b04fff5ea42cf5e5b4f2",
+    "semantic_hash": ""
+  },
+  "output/pdf/agricare-service-request-evidence/technician-dashboard-after-accept.png": {
+    "mtime": 1795172547.2712257,
+    "seen": 1795172836.6228857,
+    "ast_hash": "bf03ead0f72dd7c4f5973f28daebc3cd",
+    "semantic_hash": ""
+  },
+  "output/pdf/agricare-service-request-evidence/technician-request-accepted.png": {
+    "mtime": 1795172435.5978458,
+    "seen": 1795172836.6228857,
+    "ast_hash": "3a9bf17228bf283fe3310c076b77b6be",
+    "semantic_hash": ""
+  },
+  "output/pdf/agricare-service-request-evidence/technician-request-details.png": {
+    "mtime": 1795172292.057821,
+    "seen": 1795172836.6228857,
+    "ast_hash": "a226d874ff0aeb4f352df141e412265d",
+    "semantic_hash": ""
+  },
+  "output/pdf/agricare-service-request-evidence/technician-schedule-after-accept.png": {
+    "mtime": 1795172473.2928572,
+    "seen": 1795172836.6228857,
+    "ast_hash": "0106b36d484f8c17d9257076fb9e0675",
+    "semantic_hash": ""
+  },
+  "tmp/pdfs/agricare-report-3.png": {
+    "mtime": 1795172727.7340636,
+    "seen": 1795172836.657017,
+    "ast_hash": "419f387958279fe2862850a8a7d0aad0",
+    "semantic_hash": ""
+  },
+  "tmp/pdfs/agricare-report-4.png": {
+    "mtime": 1795172727.9528103,
+    "seen": 1795172836.657017,
+    "ast_hash": "093e41f614d69289bc3056d41da4bff8",
+    "semantic_hash": ""
+  },
+  "tmp/pdfs/agricare-report-5.png": {
+    "mtime": 1795172728.1913958,
+    "seen": 1795172836.657017,
+    "ast_hash": "fc45692175b116845c08d21e8ad0c15a",
+    "semantic_hash": ""
+  },
+  "tmp/technician-after-accept.png": {
+    "mtime": 1795172473.2928572,
+    "seen": 1795172836.6716568,
+    "ast_hash": "0106b36d484f8c17d9257076fb9e0675",
+    "semantic_hash": ""
+  },
+  "tmp/technician-dashboard-after-accept.png": {
+    "mtime": 1795172547.2712257,
+    "seen": 1795172836.6716568,
+    "ast_hash": "bf03ead0f72dd7c4f5973f28daebc3cd",
+    "semantic_hash": ""
+  },
+  "tmp/technician-notifications.png": {
+    "mtime": 1795172686.8579836,
+    "seen": 1795172836.6716568,
+    "ast_hash": "54ab5bbed02a166aabc6a0a5cb371c0f",
+    "semantic_hash": ""
+  },
+  "tmp/technician-request-accepted.png": {
+    "mtime": 1795172435.5978458,
+    "seen": 1795172836.6716568,
+    "ast_hash": "3a9bf17228bf283fe3310c076b77b6be",
+    "semantic_hash": ""
+  },
+  "tmp/current-testing-state.png": {
+    "mtime": 1795173087.8291295,
+    "seen": 1795174871.4322925,
+    "ast_hash": "d6b1e5e29de65f34cfd36717f7e97714",
+    "semantic_hash": ""
+  },
+  "tmp/farmer-home-for-test.png": {
+    "mtime": 1795173150.7500455,
+    "seen": 1795174871.4322925,
+    "ast_hash": "dbf06151d1b692e184292da206bff0cb",
+    "semantic_hash": ""
+  },
+  "tmp/farmer-login.png": {
+    "mtime": 1795173124.0198681,
+    "seen": 1795174871.4322925,
+    "ast_hash": "6d649f6ec6bb461f74a74fdbbaa4964b",
+    "semantic_hash": ""
+  },
+  "tmp/farmer-service-test.png": {
+    "mtime": 1795173569.8813314,
+    "seen": 1795174871.4322925,
+    "ast_hash": "6865fdf18ef42d2a5f9c07ed62093b62",
+    "semantic_hash": ""
+  },
+  "tmp/tech-test.png": {
+    "mtime": 1795173618.366979,
+    "seen": 1795174871.4512863,
+    "ast_hash": "539f6ebc9dd2fccd8175aa10725fa106",
+    "semantic_hash": ""
+  },
+  "tmp/technician-qualifications.png": {
+    "mtime": 1795173101.196837,
+    "seen": 1795174871.4522846,
+    "ast_hash": "a60037f806f730cb743423be5581a212",
+    "semantic_hash": ""
+  },
+  "tmp/goal-export/metadata.json": {
+    "mtime": 1795175311.364108,
+    "seen": 1795175350.872583,
+    "ast_hash": "5a3d1ec1f52e28d8ab2ccf4e9a535627",
+    "semantic_hash": ""
+  },
+  "supabase/functions/registration-email-otp/technicianDiscovery_test.ts": {
+    "mtime": 1795175411.714506,
+    "seen": 1795175472.4427025,
+    "ast_hash": "9a4f4180891b8963d9a21d097a1548d3",
+    "semantic_hash": ""
+  },
+  "src/services/technicianDiscoveryService.ts": {
+    "mtime": 1795179024.382001,
+    "seen": 1795179085.6531634,
+    "ast_hash": "6ee3427a17fa3b04d3b9291da98cabeb",
+    "semantic_hash": ""
+  },
+  "tmp/home-return-check.png": {
+    "mtime": 1795178031.136752,
+    "seen": 1795179085.8526278,
+    "ast_hash": "d54707432a3fbb96c6ecc0da06ea0b47",
+    "semantic_hash": ""
+  },
+  "tmp/technician-fetch-check.png": {
+    "mtime": 1795177371.5422213,
+    "seen": 1795179085.887216,
+    "ast_hash": "25b509c0d87411aa4bd8ae4c3a345fb5",
+    "semantic_hash": ""
+  },
+  "tmp/technician-page-final.png": {
+    "mtime": 1795178009.5509102,
+    "seen": 1795179085.8887262,
+    "ast_hash": "11f4e80a9ebfafbaa1ca638c51b0b16c",
+    "semantic_hash": ""
+  },
+  "tmp/technicians-page-after-debug.png": {
+    "mtime": 1795177976.8880928,
+    "seen": 1795179085.8897388,
+    "ast_hash": "39dd7be47f9440c9f0d3e69ec786badb",
+    "semantic_hash": ""
+  },
+  "tmp/technicians-page-check.png": {
+    "mtime": 1795177392.4164965,
+    "seen": 1795179085.8897388,
+    "ast_hash": "5d24dab3f2b590ae2e133e839680e0c7",
+    "semantic_hash": ""
+  },
+  "tmp/technicians-target-check.png": {
+    "mtime": 1795178049.4930422,
+    "seen": 1795179085.8897388,
+    "ast_hash": "30256a9b3d456620612d55d070009e84",
+    "semantic_hash": ""
+  },
+  "tmp/home-latest.png": {
+    "mtime": 1795179162.6674325,
+    "seen": 1795179918.5048292,
+    "ast_hash": "874a65aacef97f389e7b0958a710c949",
+    "semantic_hash": ""
+  },
+  "tmp/technician-latest.png": {
+    "mtime": 1795179118.4616675,
+    "seen": 1795179918.5668654,
+    "ast_hash": "51e2f036d1fa1e3532d6271ed8874575",
+    "semantic_hash": ""
+  },
+  "tmp/technicians-latest.png": {
+    "mtime": 1795179178.2585282,
+    "seen": 1795179918.5683765,
+    "ast_hash": "1c2c5d37f61ba7aeb0638c68402ed4f8",
+    "semantic_hash": ""
+  },
+  "tmp/overnight-check/availability.js": {
+    "mtime": 1795180340.749814,
+    "seen": 1795180373.079511,
+    "ast_hash": "4a86eddac3427b078ac5b42b99e23600",
+    "semantic_hash": ""
+  },
+  "tmp/animals-top.png": {
+    "mtime": 1795180179.7532513,
+    "seen": 1795180373.3675525,
+    "ast_hash": "d3877781d835f6a92778ad541404bbf3",
+    "semantic_hash": ""
+  },
+  "tmp/available-current.png": {
+    "mtime": 1795179935.3203793,
+    "seen": 1795180373.3675525,
+    "ast_hash": "d7b9c3b77f97453402f758ea6a0d6c65",
+    "semantic_hash": ""
+  },
+  "tmp/current.png": {
+    "mtime": 1795180157.6319058,
+    "seen": 1795180373.3685544,
+    "ast_hash": "02e4be504a1367336b95dce2f8e091f8",
+    "semantic_hash": ""
+  },
+  "tmp/home-scroll.png": {
+    "mtime": 1795179920.2960348,
+    "seen": 1795180373.371102,
+    "ast_hash": "1019bcb91d4ea677c7c718129aaf3891",
+    "semantic_hash": ""
+  },
+  "tmp/login.png": {
+    "mtime": 1795180235.7330985,
+    "seen": 1795180373.372101,
+    "ast_hash": "ceb3e185fd8300f14300b1d5d5326c6d",
+    "semantic_hash": ""
+  },
+  "tmp/logout-dialog.png": {
+    "mtime": 1795180221.4655733,
+    "seen": 1795180373.372101,
+    "ast_hash": "3a0cb68c47183352deb90340dfbc97fa",
+    "semantic_hash": ""
+  },
+  "tmp/profile.png": {
+    "mtime": 1795180209.7710834,
+    "seen": 1795180373.4168694,
+    "ast_hash": "7ac0739d9c44451bd4f2eafa7fa0f492",
+    "semantic_hash": ""
+  },
+  "tmp/tech-login-result.png": {
+    "mtime": 1795180281.4501748,
+    "seen": 1795180373.4168694,
+    "ast_hash": "46b6ee92d5944fca63631aa0d98a1553",
+    "semantic_hash": ""
+  },
+  "tmp/technician-home.png": {
+    "mtime": 1795180262.258473,
+    "seen": 1795180373.4194107,
+    "ast_hash": "c67e79f315f2a04f61c49d3ff507657f",
+    "semantic_hash": ""
+  },
+  "tmp/availability-setup.png": {
+    "mtime": 1795180430.631683,
+    "seen": 1795180708.0873692,
+    "ast_hash": "a1edec632555043a048ebcf494f3aab6",
+    "semantic_hash": ""
+  },
+  "tmp/daily-hours.png": {
+    "mtime": 1795180444.2898843,
+    "seen": 1795180708.0883398,
+    "ast_hash": "5a8b882bf4c71382f9071eb99cb5eec5",
+    "semantic_hash": ""
+  },
+  "tmp/daily-view.png": {
+    "mtime": 1795180469.851494,
+    "seen": 1795180708.0883398,
+    "ast_hash": "7d70086d797c1222d1b3c090e8aa74c8",
+    "semantic_hash": ""
+  },
+  "tmp/device-now.png": {
+    "mtime": 1795180398.388404,
+    "seen": 1795180708.0883398,
+    "ast_hash": "26d7692b3411b2649bfd7886dbd02784",
+    "semantic_hash": ""
+  },
+  "tmp/end-picker.png": {
+    "mtime": 1795180608.086313,
+    "seen": 1795180708.0883398,
+    "ast_hash": "676c1ab593ed04cb1674b10fc85bafb5",
+    "semantic_hash": ""
+  },
+  "tmp/hour-8-selected.png": {
+    "mtime": 1795180594.1261048,
+    "seen": 1795180708.0899422,
+    "ast_hash": "9d16ad0af04df84631dd11e4d430a37b",
+    "semantic_hash": ""
+  },
+  "tmp/hour-scroll-2.png": {
+    "mtime": 1795180580.941738,
+    "seen": 1795180708.0899422,
+    "ast_hash": "d48cfe29e7f8cf189b4d7efeeba82fd9",
+    "semantic_hash": ""
+  },
+  "tmp/hour-scroll.png": {
+    "mtime": 1795180513.0108943,
+    "seen": 1795180708.0899422,
+    "ast_hash": "062233fc523eed56119feb758bb268e7",
+    "semantic_hash": ""
+  },
+  "tmp/specializations.png": {
+    "mtime": 1795180630.3610022,
+    "seen": 1795180708.1102176,
+    "ast_hash": "619f14777449c92108f8936305f0d116",
+    "semantic_hash": ""
+  },
+  "tmp/start-picker-2.png": {
+    "mtime": 1795180568.896672,
+    "seen": 1795180708.1102176,
+    "ast_hash": "4ff1c3170ca0fbaaa65d6b65b5186603",
+    "semantic_hash": ""
+  },
+  "tmp/start-picker.png": {
+    "mtime": 1795180499.5684352,
+    "seen": 1795180708.1102176,
+    "ast_hash": "1e92b73748f3e125b7bc1edb1cd44d42",
+    "semantic_hash": ""
+  },
+  "tmp/tech-availability.png": {
+    "mtime": 1795180416.0593505,
+    "seen": 1795180708.1102176,
+    "ast_hash": "6ee067f1d0a5f3c8ac3a86a73cee2a1c",
+    "semantic_hash": ""
+  },
+  "supabase/functions/registration-email-otp/identityBucket_test.ts": {
+    "mtime": 1795190182.9769878,
+    "seen": 1795190234.2968721,
+    "ast_hash": "097a9f82204e63303049e8afc904b3ad",
     "semantic_hash": ""
   }
 }

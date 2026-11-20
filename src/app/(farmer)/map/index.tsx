@@ -233,7 +233,7 @@ export default function FarmerMapScreen() {
   const visibleAppointments = selectedAppointmentId
     ? filteredAppointments.filter((appointment) => appointment.id === selectedAppointmentId)
     : filteredAppointments;
-  const onlineTechnicians = technicians.filter(technician => !!technicianLocations[technician.id]);
+  const onlineTechnicians = technicians.filter(technician => !!technicianLocations[technician.id]).map(technician => ({ ...technician, isOnline: true }));
   const liveTechnicians = onlineTechnicians.flatMap(technician => {
     const location = technicianLocations[technician.id];
     // shortcut: use last-known coordinates while heartbeat is fresh; discard them when heartbeat expires.

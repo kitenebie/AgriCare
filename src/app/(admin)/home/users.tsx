@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, Animated, Dimensions, Pressable, Linking, KeyboardAvoidingView, Platform } from 'react-native';
 import { AppText as Text, AppTextInput as TextInput } from '@/components/ui/FontScale';
 import { modalAlert } from '@/components/ui/ModalAlert';
+import { callBackend } from '@/services/backendApi';
 import firestore from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
@@ -35,6 +36,8 @@ export default function UsersPage() {
   const [filter, setFilter] = useState('pending');
   const [search, setSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedIdPreviewUrl, setSelectedIdPreviewUrl] = useState('');
+  const [selectedProofPreviewUrl, setSelectedProofPreviewUrl] = useState('');
   const [drawerVisible, setDrawerVisible] = useState(false);
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   // Reject modal state
@@ -51,6 +54,18 @@ export default function UsersPage() {
     return () => unsub();
   }, []);
 
+  useEffect(() => {
+    if (!selectedUser?.idImageUrl && !selectedUser?.proofImageUrl) return;
+    let active = true;
+    if (selectedUser.idImageUrl) void callBackend<{ signedUrl: string }>('getIdentityPreview', { targetUserId: selectedUser.id })
+      .then(({ signedUrl }) => { if (active) setSelectedIdPreviewUrl(signedUrl); })
+      .catch(error => console.warn('[Admin] Could not load ID preview:', error.message));
+    if (selectedUser.proofImageUrl) void callBackend<{ signedUrl: string }>('getIdentityPreview', { targetUserId: selectedUser.id, documentField: 'proofImageUrl' })
+      .then(({ signedUrl }) => { if (active) setSelectedProofPreviewUrl(signedUrl); })
+      .catch(error => console.warn('[Admin] Could not load qualification proof preview:', error.message));
+    return () => { active = false; };
+  }, [selectedUser?.id, selectedUser?.idImageUrl, selectedUser?.proofImageUrl]);
+
   const filtered = users.filter(u => {
     const matchFilter = filter === 'all' ? true : filter === 'pending' ? u.status === 'pending' : u.role === filter;
     const q = search.toLowerCase();
@@ -59,10 +74,14 @@ export default function UsersPage() {
   });
 
   const pendingCount = users.filter(u => u.status === 'pending').length;
+  const selectedIdDocumentUri = selectedIdPreviewUrl || (selectedUser?.idImageUrl?.startsWith('https://') ? selectedUser.idImageUrl : '');
+  const selectedProofDocumentUri = selectedProofPreviewUrl || (selectedUser?.proofImageUrl?.startsWith('https://') ? selectedUser.proofImageUrl : '');
 
   // ─── Drawer Controls ───
   const openDrawer = (user: User) => {
     setSelectedUser(user);
+    setSelectedIdPreviewUrl('');
+    setSelectedProofPreviewUrl('');
     setDrawerVisible(true);
     Animated.spring(slideAnim, {
       toValue: 0,
@@ -80,6 +99,8 @@ export default function UsersPage() {
     }).start(() => {
       setDrawerVisible(false);
       setSelectedUser(null);
+      setSelectedIdPreviewUrl('');
+      setSelectedProofPreviewUrl('');
     });
   };
 
@@ -461,29 +482,29 @@ export default function UsersPage() {
                     </View>
                   )}
 
-                  {selectedUser.role === 'farmer' && selectedUser.photoURL && selectedUser.idImageUrl && selectedUser.status === 'pending' && (
+                  {selectedUser.role === 'farmer' && selectedUser.photoURL && selectedIdDocumentUri && selectedUser.status === 'pending' && (
                     <View style={s.drawerSection}>
                       <Text style={s.drawerSectionTitle}>Identity check · compare both faces</Text>
                       <View style={s.identityCompareRow}>
                         <View style={s.identityCompareItem}><Text style={s.drawerDocLabel}>Selfie</Text><Image source={{ uri: selectedUser.photoURL }} style={s.identityCompareImage} contentFit="cover" /></View>
-                        <View style={s.identityCompareItem}><Text style={s.drawerDocLabel}>Government ID</Text><Image source={{ uri: selectedUser.idImageUrl }} style={s.identityCompareImage} contentFit="contain" /></View>
+                        <View style={s.identityCompareItem}><Text style={s.drawerDocLabel}>Government ID</Text><Image source={{ uri: selectedIdDocumentUri }} style={s.identityCompareImage} contentFit="contain" /></View>
                       </View>
                     </View>
                   )}
                   {/* Documents */}
-                  {(selectedUser.idImageUrl || selectedUser.proofImageUrl) && (
+                  {(selectedIdDocumentUri || selectedProofDocumentUri) && (
                     <View style={s.drawerSection}>
                       <Text style={s.drawerSectionTitle}>Uploaded Documents</Text>
-                      {selectedUser.idImageUrl && (
+                      {selectedIdDocumentUri && (
                         <View style={s.drawerDocCard}>
                           <Text style={s.drawerDocLabel}>Valid ID</Text>
-                          <Image source={{ uri: selectedUser.idImageUrl }} style={s.drawerDocImage} contentFit="contain" />
+                          <Image source={{ uri: selectedIdDocumentUri }} style={s.drawerDocImage} contentFit="contain" />
                         </View>
                       )}
-                      {selectedUser.proofImageUrl && (
+                      {selectedProofDocumentUri && (
                         <View style={s.drawerDocCard}>
                           <Text style={s.drawerDocLabel}>License / Certificate</Text>
-                          <Image source={{ uri: selectedUser.proofImageUrl }} style={s.drawerDocImage} contentFit="contain" />
+                          <Image source={{ uri: selectedProofDocumentUri }} style={s.drawerDocImage} contentFit="contain" />
                         </View>
                       )}
                     </View>

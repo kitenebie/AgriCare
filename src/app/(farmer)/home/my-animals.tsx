@@ -31,7 +31,10 @@ interface Animal {
 const animalArtwork = (animal: Animal) => {
   const type = `${animal.type || ''} ${animal.name || ''}`.toLowerCase();
   if (/\b(pig|swine|hog)\b/.test(type)) return { source: require('../../../../assets/images/farmer/pig.png'), background: '#FFF0F1' };
-  if (/\b(cow|cattle|carabao|buffalo)\b/.test(type)) return { source: require('../../../../assets/images/farmer/cow.png'), background: '#FFF8E7' };
+  if (/\b(goat)\b/.test(type)) return { source: require('../../../../assets/images/farmer/goat.png'), background: '#E9F9F0' };
+  if (/\b(carabao|buffalo)\b/.test(type)) return { source: require('../../../../assets/images/farmer/carabao.png'), background: '#FFF8E7' };
+  if (/\b(horse)\b/.test(type)) return { source: require('../../../../assets/images/farmer/horse.png'), background: '#E9F9F0' };
+  if (/\b(cow|cattle)\b/.test(type)) return { source: require('../../../../assets/images/farmer/cow.png'), background: '#FFF8E7' };
   return { source: require('../../../../assets/images/farmer/cow-pig.png'), background: '#E9F9F0' };
 };
 
