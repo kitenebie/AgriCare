@@ -17,7 +17,6 @@ export default function TechAppointmentsScreen() {
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState('');
   const [userName, setUserName] = useState('');
-  const [techExpertise, setTechExpertise] = useState<string[]>([]);
   const headerAnim = useFadeIn(100);
   const contentAnim = useFadeInUp(200);
   useEffect(() => {
@@ -28,67 +27,22 @@ export default function TechAppointmentsScreen() {
       setUid(session.uid);
       setUserName(session.displayName || 'Technician');
 
-      // Fetch technician's expertise/specialization from Firestore
-      let expertise: string[] = [];
-      try {
-        const techDoc = await firestore().collection(Collections.USERS).doc(session.uid).get();
-        const techData = techDoc.data();
-        if (techData?.expertise && Array.isArray(techData.expertise)) {
-          expertise = techData.expertise;
-        } else if (techData?.specialization) {
-          expertise = techData.specialization.split(',').map((s: string) => s.trim());
-        }
-        setTechExpertise(expertise);
-      } catch (e) {
-        console.warn('Failed to fetch tech expertise:', e);
-      }
-
-      // Listen to ALL PENDING appointments — filter by specialization
-      unsub = firestore()
-        .collection(Collections.APPOINTMENTS)
-        .where('status', '==', 'pending')
-        .onSnapshot(
-          (snap) => {
-            let data = snap.docs
-              .map(d => ({ id: d.id, ...d.data() } as ServiceRequest))
-              .filter(a => isRequestAvailableToTechnician(a, session.uid));
-
-            // Filter by technician's specialization
-            if (expertise.length > 0) {
-              data = data.filter(a => {
-                // Always show appointments specifically assigned to this technician
-                if (a.technicianId === session.uid) return true;
-                // Always show unassigned/open appointments (any technician can take them)
-                if (!a.technicianId || a.technicianId === '' || (a.technicianName || '').toLowerCase() === 'unassigned') return true;
-                const svc = (a.serviceType || '').toLowerCase();
-                return expertise.some(exp => {
-                  const expLower = exp.toLowerCase();
-                  // Match if service type is mentioned in expertise
-                  // e.g. expertise "Cow Healthcare & Treatment 🐄" matches service "Health Check", "Treatment", "Vaccination" for cows
-                  if (expLower.includes('cow') && (svc.includes('cow') || svc.includes('cattle') || svc.includes('baka'))) return true;
-                  if (expLower.includes('swine') && (svc.includes('swine') || svc.includes('pig') || svc.includes('baboy'))) return true;
-                  if (expLower.includes('treatment') && svc.includes('treatment')) return true;
-                  if (expLower.includes('vaccination') && svc.includes('vaccination')) return true;
-                  if (expLower.includes('breeding') && (svc.includes('breeding') || svc.includes('insemination'))) return true;
-                  if (expLower.includes('healthcare') && (svc.includes('health') || svc.includes('checkup') || svc.includes('check'))) return true;
-                  // General match: any word overlap
-                  const expWords = expLower.replace(/[^\w\s]/g, '').split(/\s+/);
-                  const svcWords = svc.replace(/[^\w\s]/g, '').split(/\s+/);
-                  return expWords.some(w => w.length > 3 && svcWords.includes(w));
-                });
-              });
-            }
-
-            // Sort by date ascending (oldest first)
-            data.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-            setAppointments(data);
-            setLoading(false);
-          },
-          (error) => {
-            console.error('📋 Firestore error loading appointments:', error);
-            setLoading(false);
-          }
-        );
+      const pending = firestore().collection(Collections.APPOINTMENTS).where('status', '==', 'pending');
+      let eligibleSnapshot: any;
+      let assignedSnapshot: any;
+      const updateList = () => {
+        if (!eligibleSnapshot || !assignedSnapshot) return;
+        const byId = new Map<string, ServiceRequest>();
+        [...eligibleSnapshot.docs, ...assignedSnapshot.docs].forEach(doc => byId.set(doc.id, { id: doc.id, ...doc.data() } as ServiceRequest));
+        const data = [...byId.values()].filter(a => isRequestAvailableToTechnician(a, session.uid));
+        data.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+        setAppointments(data);
+        setLoading(false);
+      };
+      const onError = (error: Error) => { console.error('📋 Firestore error loading appointments:', error); setLoading(false); };
+      const stopEligible = pending.where('eligibleTechnicianIds', 'array-contains', session.uid).onSnapshot(snap => { eligibleSnapshot = snap; updateList(); }, onError);
+      const stopAssigned = pending.where('technicianId', '==', session.uid).onSnapshot(snap => { assignedSnapshot = snap; updateList(); }, onError);
+      unsub = () => { stopEligible(); stopAssigned(); };
     };
     load();
     return () => unsub();

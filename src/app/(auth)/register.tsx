@@ -8,6 +8,7 @@ import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/Font
               import { Colors, Spacing, FontSize, BorderRadius } from '@/constants/theme';
               import { Icon } from '@/components/ui';
 import IdentityVerificationResult from '@/components/auth/IdentityVerificationResult';
+import TechnicianQualificationPicker from '@/components/technician/TechnicianQualificationPicker';
               import { signUp } from '@/services/authService';
               import { sendRegistrationEmailOtp, verifyRegistrationEmailOtp } from '@/services/emailVerificationService';
               import { uploadImageToSupabase } from '@/services/storage';
@@ -15,6 +16,7 @@ import IdentityVerificationResult from '@/components/auth/IdentityVerificationRe
 import { decode as base64Decode } from 'base64-arraybuffer';
 import { File, Paths } from 'expo-file-system';
 import { fetch as expoFetch } from 'expo/fetch';
+import { validateQualifications } from '../../../functions/shared/technicianServiceMatching';
               import regions from '../../../assets/addresses/region.json';
               import provinces from '../../../assets/addresses/province.json';
               import municipalities from '../../../assets/addresses/muncity.json';
@@ -114,7 +116,8 @@ import { fetch as expoFetch } from 'expo/fetch';
                   } else if (registrationStep === 4) {
                     if (!idImageUrl) return modalAlert('ID Required', 'Please capture or upload an ID with a clear face photo.');
                   } else if (role === 'technician') {
-                    if (!specializationInput.split(',').some((item) => item.trim())) return modalAlert('Specialization Required', 'Enter at least one specialization.');
+                    const qualifications = validateQualifications(specializationIds, subSpecializationIds);
+                    if (!qualifications.valid) return modalAlert('Specialization Required', qualifications.error || 'Choose at least one service under each selected animal category.');
                     if (!proofImageUrl.trim()) return modalAlert('Proof Required', 'Please upload a photo of your technician license, ID, or certificate of qualification.');
                   }
 
@@ -187,7 +190,8 @@ import { fetch as expoFetch } from 'expo/fetch';
                 const [profilePhotoUrl, setProfilePhotoUrl] = useState('');
 
                 // Technician Specific States
-                const [specializationInput, setSpecializationInput] = useState('');
+                const [specializationIds, setSpecializationIds] = useState<string[]>([]);
+                const [subSpecializationIds, setSubSpecializationIds] = useState<string[]>([]);
                 const [proofImageUrl, setProofImageUrl] = useState('');
                 const [uploadingProof, setUploadingProof] = useState(false);
                 const [idImageUrl, setIdImageUrl] = useState('');
@@ -423,7 +427,8 @@ import { fetch as expoFetch } from 'expo/fetch';
                   }
 
                   // Technician Specific Validation
-                  const technicianExpertise = specializationInput.split(',').map((item) => item.trim()).filter(Boolean);
+                  const technicianQualifications = validateQualifications(specializationIds, subSpecializationIds);
+                  const technicianExpertise = technicianQualifications.expertise || [];
                   if (role === 'technician') {
                     if (!streetPurok.trim()) {
                       modalAlert('Street / Purok Required', 'Enter your street or purok.');
@@ -433,8 +438,8 @@ import { fetch as expoFetch } from 'expo/fetch';
                       modalAlert('Address Required', 'Please select region, province, city/municipality, and barangay.');
                       return;
                     }
-                    if (technicianExpertise.length === 0) {
-                      modalAlert('Error', 'Enter at least one specialization.');
+                    if (!technicianQualifications.valid) {
+                      modalAlert('Specialization Required', technicianQualifications.error || 'Choose at least one service under each selected animal category.');
                       return;
                     }
                     if (!proofImageUrl.trim()) {
@@ -483,7 +488,13 @@ import { fetch as expoFetch } from 'expo/fetch';
                       };
                       await appendImage('reference_image', idImageUrl, 'id.jpg');
                       await appendImage('compare_image', faceImageUri, 'face.jpg');
-                      const response = await expoFetch('https://meet.earms.site/api/v1/match', { method: 'POST', body: form });
+                      const apiKey = process.env.EXPO_PUBLIC_FACE_MATCH_API_KEY;
+                      if (!apiKey) throw new Error('Face and ID verification is not configured. Please contact support.');
+                      const response = await expoFetch('https://meet.earms.site/api/v1/match', {
+                        method: 'POST',
+                        headers: { Accept: '*/*', 'X-API-Key': apiKey },
+                        body: form,
+                      });
                       const matchResult = await response.json().catch(() => ({}));
                       if (!response.ok || !matchResult.match) {
                         const detail = typeof matchResult.detail === 'string'
@@ -547,6 +558,8 @@ import { fetch as expoFetch } from 'expo/fetch';
                       role === 'technician'
                         ? {
                             expertise: technicianExpertise,
+                            specializationIds,
+                            subSpecializationIds,
                             proofImageUrl: proofImageUrl.trim(),
                             idImageUrl: uploadedIdUrl,
                             phoneNumber: phoneNumber.trim(),
@@ -563,6 +576,7 @@ import { fetch as expoFetch } from 'expo/fetch';
 
                     setMatchStatus('saved');
                     setMatchMessage('Face and ID matched. Your registration has been saved.');
+                    if (role === 'farmer') router.replace('/(farmer)/home' as any);
                   } catch (error: any) {
                     let message = error.message || 'Registration failed. Please try again.';
                     if (!faceIdMatched) console.error('[Face ID Match] Verification request failed', message);
@@ -627,6 +641,9 @@ import { fetch as expoFetch } from 'expo/fetch';
                       onRetry={() => {
                         setShowMatchResult(false);
                         setFaceIdVerified(false);
+                        setEmailVerified(false);
+                        setVerificationTicket('');
+                        setOtpCode('');
                         setEmailOtpPending(false);
                         setTimeout(() => registrationScrollRef.current?.scrollTo({ y: captureSectionY.current, animated: true }), 100);
                       }}
@@ -947,19 +964,11 @@ import { fetch as expoFetch } from 'expo/fetch';
                             </View>
 
                             <Text style={styles.inputLabel}>Technician Specializations <Text style={styles.required}>*</Text></Text>
-                            <Text style={styles.expertiseSub}>
-                              Separate specializations with commas.
-                            </Text>
-                            <View style={styles.inputContainer}>
-                              <TextInput
-                                style={styles.input}
-                                value={specializationInput}
-                                onChangeText={setSpecializationInput}
-                                placeholder="e.g., Cattle care, vaccination, breeding"
-                                accessibilityLabel="Technician specializations, separated by commas"
-                                returnKeyType="done"
-                              />
-                            </View>
+                            <TechnicianQualificationPicker
+                              specializationIds={specializationIds}
+                              subSpecializationIds={subSpecializationIds}
+                              onChange={(mainIds, subIds) => { setSpecializationIds(mainIds); setSubSpecializationIds(subIds); }}
+                            />
 
                             {/* Upload Proof Image */}
                             <Text style={[styles.inputLabel, { marginTop: 12 }]}>

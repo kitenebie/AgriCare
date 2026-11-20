@@ -1,3 +1,5 @@
+import { isRequestAvailableToTechnician as matchesRequestForTechnician } from '../../functions/shared/technicianServiceMatching';
+
 export interface ServiceRequest {
   id: string;
   serviceType: string;
@@ -18,16 +20,12 @@ export interface ServiceRequest {
   appointmentLongitude?: number | null;
   responseDeadlineAt?: { toMillis?: () => number } | Date | number;
   declinedByTechnicianIds?: string[];
+  eligibleTechnicianIds?: string[];
+  animalTypeId?: string;
+  serviceTypeId?: string;
   createdAt?: unknown;
 }
 
 export const isRequestAvailableToTechnician = (request: ServiceRequest, technicianId: string) => {
-  if (request.status !== 'pending' || request.declinedByTechnicianIds?.includes(technicianId)) return false;
-  const assignedId = request.technicianId || '';
-  const deadline = typeof request.responseDeadlineAt === 'number'
-    ? request.responseDeadlineAt
-    : request.responseDeadlineAt instanceof Date
-      ? request.responseDeadlineAt.getTime()
-      : request.responseDeadlineAt?.toMillis?.();
-  return assignedId === technicianId || !assignedId || (request.technicianName || '').toLowerCase() === 'unassigned' || (typeof deadline === 'number' && deadline <= Date.now());
+  return matchesRequestForTechnician(request, technicianId);
 };

@@ -45,7 +45,7 @@ export default function ServiceRequestDetailsDrawer({ request, technicianId, tec
     }
     setFarmerLocation('');
     if (!request?.farmerId) return () => { current = false; };
-    void firestore().collection(Collections.USERS).doc(request.farmerId).get()
+    void firestore().collection(Collections.PUBLIC_PROFILES).doc(request.farmerId).get()
       .then(doc => {
         const location = doc.data()?.location;
         if (current && typeof location === 'string' && location.trim() && !isCoordinateText(location)) {

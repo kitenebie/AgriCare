@@ -6,6 +6,7 @@
 import firestore from '@react-native-firebase/firestore';
 import { Collections } from './firebase';
 import { getOrCreateChatRoom, sendMessage } from './chatService';
+import { callBackend } from './backendApi';
 
 /**
  * Check if technician has a completed/confirmed appointment with this farmer
@@ -104,71 +105,17 @@ export const submitRating = async (params: {
   technicianName: string;
   chatId: string;
 }) => {
-  const { rateRequestId, rating, farmerId, farmerName, technicianId, technicianName, chatId } = params;
+  const { rateRequestId, rating, farmerId } = params;
+  const result = await callBackend<{
+    reviewId: string; newRating: number; newCount: number; farmerName: string;
+    technicianName: string; animalName: string; serviceType: string; chatId: string;
+  }>('submitTechnicianRating', { rateRequestId, rating });
 
-  // Get the rate request to include animal info in the message
-  const rateReqDoc = await firestore().collection('rateRequests').doc(rateRequestId).get();
-  const rateReqData = rateReqDoc.data();
-  const animalName = rateReqData?.animalName || '';
-  const serviceType = rateReqData?.serviceType || '';
-
-  // 1. Update rate request
-  await firestore().collection('rateRequests').doc(rateRequestId).update({
-    status: 'completed',
-    rating,
-    ratedAt: firestore.FieldValue.serverTimestamp(),
-  });
-
-  // 2. Send chat message with the rating
   const stars = '★'.repeat(rating) + '☆'.repeat(5 - rating);
-  const animalInfo = animalName ? `\nService: ${serviceType || 'Checkup'} for ${animalName}` : '';
-  const ratingMessage = `⭐ Rating: ${stars} (${rating}/5)${animalInfo}\n\nThank you for your service, ${technicianName}! I rated you ${rating} out of 5 stars.`;
-  await sendMessage(chatId, farmerId, ratingMessage);
-
-  // 3. Update technician's average rating in Firestore
-  const reviewRef = await firestore().collection(Collections.REVIEWS).add({
-    technicianId,
-    technicianName,
-    farmerId,
-    farmerName,
-    rating,
-    animalName,
-    serviceType,
-    rateRequestId,
-    createdAt: firestore.FieldValue.serverTimestamp(),
-  });
-
-  // Update technician aggregate rating
-  const techDoc = await firestore().collection(Collections.USERS).doc(technicianId).get();
-  const currentData = techDoc.data();
-  const currentRating = currentData?.rating || 0;
-  const currentReviewCount = currentData?.reviewCount || 0;
-  const newCount = currentReviewCount + 1;
-  const newRating = ((currentRating * currentReviewCount) + rating) / newCount;
-
-  await firestore().collection(Collections.USERS).doc(technicianId).update({
-    rating: Math.round(newRating * 10) / 10, // 1 decimal
-    reviewCount: newCount,
-  });
-
-  // 4. Create notification for technician
-  await firestore().collection(Collections.NOTIFICATIONS).add({
-    userId: technicianId,
-    type: 'rating_received',
-    title: `New Rating: ${'⭐'.repeat(rating)}`,
-    body: `${farmerName} rated you ${rating}/5 stars${animalName ? ` for ${animalName}` : ''}! ${rating >= 4 ? 'Great job! 🎉' : 'Keep improving! 💪'}`,
-    read: false,
-    data: {
-      farmerId,
-      chatId,
-      rating,
-      reviewId: reviewRef.id,
-    },
-    createdAt: firestore.FieldValue.serverTimestamp(),
-  });
-
-
-  return { reviewId: reviewRef.id, newRating, newCount };
+  const animalInfo = result.animalName ? `\nService: ${result.serviceType || 'Checkup'} for ${result.animalName}` : '';
+  const ratingMessage = `⭐ Rating: ${stars} (${rating}/5)${animalInfo}\n\nThank you for your service, ${result.technicianName}! I rated you ${rating} out of 5 stars.`;
+  await sendMessage(result.chatId, farmerId, ratingMessage);
+  return result;
 };
 
 /**
@@ -179,13 +126,13 @@ export const getPendingRateRequest = async (chatId: string, farmerId: string) =>
   // Single-field query to avoid composite index requirement
   const snapshot = await firestore()
     .collection('rateRequests')
-    .where('chatId', '==', chatId)
+    .where('farmerId', '==', farmerId)
     .get();
 
   // Filter remaining conditions client-side
   const matches = snapshot.docs
     .map(d => ({ id: d.id, ...d.data() }))
-    .filter((r: any) => r.farmerId === farmerId && r.status === 'pending')
+    .filter((r: any) => r.chatId === chatId && r.status === 'pending')
     .sort((a: any, b: any) => ((b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0)));
 
   return matches.length > 0 ? matches[0] : null;

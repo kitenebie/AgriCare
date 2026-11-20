@@ -1,0 +1,207 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function myUser() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return signedIn() && myUser().role == 'admin' && myUser().status == 'active';
+    }
+
+    function isValidUser(data, userId) {
+      return data.keys().hasAll(['role', 'status']) &&
+        data.role in ['admin', 'farmer', 'technician'] &&
+        data.status in ['active', 'pending', 'rejected', 'banned', 'deactivated', 'inactive'] &&
+        (!('uid' in data) || data.uid == userId) &&
+        (!('qualificationVerified' in data) || data.qualificationVerified is bool) &&
+        (!('specializationIds' in data) || data.specializationIds is list) &&
+        (!('subSpecializationIds' in data) || data.subSpecializationIds is list) &&
+        (!('qualificationKeys' in data) || data.qualificationKeys is list);
+    }
+
+    function isActiveTechnician() {
+      return signedIn() && myUser().role == 'technician' && myUser().status == 'active';
+    }
+
+    function hasQualification(data) {
+      return signedIn() && myUser().qualificationVerified == true &&
+        myUser().qualificationKeys.hasAny([data.animalTypeId + ':' + data.serviceTypeId]);
+    }
+
+    function isEligibleTechnician(data) {
+      return isActiveTechnician() && myUser().qualificationVerified == true && data.get('status', '') == 'pending' &&
+        data.get('eligibleTechnicianIds', []).hasAny([request.auth.uid]);
+    }
+
+    function isValidAppointmentAssignment(data) {
+      let technician = get(/databases/$(database)/documents/users/$(data.technicianId)).data;
+      return data.get('status', '') == 'pending' &&
+        data.keys().hasAll(['animalTypeId', 'serviceTypeId']) &&
+        data.get('eligibleTechnicianIds', []).hasAny([data.technicianId]) &&
+        technician.role == 'technician' && technician.status == 'active' &&
+        technician.get('available', true) != false && technician.qualificationVerified == true &&
+        technician.qualificationKeys.hasAny([data.animalTypeId + ':' + data.serviceTypeId]);
+    }
+
+    function canActOnAssignedRequest(data) {
+      return data.get('technicianId', '') == request.auth.uid &&
+        (!data.keys().hasAll(['animalTypeId', 'serviceTypeId']) || hasQualification(data));
+    }
+
+    function canReadAppointment(data) {
+      return signedIn() && (isAdmin() || data.get('farmerId', '') == request.auth.uid ||
+        (data.get('technicianId', '') == request.auth.uid && (data.get('status', '') != 'pending' ||
+          (isActiveTechnician() && (!data.keys().hasAll(['animalTypeId', 'serviceTypeId']) ||
+            data.get('eligibleTechnicianIds', []).hasAny([request.auth.uid]))))) ||
+        isEligibleTechnician(data));
+    }
+
+    function canDeclineAppointment(data) {
+      return isEligibleTechnician(data) && hasQualification(data) &&
+        !data.get('declinedByTechnicianIds', []).hasAny([request.auth.uid]);
+    }
+
+    function farmerCancellation() {
+      return resource.data.farmerId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'cancellationReason', 'cancelledAt', 'cancellationRequestStatus',
+          'cancellationRequestedAt', 'cancellationRequestedBy', 'updatedAt'
+        ]) && (
+          (resource.data.status == 'pending' && request.resource.data.status == 'cancelled' &&
+            request.resource.data.cancellationReason == 'cancelled_by_farmer') ||
+          (resource.data.status == 'confirmed' && request.resource.data.status == 'confirmed' &&
+            request.resource.data.cancellationRequestStatus == 'pending' &&
+            request.resource.data.cancellationRequestedBy == request.auth.uid)
+        );
+    }
+
+    function technicianAppointmentUpdate() {
+      return resource.data.technicianId == request.auth.uid && (
+        (resource.data.status == 'confirmed' && request.resource.data.status == 'completed' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'completedAt'])) ||
+        (resource.data.status == 'confirmed' && resource.data.cancellationRequestStatus == 'pending' &&
+          request.resource.data.status in ['confirmed', 'cancelled'] &&
+          request.resource.data.cancellationRequestStatus in ['approved', 'declined'] &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'cancellationReason', 'cancellationRequestStatus', 'cancellationResolvedAt', 'cancelledAt'
+          ]))
+      );
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn() && (request.auth.uid == userId || isAdmin());
+      allow create: if signedIn() && request.auth.uid == userId && isValidUser(request.resource.data, userId) &&
+        request.resource.data.uid == userId &&
+        request.resource.data.role in ['farmer', 'technician'] &&
+        ((request.resource.data.role == 'farmer' && request.resource.data.status == 'active') ||
+          (request.resource.data.role == 'technician' && request.resource.data.status == 'pending')) &&
+        request.resource.data.qualificationVerified == false &&
+        request.resource.data.specializationIds == [] &&
+        request.resource.data.subSpecializationIds == [] &&
+        request.resource.data.qualificationKeys == [];
+      allow update: if isValidUser(request.resource.data, userId) && (isAdmin() || (signedIn() && request.auth.uid == userId &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'uid', 'role', 'status', 'qualificationVerified', 'qualificationCatalogVersion',
+          'qualificationKeys', 'specializationIds', 'subSpecializationIds'
+        ])));
+      allow delete: if isAdmin();
+
+      match /dailyRequestCounts/{dateId} {
+        allow read: if signedIn() && (request.auth.uid == userId || isAdmin());
+        allow write: if false;
+      }
+    }
+
+    match /publicProfiles/{userId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /appointments/{appointmentId} {
+      allow read: if canReadAppointment(resource.data);
+      allow create, delete: if false;
+      allow update: if (isAdmin() &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['technicianId', 'animalTypeId', 'serviceTypeId']) ||
+          request.resource.data.technicianId == '' || isValidAppointmentAssignment(request.resource.data))) ||
+        (signedIn() &&
+        (farmerCancellation() || technicianAppointmentUpdate() ||
+          (resource.data.status == 'pending' &&
+            (canDeclineAppointment(resource.data) ||
+              (canActOnAssignedRequest(resource.data))) &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status', 'technicianId', 'technicianName', 'responseDeadlineAt', 'declinedByTechnicianIds'
+            ]) &&
+            (request.resource.data.status == 'cancelled' ||
+              (request.resource.data.status == 'pending' &&
+                request.resource.data.technicianId == resource.data.technicianId &&
+                request.resource.data.declinedByTechnicianIds.hasAll(resource.data.get('declinedByTechnicianIds', [])) &&
+                request.resource.data.declinedByTechnicianIds.size() == resource.data.get('declinedByTechnicianIds', []).size() + 1 &&
+                request.resource.data.declinedByTechnicianIds.hasAny([request.auth.uid]))))));
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAdmin() || (signedIn() && request.resource.data.type != 'service_request');
+      allow update: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']) && request.resource.data.read is bool);
+      allow delete: if isAdmin();
+    }
+
+    match /rateRequests/{rateRequestId} {
+      allow read: if signedIn() && (isAdmin() || resource.data.farmerId == request.auth.uid ||
+        resource.data.technicianId == request.auth.uid);
+      allow create: if isActiveTechnician() && request.resource.data.technicianId == request.auth.uid &&
+        request.resource.data.status == 'pending' && request.resource.data.rating == null;
+      allow update, delete: if false;
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /livestockCategories/{documentId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /animalTypes/{documentId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /animalBreeds/{documentId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /serviceTypes/{documentId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /specializations/{documentId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /subSpecializations/{documentId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /serviceCatalogMeta/{documentId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // shortcut: Legacy non-workflow collections retain authenticated CRUD; add per-collection ownership rules before tightening them.
+    match /{collection}/{document=**} {
+      allow read, write: if signedIn() && !(collection in [
+        'users', 'publicProfiles', 'appointments', 'notifications', 'rateRequests', 'reviews', 'livestockCategories',
+        'animalTypes', 'animalBreeds', 'serviceTypes', 'specializations',
+        'subSpecializations', 'serviceCatalogMeta'
+      ]);
+    }
+  }
+}

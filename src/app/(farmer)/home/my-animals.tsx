@@ -12,6 +12,7 @@ import {
   ActivityIndicator, Image, Modal, ScrollView, StyleSheet, TouchableOpacity, View, KeyboardAvoidingView, Platform } from "react-native";
 import { AppTextInput as TextInput, AppText as Text } from '@/components/ui/FontScale';
 import { modalAlert } from '@/components/ui/ModalAlert';
+import { catalog, normalizeAnimalTypeId } from '../../../../functions/shared/technicianServiceMatching';
 
 interface Animal {
   id: string;
@@ -47,6 +48,9 @@ export default function MyAnimalsPage() {
   const [step, setStep] = useState(1); // 1=animal type, 2=details
   const [animalType, setAnimalType] = useState("");
   const [selectedBreed, setSelectedBreed] = useState("");
+  const [approvedBreeds, setApprovedBreeds] = useState<{ animalTypeId: string; name: string }[]>([]);
+  const [animalTypePicker, setAnimalTypePicker] = useState(false);
+  const [breedPicker, setBreedPicker] = useState(false);
 
   // Form (step 2)
   const [formName, setFormName] = useState("");
@@ -70,6 +74,15 @@ export default function MyAnimalsPage() {
       }
       setUid(session.uid);
 
+      void firestore().collection("livestockCategories").get().then(categories => {
+        setApprovedBreeds(categories.docs.flatMap(doc => {
+          const data = doc.data();
+          const animalTypeId = normalizeAnimalTypeId(data.name) || normalizeAnimalTypeId(data.type);
+          return Array.isArray(data.breeds) ? data.breeds.filter((name: unknown): name is string => typeof name === "string" && !!name.trim())
+            .map((name: string) => ({ animalTypeId, name: name.trim() })) : [];
+        }));
+      }).catch(() => {});
+
       const unsub = firestore()
         .collection("animals")
         .where("ownerId", "==", session.uid)
@@ -87,6 +100,12 @@ export default function MyAnimalsPage() {
     load();
   }, []);
 
+  const selectedAnimalTypeId = normalizeAnimalTypeId(animalType) || animalType.trim().toLowerCase();
+  const fixedBreeds = catalog.breeds.filter(breed => breed.animalTypeId === selectedAnimalTypeId).map(breed => breed.name);
+  const breedOptions = fixedBreeds.length ? fixedBreeds : [...new Set(approvedBreeds
+    .filter(breed => breed.animalTypeId === selectedAnimalTypeId).map(breed => breed.name))];
+  if (editingAnimal && selectedBreed && !breedOptions.includes(selectedBreed)) breedOptions.unshift(selectedBreed);
+
   const resetForm = () => {
     setStep(1);
     setAnimalType("");
@@ -101,9 +120,8 @@ export default function MyAnimalsPage() {
   };
 
   const handleContinueAnimalType = () => {
-    const type = animalType.trim();
-    if (!type) {
-      modalAlert("Animal type required", "Enter the animal type to continue.");
+    if (!selectedAnimalTypeId) {
+      modalAlert("Animal type required", "Select an animal type to continue.");
       return;
     }
     setSelectedBreed("");
@@ -489,10 +507,13 @@ export default function MyAnimalsPage() {
             {step === 1 && (
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
                 <Text style={s.stepDesc}>
-                  Enter the animal type to continue.
+                  Select the animal type for this record.
                 </Text>
                 <Text style={s.label}>Animal type</Text>
-                <TextInput style={s.input} value={animalType} onChangeText={setAnimalType} placeholder="e.g. Pig" placeholderTextColor={Colors.textLight} returnKeyType="done" />
+                <TouchableOpacity style={[s.input, s.breedSelect]} onPress={() => setAnimalTypePicker(true)} accessibilityRole="button" accessibilityLabel={`Animal type: ${animalType || "select animal type"}`}>
+                  <Text style={[s.breedValue, !animalType && { color: Colors.textLight }]}>{animalType || "Select animal type"}</Text>
+                  <Icon name="chevron-down" size={18} color={Colors.textSecondary} />
+                </TouchableOpacity>
                 <TouchableOpacity style={s.continueButton} onPress={handleContinueAnimalType} accessibilityRole="button">
                   <Text style={s.continueButtonText}>Continue</Text>
                   <Icon name="chevron-right" size={18} color={Colors.white} />
@@ -588,13 +609,10 @@ export default function MyAnimalsPage() {
 
                   {/* Breed */}
                   <Text style={s.label}>Breed</Text>
-                  <TextInput
-                    style={s.input}
-                    value={selectedBreed}
-                    onChangeText={setSelectedBreed}
-                    placeholder="Enter breed"
-                    placeholderTextColor={Colors.textLight}
-                  />
+                  <TouchableOpacity style={[s.input, s.breedSelect, !breedOptions.length && s.breedSelectDisabled]} onPress={() => setBreedPicker(true)} disabled={!breedOptions.length} accessibilityRole="button" accessibilityLabel={`Breed: ${selectedBreed || (breedOptions.length ? 'select breed' : 'no predefined breeds')}`}>
+                    <Text style={[s.breedValue, !selectedBreed && { color: Colors.textLight }]}>{selectedBreed || (breedOptions.length ? "Select breed" : "No predefined breeds")}</Text>
+                    {!!breedOptions.length && <Icon name="chevron-down" size={18} color={Colors.textSecondary} />}
+                  </TouchableOpacity>
 
                   {/* Age & Weight */}
                   <Text style={s.label}>Age</Text>
@@ -717,6 +735,46 @@ export default function MyAnimalsPage() {
           </View>
         </View>
         </KeyboardAvoidingView>
+      </Modal>
+      <Modal visible={animalTypePicker} transparent animationType="slide" onRequestClose={() => setAnimalTypePicker(false)}>
+        <View style={s.overlay}>
+          <View style={s.modal}>
+            <View style={s.modalHead}>
+              <Text style={s.modalTitle}>Select Animal Type</Text>
+              <TouchableOpacity onPress={() => setAnimalTypePicker(false)} accessibilityRole="button" accessibilityLabel="Close animal type list">
+                <Icon name="close" size={22} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {catalog.animalTypes.map(type => (
+                <TouchableOpacity key={type.id} style={s.breedOption} onPress={() => { setAnimalType(type.name); setSelectedBreed(""); setAnimalTypePicker(false); }} accessibilityRole="radio" accessibilityState={{ selected: selectedAnimalTypeId === type.id }}>
+                  <Text style={s.breedOptionText}>{type.name}</Text>
+                  {selectedAnimalTypeId === type.id && <Icon name="check" size={20} color={Colors.primary} />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={breedPicker} transparent animationType="slide" onRequestClose={() => setBreedPicker(false)}>
+        <View style={s.overlay}>
+          <View style={s.modal}>
+            <View style={s.modalHead}>
+              <Text style={s.modalTitle}>Select Breed</Text>
+              <TouchableOpacity onPress={() => setBreedPicker(false)} accessibilityRole="button" accessibilityLabel="Close breed list">
+                <Icon name="close" size={22} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {breedOptions.map(breed => (
+                <TouchableOpacity key={breed} style={s.breedOption} onPress={() => { setSelectedBreed(breed); setBreedPicker(false); }} accessibilityRole="radio" accessibilityState={{ selected: selectedBreed === breed }}>
+                  <Text style={s.breedOptionText}>{breed}</Text>
+                  {selectedBreed === breed && <Icon name="check" size={20} color={Colors.primary} />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
       </Modal>
     </KeyboardAvoidingView>
   );
@@ -876,6 +934,11 @@ const s = StyleSheet.create({
     borderColor: Colors.border,
     color: Colors.text,
   },
+  breedSelect: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  breedSelectDisabled: { opacity: 0.7 },
+  breedValue: { fontSize: FontSize.md, color: Colors.text },
+  breedOption: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  breedOptionText: { fontSize: FontSize.md, color: Colors.text },
   row: { flexDirection: "row" },
   imgPicker: { alignSelf: "center", marginBottom: Spacing.sm },
   imgPreview: { width: 120, height: 120, borderRadius: BorderRadius.lg },

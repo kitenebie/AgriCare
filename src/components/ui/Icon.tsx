@@ -15,6 +15,7 @@ import {
   CornerUpLeft,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   ClipboardList,
   Clock,
   Dna,
@@ -75,6 +76,8 @@ import {
 } from "lucide-react-native";
 import React from "react";
 import { Image } from "react-native";
+import { SvgXml } from "react-native-svg";
+import { animalSvgIcons } from "./animalSvgIcons";
 
 export type IconName =
   | "home"
@@ -96,6 +99,11 @@ export type IconName =
   | "calendar"
   | "alert"
   | "paw"
+  | "animal-pig"
+  | "animal-cattle"
+  | "animal-goat"
+  | "animal-horse"
+  | "animal-carabao"
   | "pencil"
   | "health-check"
   | "vaccination"
@@ -112,6 +120,8 @@ export type IconName =
   | "phone"
   | "chevron-right"
   | "chevron-down"
+  | "chevron-up"
+  | "heart"
   | "star"
   | "location"
   | "lock"
@@ -179,7 +189,10 @@ interface IconProps {
   style?: any;
 }
 
-const iconMap: Record<IconName, React.FC<LucideProps> | string> = {
+type AnimalSvgIconName = keyof typeof animalSvgIcons;
+type IconMapName = Exclude<IconName, AnimalSvgIconName | "cow">;
+
+const iconMap: Record<IconMapName, React.FC<LucideProps> | string> = {
   home: Home,
   map: Map,
   expand: Maximize2,
@@ -190,7 +203,6 @@ const iconMap: Record<IconName, React.FC<LucideProps> | string> = {
   bell: Bell,
   megaphone: Megaphone,
   hen: PiggyBank,
-  cow: PiggyBank,
   clipboard: ClipboardList,
   calendar: Calendar,
   alert: AlertTriangle,
@@ -215,6 +227,8 @@ const iconMap: Record<IconName, React.FC<LucideProps> | string> = {
   phone: Phone,
   "chevron-right": ChevronRight,
   "chevron-down": ChevronDown,
+  "chevron-up": ChevronUp,
+  heart: Heart,
   star: Star,
   location: MapPin,
   lock: Lock,
@@ -283,7 +297,13 @@ export const Icon: React.FC<IconProps> = ({
   strokeWidth = 1.5,
   style,
 }) => {
-  const LucideIcon = iconMap[name];
+  const animalName = name === "cow" ? "animal-cattle" : name;
+  const animalSvg = animalSvgIcons[animalName as AnimalSvgIconName];
+  if (animalSvg) {
+    return <SvgXml xml={animalSvg.replace(/currentColor/g, color)} width={size} height={size} style={style} />;
+  }
+
+  const LucideIcon = iconMap[name as IconMapName];
 
   if (!LucideIcon) {
     return null;

@@ -68,7 +68,7 @@ export default function ForumViewScreen() {
           // Fetch author photo from users collection if missing
           if (!postData.authorPhotoURL && postData.authorId) {
             try {
-              const userDoc = await firestore().collection(Collections.USERS).doc(postData.authorId).get();
+              const userDoc = await firestore().collection(Collections.PUBLIC_PROFILES).doc(postData.authorId).get();
               if (userDoc.exists) postData.authorPhotoURL = userDoc.data()?.photoURL || '';
             } catch (e) {}
           }
@@ -92,7 +92,7 @@ export default function ForumViewScreen() {
           repliesData.map(async (reply) => {
             if (!reply.authorPhotoURL && reply.authorId) {
               try {
-                const userDoc = await firestore().collection(Collections.USERS).doc(reply.authorId).get();
+                const userDoc = await firestore().collection(Collections.PUBLIC_PROFILES).doc(reply.authorId).get();
                 if (userDoc.exists) reply.authorPhotoURL = userDoc.data()?.photoURL || '';
               } catch (e) {}
             }

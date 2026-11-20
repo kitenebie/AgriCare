@@ -19,13 +19,14 @@ export default function LoginScreen() {
         // Check account status from Firestore
         try {
           const userDoc = await firestore().collection(Collections.USERS).doc(session.uid).get();
-          const status = userDoc.data()?.status;
-          if (status === 'pending') {
+          const profile = userDoc.data();
+          const status = profile?.status;
+          if (profile?.role === 'technician' && status === 'pending') {
             router.replace('/(auth)/pending-verification' as any);
             return;
           }
-          if (status === 'rejected') {
-            const reason = userDoc.data()?.rejectionReason || 'Your documents did not meet our verification requirements.';
+          if (profile?.role === 'technician' && status === 'rejected') {
+            const reason = profile.rejectionReason || 'Your documents did not meet our verification requirements.';
             router.replace({ pathname: '/(auth)/rejected', params: { reason } } as any);
             return;
           }

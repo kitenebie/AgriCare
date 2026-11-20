@@ -30,7 +30,6 @@ interface Post {
   authorName: string;
   authorRole: string;
   authorPhotoURL?: string;
-  authorPhotoURL?: string;
   likes: number;
   replies: number;
   views: number;
@@ -91,7 +90,7 @@ export default function ForumScreen() {
             postsData.map(async (post) => {
               if (!post.authorPhotoURL && post.authorId) {
                 try {
-                  const userDoc = await firestore().collection(Collections.USERS).doc(post.authorId).get();
+                  const userDoc = await firestore().collection(Collections.PUBLIC_PROFILES).doc(post.authorId).get();
                   if (userDoc.exists) post.authorPhotoURL = userDoc.data()?.photoURL || '';
                 } catch (e) {}
               }
@@ -162,7 +161,7 @@ export default function ForumScreen() {
 
         // Send FCM push to all active users (except author)
         try {
-          const usersSnap = await firestore().collection(Collections.USERS).where('status', '==', 'active').get();
+          const usersSnap = await firestore().collection(Collections.PUBLIC_PROFILES).where('status', '==', 'active').get();
           const contentPreview = content.trim().substring(0, 180);
           const targetUserIds = usersSnap.docs
             .filter(doc => doc.id !== currentUser.id)

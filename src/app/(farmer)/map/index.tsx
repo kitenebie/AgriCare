@@ -88,7 +88,7 @@ export default function FarmerMapScreen() {
   const listAnim = useFadeInUp(300);
 
   useEffect(() => {
-    const stopProfiles = firestore().collection(Collections.USERS).where('role', '==', 'technician').onSnapshot(snap => {
+    const stopProfiles = firestore().collection(Collections.PUBLIC_PROFILES).where('role', '==', 'technician').onSnapshot(snap => {
       setTechnicians(snap.docs.filter(doc => doc.data()?.status === 'active').map(doc => ({ ...doc.data(), id: doc.id } as MapTechnician)));
     });
     const stopLocations = listenToHeartbeatsByRole('technician', setTechnicianLocations);
@@ -148,7 +148,7 @@ export default function FarmerMapScreen() {
                 // below and saved into responderLatitude/responderLongitude.
                 if (appt.technicianId) {
                   try {
-                    const techDoc = await firestore().collection(Collections.USERS).doc(appt.technicianId).get();
+                    const techDoc = await firestore().collection(Collections.PUBLIC_PROFILES).doc(appt.technicianId).get();
                     if (techDoc.exists) {
                       const td = techDoc.data();
                       if (td?.photoURL) photoURL = td.photoURL;

@@ -6,7 +6,10 @@ import {
   useFontScale,
 } from "@/components/ui/FontScale";
 import { modalAlert } from "@/components/ui/ModalAlert";
+import TechnicianQualificationPicker from "@/components/technician/TechnicianQualificationPicker";
 import { BorderRadius, Colors, FontSize, Spacing } from "@/constants/theme";
+import { updateTechnicianQualifications as saveTechnicianQualifications } from "@/services/technicianQualificationService";
+import { validateQualifications } from "../../../../functions/shared/technicianServiceMatching";
 import {
   clearSession,
   getSession,
@@ -78,6 +81,10 @@ export default function TechnicianProfileScreen() {
   const [selectedAddress, setSelectedAddress] = useState(getInitialAddress);
   const [addressPicker, setAddressPicker] = useState<AddressPicker>(null);
   const [saving, setSaving] = useState(false);
+  const [qualificationModal, setQualificationModal] = useState(false);
+  const [qualificationSaving, setQualificationSaving] = useState(false);
+  const [specializationIds, setSpecializationIds] = useState<string[]>([]);
+  const [subSpecializationIds, setSubSpecializationIds] = useState<string[]>([]);
 
   const addressOptions = useMemo<AddressOption[]>(() => {
     switch (addressPicker) {
@@ -138,6 +145,8 @@ export default function TechnicianProfileScreen() {
           if (doc.exists) {
             const data = doc.data();
             if (data?.photoURL) setPhotoURL(data.photoURL);
+            setSpecializationIds(Array.isArray(data?.specializationIds) ? data.specializationIds : []);
+            setSubSpecializationIds(Array.isArray(data?.subSpecializationIds) ? data.subSpecializationIds : []);
             if (data?.phoneNumber) setEditPhone(data.phoneNumber);
             if (data?.location) {
               setSelectedAddress(getInitialAddress(data.location));
@@ -215,6 +224,21 @@ export default function TechnicianProfileScreen() {
       modalAlert("Error", e.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveQualifications = async () => {
+    const selection = validateQualifications(specializationIds, subSpecializationIds);
+    if (!selection.valid) { modalAlert("Specialization Required", selection.error || "Select a service under every animal category."); return; }
+    setQualificationSaving(true);
+    try {
+      await saveTechnicianQualifications(specializationIds, subSpecializationIds);
+      setQualificationModal(false);
+      modalAlert("Saved", "Your qualifications were updated.");
+    } catch (error: any) {
+      modalAlert("Could Not Save", error.message || "Please try again.");
+    } finally {
+      setQualificationSaving(false);
     }
   };
 
@@ -302,6 +326,20 @@ export default function TechnicianProfileScreen() {
               <Text style={styles.menuDescription}>
                 Manage your personal information
               </Text>
+            </View>
+            <Icon name="chevron-right" size={18} color={Colors.textLight} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.menuItem}
+            activeOpacity={0.7}
+            onPress={() => setQualificationModal(true)}
+          >
+            <View style={[styles.menuIcon, styles.accountIcon]}>
+              <Icon name="health-check" size={28} color={Colors.primary} />
+            </View>
+            <View style={styles.menuCopy}>
+              <Text style={styles.menuLabel}>Specializations</Text>
+              <Text style={styles.menuDescription}>{subSpecializationIds.length} services selected</Text>
             </View>
             <Icon name="chevron-right" size={18} color={Colors.textLight} />
           </TouchableOpacity>
@@ -472,6 +510,29 @@ export default function TechnicianProfileScreen() {
               </View>
             </View>
           </KeyboardAvoidingView>
+        </Modal>
+
+        <Modal visible={qualificationModal} transparent animationType="slide" onRequestClose={() => setQualificationModal(false)}>
+          <View style={styles.overlay}>
+            <View style={[styles.modal, { maxHeight: "92%" }]}>
+              <View style={styles.modalHead}>
+                <Text style={styles.modalTitle}>Technician Specializations</Text>
+                <TouchableOpacity onPress={() => setQualificationModal(false)} accessibilityLabel="Close specializations">
+                  <Icon name="close" size={22} color={Colors.text} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled">
+                <TechnicianQualificationPicker
+                  specializationIds={specializationIds}
+                  subSpecializationIds={subSpecializationIds}
+                  onChange={(mainIds, subIds) => { setSpecializationIds(mainIds); setSubSpecializationIds(subIds); }}
+                />
+              </ScrollView>
+              <TouchableOpacity style={styles.saveBtn} onPress={handleSaveQualifications} disabled={qualificationSaving} activeOpacity={0.8}>
+                {qualificationSaving ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.saveBtnText}>Save Specializations</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
         </Modal>
 
         {/* Security Modal */}

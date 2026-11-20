@@ -10,6 +10,7 @@ import { logCrud } from './logService';
 import { createAppointmentEvent, deleteCalendarEvent } from './calendarService';
 import { hasAppointmentTimeConflict, isTechnicianAppointmentActive, isTechnicianServiceInProgress } from '@/utils/availability';
 import { sendPushNotification } from '@/services/pushService';
+import { callBackend } from '@/services/backendApi';
 
 interface AcceptParams {
   appointmentId: string;
@@ -55,83 +56,11 @@ export const acceptAppointment = async (params: AcceptParams) => {
     throw new Error('Complete your current service before accepting another request.');
   }
 
-  // Claim only an open request or one assigned to this technician.
-  const appointmentRef = appointments.doc(appointmentId);
-  const technicianRef = firestore().collection(Collections.USERS).doc(technicianId);
-  const { expiredForSelectedTechnician, previousTechnicianId, alreadyAccepted, existingCalendarEventId } = await firestore().runTransaction(async transaction => {
-    const [snapshot, technicianSnapshot] = await Promise.all([
-      transaction.get(appointmentRef),
-      transaction.get(technicianRef),
-    ]);
-    if (!snapshot.exists) throw new Error('This request no longer exists.');
-    const appointment = snapshot.data()!;
-    if (appointment.status === 'confirmed' && appointment.technicianId === technicianId) {
-      return {
-        expiredForSelectedTechnician: false,
-        previousTechnicianId: technicianId,
-        alreadyAccepted: true,
-        existingCalendarEventId: appointment.calendarEventId || null,
-      };
-    }
-    if (appointment.status !== 'pending') throw new Error('This request is no longer pending.');
-    if (appointment.declinedByTechnicianIds?.includes(technicianId)) throw new Error('You already declined this request.');
-    const previousTechnicianId = appointment.technicianId || '';
-    const deadline = appointment.responseDeadlineAt?.toMillis?.();
-    const expired = typeof deadline === 'number' && deadline <= Date.now();
-
-    if (previousTechnicianId && previousTechnicianId !== technicianId && !expired) {
-      throw new Error('This request is reserved for another technician.');
-    }
-    const technicianData = technicianSnapshot.data();
-    const activeAppointmentIds = [...new Set([
-      ...(Array.isArray(technicianData?.activeAppointmentIds) ? technicianData.activeAppointmentIds : []),
-      technicianData?.activeAppointmentId,
-    ].filter((id): id is string => typeof id === 'string' && id !== appointmentId))];
-    const activeSnapshots = await Promise.all(activeAppointmentIds.map(id => transaction.get(appointments.doc(id))));
-    if (activeSnapshots.some(active => active.exists && isTechnicianServiceInProgress(active.data()!) && hasAppointmentTimeConflict(date, time, active.data()!))) {
-      throw new Error('Complete your current service before accepting another request.');
-    }
-    if (previousTechnicianId === technicianId && expired) {
-      transaction.update(appointmentRef, {
-        technicianId: '',
-        technicianName: 'Unassigned',
-        responseDeadlineAt: firestore.FieldValue.delete(),
-        publishedAt: firestore.FieldValue.serverTimestamp(),
-      });
-      return { expiredForSelectedTechnician: true, previousTechnicianId, alreadyAccepted: false, existingCalendarEventId: null };
-    }
-    const maxRequestsPerDay = technicianSnapshot.data()?.maxRequestsPerDay;
-    const hasDailyLimit = Number.isInteger(maxRequestsPerDay) && maxRequestsPerDay > 0;
-    if (hasDailyLimit && !appointment.date) {
-      throw new Error('This request has no scheduled date, so its daily limit cannot be checked.');
-    }
-    if (appointment.date) {
-      const dailyCountRef = technicianRef.collection('dailyRequestCounts').doc(appointment.date);
-      const dailyCountSnapshot = await transaction.get(dailyCountRef);
-      const existingAcceptedForDay = existingAppointments.docs.filter(doc =>
-        doc.id !== appointmentId && doc.data().date === appointment.date &&
-        ['confirmed', 'upcoming', 'completed'].includes(doc.data().status)
-      ).length;
-      const storedCount = dailyCountSnapshot.data()?.acceptedCount;
-      const acceptedForDay = Number.isInteger(storedCount) && storedCount >= 0 ? storedCount : existingAcceptedForDay;
-      if (hasDailyLimit && acceptedForDay >= maxRequestsPerDay) {
-        throw new Error(`You reached your limit of ${maxRequestsPerDay} accepted requests for ${appointment.date}.`);
-      }
-      transaction.set(dailyCountRef, { acceptedCount: acceptedForDay + 1, updatedAt: firestore.FieldValue.serverTimestamp() });
-    }
-    transaction.update(appointmentRef, {
-      status: 'confirmed',
-      technicianId,
-      technicianName,
-      responseDeadlineAt: firestore.FieldValue.delete(),
-    });
-    transaction.set(technicianRef, {
-      activeAppointmentId: appointmentId,
-      activeAppointmentIds: firestore.FieldValue.arrayUnion(appointmentId),
-    }, { merge: true });
-    return { expiredForSelectedTechnician: false, previousTechnicianId, alreadyAccepted: false, existingCalendarEventId: null };
-  });
-  if (expiredForSelectedTechnician) throw new Error('The response window expired. This request is now available to all technicians.');
+  const { previousTechnicianId, alreadyAccepted, existingCalendarEventId } = await callBackend<{
+    previousTechnicianId: string;
+    alreadyAccepted: boolean;
+    existingCalendarEventId?: string | null;
+  }>('acceptServiceRequest', { appointmentId });
   if (alreadyAccepted) return { chatId: '', calendarEventId: existingCalendarEventId, alreadyAccepted: true };
 
   try {

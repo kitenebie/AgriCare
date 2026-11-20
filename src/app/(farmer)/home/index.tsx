@@ -113,7 +113,7 @@ export default function HomeScreen() {
 
         // Badge counts for Quick Access
         const [techSnap, healthRecordsSnap] = await Promise.all([
-          firestore().collection(Collections.USERS).where('role', '==', 'technician').where('status', '==', 'active').get(),
+          firestore().collection(Collections.PUBLIC_PROFILES).where('role', '==', 'technician').where('status', '==', 'active').get(),
           firestore().collection('healthRecords').where('farmerId', '==', uid).get(),
         ]);
         setBadgeCounts(current => ({
@@ -150,7 +150,7 @@ export default function HomeScreen() {
     const subscribe = async () => {
       const session = await getSession();
       if (!active || !session) return;
-      stopProfiles = firestore().collection(Collections.USERS).where('role', '==', 'technician').onSnapshot(snapshot => {
+      stopProfiles = firestore().collection(Collections.PUBLIC_PROFILES).where('role', '==', 'technician').onSnapshot(snapshot => {
         if (active) setTechnicianProfiles(snapshot.docs.filter(doc => doc.data()?.status === 'active').map(doc => ({ ...doc.data(), id: doc.id } as Omit<OnlineTechnician, 'latitude' | 'longitude'>)));
       }, error => console.warn('Online technicians load failed:', error));
       stopLocations = listenToHeartbeatsByRole('technician', locations => { if (active) setTechnicianLocations(locations); });

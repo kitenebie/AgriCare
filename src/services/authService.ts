@@ -9,6 +9,7 @@ import { requestNotificationPermission, registerDeviceToken, unregisterDeviceTok
 import { saveSession, clearSession } from './sessionService';
 import { logAuth, logError } from './logService';
 import { completeRegistrationEmailVerification } from './emailVerificationService';
+import { updateTechnicianQualifications } from './technicianQualificationService';
 
 export type AuthUser = any;
 
@@ -27,22 +28,6 @@ const registerFCM = async (uid: string) => {
 };
 
 /**
- * Find user document by email
- */
-const findUserByEmail = async (email: string) => {
-  const snapshot = await firestore()
-    .collection(Collections.USERS)
-    .where('email', '==', email)
-    .limit(1)
-    .get();
-  if (!snapshot.empty) {
-    const userDoc = snapshot.docs[0];
-    return { id: userDoc.id, ...userDoc.data() };
-  }
-  return null;
-};
-
-/**
  * Sign up with email
  */
 export const signUp = async (
@@ -53,6 +38,8 @@ export const signUp = async (
   verificationTicket: string,
   extraData?: {
     expertise?: string[];
+    specializationIds?: string[];
+    subSpecializationIds?: string[];
     proofImageUrl?: string;
     idImageUrl?: string;
     phoneNumber?: string;
@@ -78,21 +65,40 @@ export const signUp = async (
     : '';
 
   // Create user document using Auth UID as doc ID
-  await firestore().collection(Collections.USERS).doc(user.uid).set({
-    email,
-    displayName,
-    role,
-    phoneNumber: extraData?.phoneNumber || '',
-    location: extraData?.location || '',
-    photoURL: extraData?.photoURL || '',
-    proofImageUrl: extraData?.proofImageUrl || '',
-    idImageUrl: extraData?.idImageUrl || '',
-    expertise: extraData?.expertise || [],
-    specialization: specializationStr,
-    status: 'pending',
-    createdAt: firestore.FieldValue.serverTimestamp(),
-    updatedAt: firestore.FieldValue.serverTimestamp(),
-  });
+  const userRef = firestore().collection(Collections.USERS).doc(user.uid);
+  try {
+    await userRef.set({
+      uid: user.uid,
+      email,
+      displayName,
+      role,
+      phoneNumber: extraData?.phoneNumber || '',
+      location: extraData?.location || '',
+      photoURL: extraData?.photoURL || '',
+      proofImageUrl: extraData?.proofImageUrl || '',
+      idImageUrl: extraData?.idImageUrl || '',
+      expertise: extraData?.expertise || [],
+      specialization: specializationStr,
+      specializationIds: [],
+      subSpecializationIds: [],
+      qualificationKeys: [],
+      qualificationVerified: false,
+      status: role === 'technician' ? 'pending' : 'active',
+      createdAt: firestore.FieldValue.serverTimestamp(),
+      updatedAt: firestore.FieldValue.serverTimestamp(),
+    });
+    if (role === 'technician') {
+      await updateTechnicianQualifications(
+        extraData?.specializationIds || [],
+        extraData?.subSpecializationIds || [],
+        await user.getIdToken(),
+      );
+    }
+  } catch (error) {
+    await userRef.delete().catch(cleanupError => console.warn('Failed to remove incomplete registration:', cleanupError));
+    await user.delete().catch(cleanupError => console.warn('Failed to remove incomplete auth account:', cleanupError));
+    throw error;
+  }
 
   await registerFCM(user.uid);
 
@@ -123,17 +129,9 @@ export const signIn = async (email: string, pass: string) => {
   const authDoc = await firestore().collection(Collections.USERS).doc(user.uid).get();
 
   if (!authDoc.exists) {
-    console.log('No doc at UID, searching by email...');
-    const existingUser = await findUserByEmail(email);
-    if (existingUser) {
-      console.log('Found doc by email, copying to UID key');
-      const { id, ...data } = existingUser;
-      await firestore().collection(Collections.USERS).doc(user.uid).set({
-        ...data,
-        uid: user.uid,
-        updatedAt: firestore.FieldValue.serverTimestamp(),
-      });
-    } else {
+    console.log('No doc at UID, migrating legacy profile through backend...');
+    const migration = await callBackend<{ found: boolean }>('migrateLegacyUserProfile');
+    if (!migration.found) {
       console.log('No doc found, creating new');
       await firestore().collection(Collections.USERS).doc(user.uid).set({
         email: user.email,

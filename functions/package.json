@@ -3,10 +3,13 @@
   "description": "AgriCare Cloud Functions — FCM Push Notifications",
   "scripts": {
     "serve": "firebase emulators:start --only functions",
-    "deploy": "firebase deploy --only functions"
+    "deploy": "firebase deploy --only functions",
+    "test": "node --test",
+    "test:rules": "cd .. && firebase emulators:exec --project demo-agricare --only firestore,auth \"node --test functions/firestoreRules.emulator.test.js\"",
+    "test:api": "cd .. && firebase emulators:exec --project demo-agricare --only firestore,auth,functions \"node --test functions/serviceRequestApi.emulator.test.js\""
   },
   "engines": {
-    "node": "18"
+    "node": "22"
   },
   "main": "index.js",
   "dependencies": {

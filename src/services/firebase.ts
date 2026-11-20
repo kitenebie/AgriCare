@@ -33,6 +33,7 @@ export const messaging = messagingModule();
 // Top-level collections
 export const Collections = {
   USERS: 'users',
+  PUBLIC_PROFILES: 'publicProfiles',
   ADMIN: 'admin',
   FARMER: 'farmer',
   TECHNICIAN: 'technician',

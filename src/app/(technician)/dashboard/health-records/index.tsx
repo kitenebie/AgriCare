@@ -74,7 +74,7 @@ export default function HealthRecordsListScreen() {
             let animalPhoto = '';
             if (data.farmerId) {
               try {
-                const farmerDoc = await firestore().collection(Collections.USERS).doc(data.farmerId).get();
+                const farmerDoc = await firestore().collection(Collections.PUBLIC_PROFILES).doc(data.farmerId).get();
                 if (farmerDoc.exists) farmerPhoto = farmerDoc.data()?.photoURL || '';
               } catch (e) {}
             }

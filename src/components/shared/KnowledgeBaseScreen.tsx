@@ -121,7 +121,7 @@ export default function KnowledgeBaseScreen() {
 
       // Notify active users on both article creation and edit.
       try {
-        const usersSnap = await firestore().collection(Collections.USERS).where('status', '==', 'active').get();
+        const usersSnap = await firestore().collection(Collections.PUBLIC_PROFILES).where('status', '==', 'active').get();
         await Promise.all(usersSnap.docs.map(async doc =>
           createEmailNotification(
             doc.id,
@@ -146,7 +146,7 @@ export default function KnowledgeBaseScreen() {
           await firestore().collection(Collections.KNOWLEDGE_BASE).doc(id).delete();
           await logCrud('Article Deleted', `Deleted: ${name}`, 'knowledgeBase', id);
           try {
-            const usersSnap = await firestore().collection(Collections.USERS).where('status', '==', 'active').get();
+            const usersSnap = await firestore().collection(Collections.PUBLIC_PROFILES).where('status', '==', 'active').get();
             await Promise.all(usersSnap.docs.map(doc =>
               createEmailNotification(doc.id, 'knowledge_base', '📚 Knowledge Base Article Removed', name, { type: 'knowledge_base' }),
             ));

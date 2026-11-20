@@ -64,14 +64,14 @@ export default function LoginScreen() {
       console.log('🔐 User profile:', JSON.stringify(profile));
 
       // ─── Check if user account is pending verification ───
-      if (profile?.status === 'pending') {
+      if (profile?.role === 'technician' && profile.status === 'pending') {
         router.replace('/(auth)/pending-verification');
         setLoading(false);
         return;
       }
 
       // ─── Check if user account was rejected ───
-      if (profile?.status === 'rejected') {
+      if (profile?.role === 'technician' && profile.status === 'rejected') {
         const reason = profile?.rejectionReason || 'Your documents did not meet our verification requirements.';
         router.replace({ pathname: '/(auth)/rejected', params: { reason } });
         setLoading(false);

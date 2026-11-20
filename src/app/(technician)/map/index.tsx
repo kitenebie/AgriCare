@@ -123,7 +123,7 @@ export default function TechMapScreen() {
                 // are deliberately not used as an appointment destination.
                 if (appt.farmerId) {
                   try {
-                    const farmerDoc = await firestore().collection(Collections.USERS).doc(appt.farmerId).get();
+                    const farmerDoc = await firestore().collection(Collections.PUBLIC_PROFILES).doc(appt.farmerId).get();
                     if (farmerDoc.exists) {
                       const fd = farmerDoc.data();
                       if (typeof fd?.location === 'string' && fd.location.trim()) location = fd.location.trim();

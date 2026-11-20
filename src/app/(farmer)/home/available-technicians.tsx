@@ -27,7 +27,7 @@ export default function AvailableTechniciansPage() {
   const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
-    firestore().collection(Collections.USERS).where('role', '==', 'technician').where('status', '==', 'active').get()
+    firestore().collection(Collections.PUBLIC_PROFILES).where('role', '==', 'technician').where('status', '==', 'active').get()
       .then(snapshot => {
         setTechnicians(snapshot.docs.flatMap(doc => {
           const tech = { id: doc.id, ...doc.data() } as Technician;

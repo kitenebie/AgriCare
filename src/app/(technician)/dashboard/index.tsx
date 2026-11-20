@@ -99,17 +99,16 @@ export default function TechDashboardScreen() {
         const rvCount = data?.reviewCount || 0;
         setReviewCount(rvCount);
       }
-      // Fetch ALL appointments (single collection scan, no composite index needed)
-      const allApptsSnap = await firestore()
-        .collection(Collections.APPOINTMENTS)
-        .get();
-      const allAppts = allApptsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as ServiceRequest);
-
-      // Pending: status "pending" AND (unassigned OR assigned to this tech)
-      const pendingRequests = allAppts.filter((appointment) => isRequestAvailableToTechnician(appointment, uid)).length;
-
-      // Accepted: confirmed appointments where technicianId matches this user
-      const myAppts = allAppts.filter((a) => a.technicianId === uid);
+      const appointmentsRef = firestore().collection(Collections.APPOINTMENTS);
+      const [eligibleSnap, assignedSnap] = await Promise.all([
+        appointmentsRef.where('status', '==', 'pending').where('eligibleTechnicianIds', 'array-contains', uid).get(),
+        appointmentsRef.where('technicianId', '==', uid).get(),
+      ]);
+      const byId = new Map<string, ServiceRequest>();
+      [...eligibleSnap.docs, ...assignedSnap.docs].forEach(doc => byId.set(doc.id, { id: doc.id, ...doc.data() } as ServiceRequest));
+      const allAppts = [...byId.values()];
+      const pendingRequests = allAppts.filter(appointment => isRequestAvailableToTechnician(appointment, uid)).length;
+      const myAppts = allAppts.filter(a => a.technicianId === uid);
       const acceptedRequests = myAppts.filter(
         (a) => a.status === "confirmed",
       ).length;
@@ -188,16 +187,23 @@ export default function TechDashboardScreen() {
     let unsubscribe = () => {};
     getSession().then(session => {
       if (!active || !session) return;
-      unsubscribe = firestore().collection(Collections.APPOINTMENTS).where('status', '==', 'pending').onSnapshot(snapshot => {
-        const requests = snapshot.docs
-          .map(doc => ({ ...doc.data(), id: doc.id }) as ServiceRequest)
-          .filter(request => isRequestAvailableToTechnician(request, session.uid))
-          .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+      let eligibleSnapshot: any;
+      let assignedSnapshot: any;
+      const updateRequests = () => {
+        if (!eligibleSnapshot || !assignedSnapshot) return;
+        const byId = new Map<string, ServiceRequest>();
+        [...eligibleSnapshot.docs, ...assignedSnapshot.docs].forEach(doc => byId.set(doc.id, { ...doc.data(), id: doc.id } as ServiceRequest));
+        const requests = [...byId.values()].filter(request => isRequestAvailableToTechnician(request, session.uid)).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
         if (active) {
           setFarmerRequests(requests);
           setBadgeCounts(current => ({ ...current, availableRequests: requests.length }));
         }
-      }, error => console.warn('Farmer request services load error:', error));
+      };
+      const onError = (error: Error) => console.warn('Farmer request services load error:', error);
+      const requests = firestore().collection(Collections.APPOINTMENTS).where('status', '==', 'pending');
+      const stopEligible = requests.where('eligibleTechnicianIds', 'array-contains', session.uid).onSnapshot(snapshot => { eligibleSnapshot = snapshot; updateRequests(); }, onError);
+      const stopAssigned = requests.where('technicianId', '==', session.uid).onSnapshot(snapshot => { assignedSnapshot = snapshot; updateRequests(); }, onError);
+      unsubscribe = () => { stopEligible(); stopAssigned(); };
     }).catch(error => console.warn('Farmer request services subscription failed:', error));
     return () => { active = false; unsubscribe(); };
   }, []);

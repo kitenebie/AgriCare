@@ -38,7 +38,7 @@ export default function TechniciansPage() {
       setUid(session.uid);
 
       // Load all active technicians
-      const techSnap = await firestore().collection(Collections.USERS).where('role', '==', 'technician').where('status', '==', 'active').get();
+      const techSnap = await firestore().collection(Collections.PUBLIC_PROFILES).where('role', '==', 'technician').where('status', '==', 'active').get();
       setTechnicians(techSnap.docs.map(d => ({ id: d.id, ...d.data() } as TechnicianItem)));
 
       // Load user's favorites

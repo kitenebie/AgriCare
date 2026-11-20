@@ -6,7 +6,7 @@
  * This function picks it up and sends the actual FCM notification.
  */
 
-const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
+const { onDocumentCreated, onDocumentUpdated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onRequest } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret, defineString } = require("firebase-functions/params");
@@ -21,6 +21,9 @@ const resendApiKey = defineSecret("RESEND_API_KEY");
 const emailFrom = defineString("EMAIL_FROM");
 const emailOtpSecret = defineSecret("REGISTRATION_OTP_SECRET");
 const crypto = require("node:crypto");
+const serviceCatalog = require("./shared/technicianServiceCatalog.json");
+const { normalizeAnimalTypeId, qualificationKey, validateQualifications, eligibleTechnicians, canAcceptServiceRequest } = require("./shared/technicianServiceMatching");
+const { toPublicProfile } = require("./shared/publicProfile");
 
 const otpCollection = "registrationEmailOtps";
 const otpHash = (email, salt, code) =>
@@ -40,6 +43,521 @@ const isEqualHash = (actual, expected) => {
   const b = Buffer.from(String(expected || ""));
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 };
+
+const authenticatedUser = async (req) => {
+  const token = req.headers.authorization?.match(/^Bearer (.+)$/i)?.[1];
+  if (!token) throw new Error("Authentication required.");
+  return getAuth().verifyIdToken(token, true);
+};
+
+const seedServiceCatalog = async () => {
+  const db = getFirestore();
+  const versionRef = db.collection("serviceCatalogMeta").doc("current");
+  const version = await versionRef.get();
+  if (version.data()?.version === 1) return;
+  const batch = db.batch();
+  const collections = [
+    ["animalTypes", serviceCatalog.animalTypes],
+    ["animalBreeds", serviceCatalog.breeds],
+    ["serviceTypes", serviceCatalog.serviceTypes],
+    ["specializations", serviceCatalog.specializations],
+    ["subSpecializations", serviceCatalog.subSpecializations],
+  ];
+  for (const [collectionName, items] of collections) {
+    for (const item of items) batch.set(db.collection(collectionName).doc(item.id), { ...item, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  }
+  batch.set(versionRef, { version: 1, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  await batch.commit();
+};
+
+const timeMinutes = (value) => {
+  const match = typeof value === "string" && value.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match || Number(match[1]) < 1 || Number(match[1]) > 12 || Number(match[2]) > 59) return null;
+  return ((Number(match[1]) % 12) + (match[3].toUpperCase() === "PM" ? 12 : 0)) * 60 + Number(match[2]);
+};
+const timeInRange = (time, start, end) => {
+  const minutes = timeMinutes(time);
+  const startMinutes = timeMinutes(start);
+  const endMinutes = timeMinutes(end);
+  return minutes !== null && startMinutes !== null && endMinutes !== null && startMinutes < endMinutes && minutes >= startMinutes && minutes < endMinutes;
+};
+const timeConflict = (date, time, appointment) => {
+  const requested = timeMinutes(time);
+  const existing = timeMinutes(appointment.time);
+  if (requested === null || existing === null || !appointment.date) return true;
+  const requestedStart = new Date(`${date}T00:00:00Z`).getTime() + requested * 60000;
+  const existingStart = new Date(`${appointment.date}T00:00:00Z`).getTime() + existing * 60000;
+  return requestedStart < existingStart + 3600000 && existingStart < requestedStart + 3600000;
+};
+const isAppointmentActive = (appointment) => appointment.status === "confirmed" || appointment.status === "upcoming" ||
+  (appointment.status === "pending" && (appointment.responseDeadlineAt?.toMillis?.() ?? Infinity) > Date.now());
+const scheduledAt = (technician, date, time) => {
+  const dayOfWeek = new Date(`${date}T12:00:00Z`).getUTCDay();
+  const hasSlot = technician.availabilitySlots?.some(slot => {
+    const dateMatches = slot.date ? slot.date === date : slot.dayOfWeek === dayOfWeek;
+    return dateMatches && (slot.startTime && slot.endTime
+      ? timeInRange(time, slot.startTime, slot.endTime)
+      : typeof slot.time === "string" && slot.time.trim().toUpperCase() === time.trim().toUpperCase());
+  });
+  const ranges = Array.isArray(technician.alwaysAvailable) ? technician.alwaysAvailable : technician.alwaysAvailable ? [technician.alwaysAvailable] : [];
+  return !!hasSlot || (technician.alwaysAvailableEnabled !== false && ranges.some(range => timeInRange(time, range.startTime, range.endTime)));
+};
+
+exports.getServiceCatalog = onRequest({ cors: true }, async (req, res) => {
+  setOtpCors(res);
+  if (req.method === "OPTIONS") return res.status(204).send("");
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed." });
+  try {
+    await authenticatedUser(req);
+    await seedServiceCatalog();
+    const categories = await getFirestore().collection("livestockCategories").get();
+    const additionalBreeds = [];
+    for (const category of categories.docs) {
+      const data = category.data();
+      const animalTypeId = normalizeAnimalTypeId(data.name) || normalizeAnimalTypeId(data.type);
+      if (!animalTypeId || !["goat", "horse"].includes(animalTypeId) || !Array.isArray(data.breeds)) continue;
+      for (const breedName of data.breeds) {
+        if (typeof breedName !== "string" || !breedName.trim()) continue;
+        const slug = breedName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+        additionalBreeds.push({ id: `approved-${category.id}-${slug}`, sourceCategoryId: category.id, animalTypeId, name: breedName.trim() });
+      }
+    }
+    return res.status(200).json({ ...serviceCatalog, additionalBreeds });
+  } catch (error) {
+    console.error("Service catalog request failed:", error.message);
+    return res.status(error.code?.startsWith("auth/") || error.message === "Authentication required." ? 401 : 500).json({ error: error.message || "Could not load service options." });
+  }
+});
+
+exports.migrateLegacyUserProfile = onRequest({ cors: true }, async (req, res) => {
+  setOtpCors(res);
+  if (req.method === "OPTIONS") return res.status(204).send("");
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed." });
+  try {
+    const decoded = await authenticatedUser(req);
+    const db = getFirestore();
+    const targetRef = db.collection("users").doc(decoded.uid);
+    if ((await targetRef.get()).exists) return res.status(200).json({ found: true });
+    if (typeof decoded.email === "string") {
+      const legacy = await db.collection("users").where("email", "==", decoded.email).limit(1).get();
+      if (!legacy.empty) {
+        await targetRef.set({ ...legacy.docs[0].data(), uid: decoded.uid, updatedAt: FieldValue.serverTimestamp() });
+        return res.status(200).json({ found: true });
+      }
+    }
+    return res.status(200).json({ found: false });
+  } catch (error) {
+    console.error("Legacy profile migration failed:", error.message);
+    return res.status(error.code?.startsWith("auth/") || error.message === "Authentication required." ? 401 : 500)
+      .json({ error: error.message || "Could not migrate account profile." });
+  }
+});
+
+exports.syncPublicProfile = onDocumentWritten("users/{userId}", async (event) => {
+  const db = getFirestore();
+  const profileRef = db.collection("publicProfiles").doc(event.params.userId);
+  const profile = toPublicProfile(event.params.userId, event.data?.after?.data());
+  if (!profile) return profileRef.delete();
+  return profileRef.set(profile);
+});
+
+exports.sendPushNotification = onRequest({ cors: true }, async (req, res) => {
+  setOtpCors(res);
+  if (req.method === "OPTIONS") return res.status(204).send("");
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed." });
+  try {
+    const sender = await authenticatedUser(req);
+    const { targetUserId, payload } = req.body || {};
+    const type = payload?.data?.type;
+    const title = typeof payload?.title === "string" ? payload.title.trim().slice(0, 120) : "";
+    const body = typeof payload?.body === "string" ? payload.body.trim().slice(0, 500) : "";
+    if (typeof targetUserId !== "string" || !targetUserId || !title || !body || !["new_chat_message", "forum_reply", "forum_react"].includes(type)) {
+      return res.status(422).json({ error: "Invalid push notification." });
+    }
+    if (targetUserId === sender.uid) return res.status(403).json({ error: "Cannot notify yourself." });
+
+    const db = getFirestore();
+    if (type === "new_chat_message") {
+      if (payload.data.chatId !== [sender.uid, targetUserId].sort().join("_")) {
+        return res.status(403).json({ error: "You are not a participant in this chat." });
+      }
+    } else {
+      const postId = payload.data.postId;
+      if (typeof postId !== "string" || !postId) return res.status(422).json({ error: "Invalid forum post." });
+      const post = await db.collection("communityForum").doc(postId).get();
+      if (!post.exists || post.data()?.authorId !== targetUserId) {
+        return res.status(403).json({ error: "You cannot notify this forum user." });
+      }
+    }
+
+    const target = await db.collection("users").doc(targetUserId).get();
+    if (!target.exists || target.data()?.status !== "active") return res.status(404).json({ error: "Recipient not found." });
+    const token = target.data()?.fcmToken;
+    if (typeof token !== "string" || !token) return res.status(200).json({ sent: false });
+    const data = Object.fromEntries(Object.entries(payload.data || {})
+      .filter(([key, value]) => key !== "type" && typeof value === "string")
+      .map(([key, value]) => [key, value.slice(0, 500)]));
+    try {
+      await getMessaging().send({ token, notification: { title, body }, data: { ...data, type }, android: { priority: "high" } });
+    } catch (error) {
+      if (["messaging/registration-token-not-registered", "messaging/invalid-argument"].includes(error.code)) {
+        await target.ref.update({ fcmToken: FieldValue.delete() });
+        return res.status(200).json({ sent: false });
+      }
+      throw error;
+    }
+    return res.status(200).json({ sent: true });
+  } catch (error) {
+    console.error("Push notification request failed:", error.message);
+    return res.status(error.code?.startsWith("auth/") || error.message === "Authentication required." ? 401 : 500)
+      .json({ error: error.message || "Could not send push notification." });
+  }
+});
+
+exports.submitTechnicianRating = onRequest({ cors: true }, async (req, res) => {
+  setOtpCors(res);
+  if (req.method === "OPTIONS") return res.status(204).send("");
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed." });
+  try {
+    const farmer = await authenticatedUser(req);
+    const { rateRequestId, rating } = req.body || {};
+    if (typeof rateRequestId !== "string" || !rateRequestId || !Number.isInteger(rating) || rating < 1 || rating > 5) {
+      return res.status(422).json({ error: "Choose a rating from 1 to 5." });
+    }
+    const db = getFirestore();
+    const rateRequestRef = db.collection("rateRequests").doc(rateRequestId);
+    const reviewRef = db.collection("reviews").doc();
+    const notificationRef = db.collection("notifications").doc();
+    const result = await db.runTransaction(async transaction => {
+      const requestSnapshot = await transaction.get(rateRequestRef);
+      if (!requestSnapshot.exists) throw new Error("Rating request not found.");
+      const request = requestSnapshot.data();
+      if (request.farmerId !== farmer.uid || request.status !== "pending") throw new Error("This rating request is no longer available.");
+      const technicianRef = db.collection("users").doc(request.technicianId);
+      const farmerRef = db.collection("users").doc(farmer.uid);
+      const [technicianSnapshot, farmerSnapshot] = await Promise.all([
+        transaction.get(technicianRef), transaction.get(farmerRef),
+      ]);
+      const technician = technicianSnapshot.data();
+      const farmerProfile = farmerSnapshot.data();
+      if (!technicianSnapshot.exists || technician?.role !== "technician") throw new Error("Technician not found.");
+      const oldCount = Number(technician.reviewCount) || 0;
+      const newCount = oldCount + 1;
+      const newRating = Math.round((((Number(technician.rating) || 0) * oldCount + rating) / newCount) * 10) / 10;
+      const farmerName = farmerProfile?.displayName || farmer.name || "Farmer";
+      const technicianName = technician.displayName || "Technician";
+      const now = FieldValue.serverTimestamp();
+      transaction.update(rateRequestRef, { status: "completed", rating, ratedAt: now });
+      transaction.update(technicianRef, { rating: newRating, reviewCount: newCount });
+      transaction.create(reviewRef, {
+        technicianId: request.technicianId, technicianName, farmerId: farmer.uid, farmerName,
+        rating, animalName: request.animalName || "", serviceType: request.serviceType || "",
+        rateRequestId, createdAt: now,
+      });
+      transaction.create(notificationRef, {
+        userId: request.technicianId, type: "rating_received",
+        title: `New Rating: ${"⭐".repeat(rating)}`,
+        body: `${farmerName} rated you ${rating}/5 stars${request.animalName ? ` for ${request.animalName}` : ""}! ${rating >= 4 ? "Great job! 🎉" : "Keep improving! 💪"}`,
+        read: false, data: { farmerId: farmer.uid, chatId: request.chatId || "", rating, reviewId: reviewRef.id }, createdAt: now,
+      });
+      return { reviewId: reviewRef.id, newRating, newCount, farmerName, technicianName, request };
+    });
+    return res.status(200).json({ reviewId: result.reviewId, newRating: result.newRating, newCount: result.newCount,
+      farmerName: result.farmerName, technicianName: result.technicianName, animalName: result.request.animalName || "",
+      serviceType: result.request.serviceType || "", chatId: result.request.chatId || "" });
+  } catch (error) {
+    console.error("Technician rating submission failed:", error.message);
+    const status = error.code?.startsWith("auth/") || error.message === "Authentication required." ? 401 :
+      ["Rating request not found.", "This rating request is no longer available.", "Technician not found."].includes(error.message) ? 403 : 500;
+    return res.status(status).json({ error: error.message || "Could not submit rating." });
+  }
+});
+
+exports.updateTechnicianQualifications = onRequest({ cors: true }, async (req, res) => {
+  setOtpCors(res);
+  if (req.method === "OPTIONS") return res.status(204).send("");
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed." });
+  try {
+    const decoded = await authenticatedUser(req);
+    const db = getFirestore();
+    const userRef = db.collection("users").doc(decoded.uid);
+    const userSnapshot = await userRef.get();
+    if (!userSnapshot.exists || userSnapshot.data()?.role !== "technician" || !["pending", "active"].includes(userSnapshot.data()?.status)) {
+      return res.status(403).json({ error: "Only an active or pending technician can update qualifications." });
+    }
+    const qualifications = validateQualifications(req.body?.specializationIds, req.body?.subSpecializationIds);
+    if (!qualifications.valid) return res.status(400).json({ error: qualifications.error });
+    await userRef.update({
+      specializationIds: qualifications.specializationIds,
+      subSpecializationIds: qualifications.subSpecializationIds,
+      qualificationKeys: qualifications.qualificationKeys,
+      qualificationVerified: true,
+      qualificationCatalogVersion: 1,
+      expertise: qualifications.expertise,
+      specialization: qualifications.specialization,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    return res.status(200).json({ ok: true, qualificationKeys: qualifications.qualificationKeys });
+  } catch (error) {
+    console.error("Technician qualification update failed:", error.message);
+    return res.status(error.code?.startsWith("auth/") || error.message === "Authentication required." ? 401 : 500).json({ error: error.message || "Could not save qualifications." });
+  }
+});
+
+exports.getEligibleTechnicians = onRequest({ cors: true }, async (req, res) => {
+  setOtpCors(res);
+  if (req.method === "OPTIONS") return res.status(204).send("");
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed." });
+  try {
+    await authenticatedUser(req);
+    const animalTypeId = normalizeAnimalTypeId(req.body?.animalTypeId);
+    const serviceTypeId = String(req.body?.serviceTypeId || "");
+    if (!animalTypeId || !serviceCatalog.subSpecializations.some(item => item.animalTypeId === animalTypeId && item.serviceTypeId === serviceTypeId)) {
+      return res.status(400).json({ error: "That animal and service combination is not supported." });
+    }
+    const candidates = await getFirestore().collection("users")
+      .where("role", "==", "technician")
+      .where("status", "==", "active")
+      .where("qualificationKeys", "array-contains", qualificationKey(animalTypeId, serviceTypeId))
+      .get();
+    const date = req.body?.date;
+    const time = req.body?.time;
+    let appointments = [];
+    if (date || time) {
+      if (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date) || timeMinutes(time) === null) return res.status(400).json({ error: "A valid date and time are required." });
+      const appointmentsSnapshot = await getFirestore().collection("appointments").where("date", "==", date).get();
+      appointments = appointmentsSnapshot.docs.map(doc => doc.data());
+    }
+    const technicians = candidates.docs
+      .map(doc => ({ id: doc.id, ...doc.data() }))
+      .filter(technician => technician.qualificationVerified === true && technician.available !== false)
+      .filter(technician => !date || (scheduledAt(technician, date, time) && !appointments.some(appointment =>
+        appointment.technicianId === technician.id && isAppointmentActive(appointment) && timeConflict(date, time, appointment))))
+      .map(({ id, displayName, photoURL, rating, availabilitySlots, alwaysAvailable, alwaysAvailableEnabled, qualificationKeys, qualificationVerified, specialization }) => ({
+        id, displayName: displayName || "Technician", photoURL: photoURL || "", rating: rating || 0,
+        qualificationKeys: qualificationKeys || [], qualificationVerified: qualificationVerified === true, specialization: specialization || "",
+        availabilitySlots: availabilitySlots || [], alwaysAvailable: alwaysAvailable || [], alwaysAvailableEnabled: alwaysAvailableEnabled !== false,
+      }));
+    return res.status(200).json({ technicians });
+  } catch (error) {
+    console.error("Eligible technician lookup failed:", error.message);
+    return res.status(error.code?.startsWith("auth/") || error.message === "Authentication required." ? 401 : 500).json({ error: error.message || "Could not load qualified technicians." });
+  }
+});
+
+exports.acceptServiceRequest = onRequest({ cors: true }, async (req, res) => {
+  setOtpCors(res);
+  if (req.method === "OPTIONS") return res.status(204).send("");
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed." });
+  try {
+    const decoded = await authenticatedUser(req);
+    const appointmentId = req.body?.appointmentId;
+    if (typeof appointmentId !== "string" || !appointmentId.trim()) return res.status(422).json({ error: "A valid request ID is required." });
+    const db = getFirestore();
+    const appointmentRef = db.collection("appointments").doc(appointmentId);
+    const technicianRef = db.collection("users").doc(decoded.uid);
+    const claim = await db.runTransaction(async transaction => {
+      const [appointmentSnapshot, technicianSnapshot] = await Promise.all([
+        transaction.get(appointmentRef), transaction.get(technicianRef),
+      ]);
+      if (!appointmentSnapshot.exists) throw new Error("This request no longer exists.");
+      const appointment = appointmentSnapshot.data();
+      const technician = technicianSnapshot.data();
+      if (!technicianSnapshot.exists || technician?.role !== "technician" || technician.status !== "active") throw new Error("Only an active technician can accept a request.");
+      if (appointment.status === "confirmed" && appointment.technicianId === decoded.uid) return { alreadyAccepted: true, previousTechnicianId: decoded.uid, existingCalendarEventId: appointment.calendarEventId || null };
+      if (appointment.status !== "pending") throw new Error("This request is no longer pending.");
+      if (appointment.declinedByTechnicianIds?.includes(decoded.uid)) throw new Error("You already declined this request.");
+      const previousTechnicianId = appointment.technicianId || "";
+      const deadline = appointment.responseDeadlineAt?.toMillis?.();
+      const expired = typeof deadline === "number" && deadline <= Date.now();
+      if (previousTechnicianId === decoded.uid && expired) throw new Error("The response window expired. The request is being shared with other qualified technicians.");
+      if (previousTechnicianId && previousTechnicianId !== decoded.uid && !expired) throw new Error("This request is reserved for another technician.");
+      if (appointment.animalTypeId && appointment.serviceTypeId) {
+        if (!canAcceptServiceRequest(appointment, decoded.uid, technician)) {
+          throw new Error("You are not qualified or eligible to accept this service request.");
+        }
+      } else if (previousTechnicianId !== decoded.uid) {
+        throw new Error("Legacy requests can only be accepted by their previously assigned technician.");
+      }
+      if (technician.available === false || !scheduledAt(technician, appointment.date, appointment.time)) throw new Error("You are not available for this request's scheduled time.");
+
+      const assignedSnapshot = await transaction.get(db.collection("appointments").where("technicianId", "==", decoded.uid));
+      const assigned = assignedSnapshot.docs.filter(doc => doc.id !== appointmentId).map(doc => doc.data());
+      if (assigned.some(existing => isAppointmentActive(existing) && timeConflict(appointment.date, appointment.time, existing))) {
+        throw new Error("Complete your current service before accepting another request.");
+      }
+      const maxRequestsPerDay = technician.maxRequestsPerDay;
+      const hasDailyLimit = Number.isInteger(maxRequestsPerDay) && maxRequestsPerDay > 0;
+      if (hasDailyLimit && !appointment.date) throw new Error("This request has no scheduled date, so its daily limit cannot be checked.");
+      if (appointment.date) {
+        const dailyCountRef = technicianRef.collection("dailyRequestCounts").doc(appointment.date);
+        const dailyCountSnapshot = await transaction.get(dailyCountRef);
+        const acceptedForDay = assigned.filter(existing => existing.date === appointment.date && ["confirmed", "upcoming", "completed"].includes(existing.status)).length;
+        const storedCount = dailyCountSnapshot.data()?.acceptedCount;
+        const currentCount = Number.isInteger(storedCount) && storedCount >= 0 ? storedCount : acceptedForDay;
+        if (hasDailyLimit && currentCount >= maxRequestsPerDay) throw new Error(`You reached your limit of ${maxRequestsPerDay} accepted requests for ${appointment.date}.`);
+        transaction.set(dailyCountRef, { acceptedCount: currentCount + 1, updatedAt: FieldValue.serverTimestamp() });
+      }
+      transaction.update(appointmentRef, { status: "confirmed", technicianId: decoded.uid, technicianName: technician.displayName || "Technician", responseDeadlineAt: FieldValue.delete() });
+      transaction.set(technicianRef, { activeAppointmentId: appointmentId, activeAppointmentIds: FieldValue.arrayUnion(appointmentId) }, { merge: true });
+      return { alreadyAccepted: false, previousTechnicianId, existingCalendarEventId: null };
+    });
+    return res.status(200).json(claim);
+  } catch (error) {
+    console.error("Service request acceptance failed:", error.message);
+    return res.status(error.code?.startsWith("auth/") || error.message === "Authentication required." ? 401 : 422).json({ error: error.message || "Could not accept the service request." });
+  }
+});
+
+exports.createServiceRequest = onRequest({ cors: true }, async (req, res) => {
+  setOtpCors(res);
+  if (req.method === "OPTIONS") return res.status(204).send("");
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed." });
+  try {
+    const decoded = await authenticatedUser(req);
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    const db = getFirestore();
+    const farmerSnapshot = await db.collection("users").doc(decoded.uid).get();
+    const farmer = farmerSnapshot.data();
+    if (!farmerSnapshot.exists || farmer?.role !== "farmer" || !["active", "pending"].includes(farmer?.status)) {
+      return res.status(403).json({ error: "Only an active farmer can submit a service request." });
+    }
+
+    const animalTypeId = normalizeAnimalTypeId(body.animalTypeId);
+    const serviceTypeId = String(body.serviceTypeId || "");
+    const animalRecordId = typeof body.animalRecordId === "string" ? body.animalRecordId.trim() : "";
+    const breedId = typeof body.animalBreedId === "string" ? body.animalBreedId : "";
+    const quantity = Number(body.animalQuantity);
+    const { date, time, description, technicianId = "" } = body;
+    if (typeof technicianId !== "string") return res.status(422).json({ error: "Invalid technician selection." });
+    const supportedService = serviceCatalog.subSpecializations.some(item => item.animalTypeId === animalTypeId && item.serviceTypeId === serviceTypeId);
+    if (!supportedService || !serviceCatalog.serviceTypes.some(item => item.id === serviceTypeId)) {
+      return res.status(422).json({ error: "That animal and service combination is not supported." });
+    }
+    if (!animalRecordId) return res.status(422).json({ error: "Select one of your registered animals." });
+    const animalSnapshot = await db.collection("animals").doc(animalRecordId).get();
+    const animalRecord = animalSnapshot.data();
+    if (!animalSnapshot.exists || animalRecord?.ownerId !== decoded.uid) return res.status(422).json({ error: "That animal record does not belong to your account." });
+    if (normalizeAnimalTypeId(animalRecord.type || animalRecord.name) !== animalTypeId) return res.status(422).json({ error: "The selected animal record does not match the chosen animal type." });
+    if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 10000) return res.status(422).json({ error: "Enter a valid animal quantity." });
+    const recordCount = Number(animalRecord.count || 1);
+    if (Number.isSafeInteger(recordCount) && recordCount > 0 && quantity > recordCount) return res.status(422).json({ error: "Quantity cannot exceed the selected animal record." });
+    if (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isInteger(timeMinutes(time)) || typeof description !== "string" || description.length > 5000) {
+      return res.status(422).json({ error: "Enter a valid date, time, and request description." });
+    }
+    if (!Number.isFinite(body.appointmentLatitude) || body.appointmentLatitude < -90 || body.appointmentLatitude > 90 ||
+        !Number.isFinite(body.appointmentLongitude) || body.appointmentLongitude < -180 || body.appointmentLongitude > 180 ||
+        (body.appointmentLocationAccuracy !== null && (!Number.isFinite(body.appointmentLocationAccuracy) || body.appointmentLocationAccuracy > 50))) {
+      return res.status(422).json({ error: "A valid service location is required." });
+    }
+    const [year, month, day] = date.split("-").map(Number);
+    if (new Date(Date.UTC(year, month - 1, day)).toISOString().slice(0, 10) !== date || Date.UTC(year, month - 1, day) + timeMinutes(time) * 60000 - 8 * 3600000 <= Date.now()) {
+      return res.status(422).json({ error: "Choose a future date and time." });
+    }
+
+    const approvedBreedsSnapshot = await db.collection("livestockCategories").get();
+    const approvedBreeds = [];
+    for (const category of approvedBreedsSnapshot.docs) {
+      const data = category.data();
+      const typeId = normalizeAnimalTypeId(data.name) || normalizeAnimalTypeId(data.type);
+      if (typeId !== animalTypeId || !["goat", "horse"].includes(typeId) || !Array.isArray(data.breeds)) continue;
+      for (const name of data.breeds) {
+        if (typeof name !== "string" || !name.trim()) continue;
+        const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+        approvedBreeds.push({ id: `approved-${category.id}-${slug}`, name: name.trim() });
+      }
+    }
+    const staticBreeds = serviceCatalog.breeds.filter(item => item.animalTypeId === animalTypeId);
+    const validBreed = staticBreeds.some(item => item.id === breedId) || approvedBreeds.some(item => item.id === breedId);
+    const availableBreeds = [...staticBreeds, ...approvedBreeds];
+    const selectedBreed = availableBreeds.find(item => item.id === breedId);
+    const recordBreed = typeof animalRecord.breed === "string" ? animalRecord.breed.trim() : "";
+    const recordBreedOption = availableBreeds.find(item => item.name.trim().toLowerCase() === recordBreed.toLowerCase());
+    if ((staticBreeds.length || approvedBreeds.length) && (!recordBreedOption || recordBreedOption.id !== breedId)) {
+      return res.status(422).json({ error: "Update this animal with an approved breed before requesting service." });
+    }
+    if ((staticBreeds.length || approvedBreeds.length) && !validBreed) return res.status(422).json({ error: "Select a valid breed for the chosen animal type." });
+    if (!breedId && (staticBreeds.length || approvedBreeds.length)) return res.status(422).json({ error: "Select an animal breed." });
+
+    const matchingSnapshot = await db.collection("users")
+      .where("role", "==", "technician")
+      .where("status", "==", "active")
+      .where("qualificationKeys", "array-contains", qualificationKey(animalTypeId, serviceTypeId))
+      .get();
+    const candidates = eligibleTechnicians(matchingSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })), animalTypeId, serviceTypeId)
+      .filter(technician => technician.qualificationVerified === true && scheduledAt(technician, date, time));
+    const appointmentsSnapshot = await db.collection("appointments").where("date", "==", date).get();
+    const dayAppointments = appointmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const available = candidates.filter(technician => !dayAppointments.some(appointment =>
+      appointment.technicianId === technician.id && isAppointmentActive(appointment) && timeConflict(date, time, appointment)));
+    const selectedTechnicianId = typeof technicianId === "string" ? technicianId : "";
+    const recipients = selectedTechnicianId ? available.filter(technician => technician.id === selectedTechnicianId) : available;
+    if (!recipients.length) return res.status(422).json({ error: selectedTechnicianId
+      ? "The selected technician is not qualified or available for this animal, service, and time."
+      : "No active, qualified technician is available for this animal, service, and time." });
+
+    const selectedTechnician = selectedTechnicianId ? recipients[0] : null;
+    const appointmentRef = db.collection("appointments").doc();
+    const timestamp = FieldValue.serverTimestamp();
+    const appointmentData = {
+      serviceTypeId,
+      serviceType: serviceCatalog.serviceTypes.find(item => item.id === serviceTypeId).name,
+      animalTypeId,
+      animalType: serviceCatalog.animalTypes.find(item => item.id === animalTypeId).name,
+      animalName: animalRecord.name || serviceCatalog.animalTypes.find(item => item.id === animalTypeId).name,
+      animalRecordId,
+      animalBreedId: breedId,
+      animalBreed: selectedBreed?.name || recordBreed,
+      animalQuantity: quantity,
+      farmerId: decoded.uid,
+      farmerName: farmer.displayName || farmer.name || "Farmer",
+      technicianId: selectedTechnician?.id || "",
+      technicianName: selectedTechnician?.displayName || "Unassigned",
+      eligibleTechnicianIds: recipients.map(technician => technician.id),
+      requestMode: selectedTechnician ? "direct" : "general",
+      declinedByTechnicianIds: [],
+      date,
+      time,
+      status: "pending",
+      description: description.trim(),
+      location: typeof body.location === "string" ? body.location.slice(0, 500) : "",
+      appointmentLatitude: body.appointmentLatitude,
+      appointmentLongitude: body.appointmentLongitude,
+      appointmentLocationAccuracy: body.appointmentLocationAccuracy,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      ...(selectedTechnician ? { responseDeadlineAt: Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000) } : {}),
+    };
+    await appointmentRef.set(appointmentData);
+
+    let notificationsQueued = true;
+    try {
+      for (let i = 0; i < recipients.length; i += 450) {
+        const batch = db.batch();
+        for (const technician of recipients.slice(i, i + 450)) {
+          const notificationRef = db.collection("notifications").doc(`service-request-${appointmentRef.id}-${technician.id}`);
+          batch.set(notificationRef, {
+            userId: technician.id,
+            type: "service_request",
+            title: "New Service Request",
+            body: `${appointmentData.serviceType} requested for ${appointmentData.animalType} on ${date} at ${time}.`,
+            read: false,
+            data: { appointmentId: appointmentRef.id },
+            createdAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
+        }
+        await batch.commit();
+      }
+    } catch (error) {
+      notificationsQueued = false;
+      console.error("Service request notifications failed:", error.message);
+    }
+    return res.status(201).json({ appointmentId: appointmentRef.id, eligibleTechnicianCount: recipients.length, notificationsQueued });
+  } catch (error) {
+    console.error("Service request creation failed:", error.message);
+    return res.status(error.code?.startsWith("auth/") || error.message === "Authentication required." ? 401 : 500).json({ error: error.message || "Could not submit the service request." });
+  }
+});
 
 const otpEndpoint = (handler) => onRequest({
   secrets: [emailOtpSecret, resendApiKey],
@@ -421,18 +939,62 @@ exports.publishExpiredAppointmentRequests = onSchedule("every 1 minutes", async 
     .get();
 
   for (const request of expiredRequests.docs) {
-    await db.runTransaction(async (transaction) => {
+    const initial = request.data();
+    const animalTypeId = initial.animalTypeId;
+    const serviceTypeId = String(initial.serviceTypeId || "");
+    let recipients = [];
+    if (animalTypeId && serviceCatalog.subSpecializations.some(item => item.animalTypeId === animalTypeId && item.serviceTypeId === serviceTypeId)) {
+      const [techniciansSnapshot, dayAppointments] = await Promise.all([
+        db.collection("users").where("role", "==", "technician").where("status", "==", "active")
+          .where("qualificationKeys", "array-contains", qualificationKey(animalTypeId, serviceTypeId)).get(),
+        initial.date ? db.collection("appointments").where("date", "==", initial.date).get() : Promise.resolve(null),
+      ]);
+      const appointments = dayAppointments?.docs.map(doc => ({ id: doc.id, ...doc.data() })) || [];
+      recipients = eligibleTechnicians(techniciansSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })), animalTypeId, serviceTypeId)
+        .filter(technician => technician.qualificationVerified === true && scheduledAt(technician, initial.date, initial.time))
+        .filter(technician => !appointments.some(appointment => appointment.technicianId === technician.id &&
+          isAppointmentActive(appointment) && timeConflict(initial.date, initial.time, appointment)));
+    }
+
+    const published = await db.runTransaction(async (transaction) => {
       const snapshot = await transaction.get(request.ref);
       const appointment = snapshot.data();
       if (!snapshot.exists || appointment?.status !== "pending" || !appointment.technicianId ||
-          !appointment.responseDeadlineAt || appointment.responseDeadlineAt.toMillis() > Date.now()) return;
+          !appointment.responseDeadlineAt || appointment.responseDeadlineAt.toMillis() > Date.now() ||
+          appointment.animalTypeId !== initial.animalTypeId || appointment.serviceTypeId !== initial.serviceTypeId ||
+          appointment.date !== initial.date || appointment.time !== initial.time) return false;
 
       transaction.update(request.ref, {
         technicianId: "",
         technicianName: "Unassigned",
+        eligibleTechnicianIds: recipients.map(technician => technician.id),
+        requestMode: "general",
         responseDeadlineAt: FieldValue.delete(),
         publishedAt: FieldValue.serverTimestamp(),
       });
+      return true;
     });
+    if (!published) continue;
+
+    try {
+      for (let index = 0; index < recipients.length; index += 450) {
+        const batch = db.batch();
+        for (const technician of recipients.slice(index, index + 450)) {
+          const notificationRef = db.collection("notifications").doc(`service-request-${request.id}-${technician.id}`);
+          batch.set(notificationRef, {
+            userId: technician.id,
+            type: "service_request",
+            title: "New Service Request",
+            body: `${initial.serviceType || "Service"} requested for ${initial.animalType || "animal"} on ${initial.date} at ${initial.time}.`,
+            read: false,
+            data: { appointmentId: request.id },
+            createdAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
+        }
+        await batch.commit();
+      }
+    } catch (error) {
+      console.error(`Republished request notification failed for ${request.id}:`, error.message);
+    }
   }
 });

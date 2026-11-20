@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, Modal } from 'react-native';
 import { AppText as Text, AppTextInput as TextInput } from '@/components/ui/FontScale';
 import { modalAlert } from '@/components/ui/ModalAlert';
 import Animated from 'react-native-reanimated';
@@ -11,18 +11,20 @@ import { Avatar } from '@/components/ui';
 import { useFadeInUp } from '@/hooks/useAnimatedEntry';
 import { getSession } from '@/services/sessionService';
 import { Collections } from '@/services/firebase';
-import { hasAppointmentTimeConflict, isTechnicianAppointmentActive, isTimeInAnyRange, isTimeInRange, type TimeRange } from '@/utils/availability';
+import type { TimeRange } from '@/utils/availability';
 import { logCrud } from '@/services/logService';
 import * as Location from 'expo-location';
 import { DatePickerModal } from '@/components/ui/DatePickerModal';
 import { TimePickerModal } from '@/components/ui/TimePickerModal';
+import { callBackend } from '@/services/backendApi';
+import { catalog, isTechnicianQualified, normalizeAnimalTypeId } from '../../../../functions/shared/technicianServiceMatching';
 
 interface ServiceItem { id: string; name: string; iconName: IconName; }
+interface BreedOption { id: string; animalTypeId: string; name: string; sourceCategoryId?: string; }
+interface FarmerAnimal { id: string; name?: string; type?: string; breed?: string; count?: number; age?: number; ageUnit?: string; }
 interface AvailabilitySlot { date?: string; dayOfWeek?: number; time?: string; startTime?: string; endTime?: string; }
-interface Technician { id: string; displayName: string; specialization?: string; photoURL?: string; rating?: number; available?: boolean; availabilitySlots?: AvailabilitySlot[]; alwaysAvailable?: TimeRange[] | TimeRange; alwaysAvailableEnabled?: boolean; }
-interface ScheduledAppointment { technicianId?: string; date?: string; time?: string; status?: string; responseDeadlineAt?: { toMillis?: () => number }; }
+interface Technician { id: string; role?: string; status?: string; displayName: string; specialization?: string; specializationIds?: string[]; qualificationKeys?: string[]; qualificationVerified?: boolean; photoURL?: string; rating?: number; available?: boolean; availabilitySlots?: AvailabilitySlot[]; alwaysAvailable?: TimeRange[] | TimeRange; alwaysAvailableEnabled?: boolean; }
 const dateKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-const TECHNICIAN_RESPONSE_HOURS = 24;
 const MAX_DESCRIPTION_LENGTH = 5000;
 const isPastTimeOnDate = (date: Date, time: string) => {
   const match = time.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
@@ -40,24 +42,19 @@ const issueTemplates = [
   { label: 'Animal details', text: 'Animal age or condition:\nRelevant health history:' },
 ];
 
-const serviceTypes: ServiceItem[] = [
-  { id: '1', name: 'Health Check', iconName: 'health-check' },
-  { id: '2', name: 'Vaccination', iconName: 'vaccination' },
-  { id: '3', name: 'Treatment', iconName: 'treatment' },
-  { id: '4', name: 'Deworming', iconName: 'bug' },
-  { id: '5', name: 'Artificial Insemination', iconName: 'dna' },
-  { id: '6', name: 'Iron Injection', iconName: 'vaccination' },
-  { id: '7', name: 'Vitamin Injection', iconName: 'vaccination' },
-  { id: '8', name: 'Castration', iconName: 'treatment' },
-  { id: '9', name: 'Wound Treatment', iconName: 'health-check' },
-  { id: '10', name: 'Antibiotic Injection', iconName: 'vaccination' },
-];
-
 export default function ServicesScreen() {
   const { technicianId, returnToAvailable, returnToTechnicians } = useLocalSearchParams<{ technicianId?: string; returnToAvailable?: string; returnToTechnicians?: string }>();
   const [selectedService, setSelectedService] = useState<string | null>(null);
+  const [farmerAnimals, setFarmerAnimals] = useState<FarmerAnimal[]>([]);
   const [animalType, setAnimalType] = useState('');
+  const [animalTypeId, setAnimalTypeId] = useState('');
+  const [selectedAnimalId, setSelectedAnimalId] = useState('');
   const [animalBreed, setAnimalBreed] = useState('');
+  const [animalBreedId, setAnimalBreedId] = useState('');
+  const [approvedBreeds, setApprovedBreeds] = useState<BreedOption[]>([]);
+  const [catalogError, setCatalogError] = useState('');
+  const [animalTypeModal, setAnimalTypeModal] = useState(false);
+  const [technicianModal, setTechnicianModal] = useState(false);
   const [animalQuantity, setAnimalQuantity] = useState('1');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedTime, setSelectedTime] = useState('');
@@ -65,15 +62,13 @@ export default function ServicesScreen() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [uid, setUid] = useState('');
-  const [userName, setUserName] = useState('');
   const [farmerLocation, setFarmerLocation] = useState('');
 
   // Technicians
   const [technicians, setTechnicians] = useState<Technician[]>([]);
-  const [scheduledAppointments, setScheduledAppointments] = useState<ScheduledAppointment[]>([]);
-  const [appointmentsLoading, setAppointmentsLoading] = useState(true);
-  const [appointmentsLoadFailed, setAppointmentsLoadFailed] = useState(false);
   const [selectedTech, setSelectedTech] = useState<Technician | null>(null);
+  const [candidateLoading, setCandidateLoading] = useState(false);
+  const [candidateError, setCandidateError] = useState('');
   const [dateModal, setDateModal] = useState(false);
   const [timeModal, setTimeModal] = useState(false);
   const [descriptionHeight, setDescriptionHeight] = useState(100);
@@ -88,13 +83,21 @@ export default function ServicesScreen() {
       const session = await getSession();
       if (!session) { setLoading(false); return; }
       setUid(session.uid);
-      setUserName(session.displayName || 'Farmer');
 
-      const [techSnap, farmerDoc] = await Promise.all([
-        firestore().collection(Collections.USERS).where('role', '==', 'technician').where('status', '==', 'active').get(),
+      const [farmerDoc, directTechDoc, catalogResult, animalsSnapshot] = await Promise.all([
         firestore().collection(Collections.USERS).doc(session.uid).get().catch(() => null),
+        technicianId ? firestore().collection(Collections.PUBLIC_PROFILES).doc(String(technicianId)).get().catch(() => null) : Promise.resolve(null),
+        callBackend<{ additionalBreeds?: BreedOption[] }>('getServiceCatalog').catch(error => { setCatalogError(error.message || 'Approved breed options could not be loaded.'); return null; }),
+        firestore().collection('animals').where('ownerId', '==', session.uid).get().catch(() => null),
       ]);
-      setTechnicians(techSnap.docs.map(d => ({ id: d.id, ...d.data() } as Technician)));
+      setApprovedBreeds(catalogResult?.additionalBreeds || []);
+      setFarmerAnimals((animalsSnapshot?.docs || []).map(doc => ({ id: doc.id, ...doc.data() }) as FarmerAnimal));
+      const directTech = directTechDoc?.data();
+      if (directTechDoc?.exists && directTech?.role === 'technician' && directTech.status === 'active') {
+        const technician = { id: directTechDoc.id, ...directTech } as Technician;
+        setSelectedTech(technician);
+        setTechnicians([technician]);
+      }
       setFarmerLocation(farmerDoc?.data()?.location || '');
 
       // Default date to tomorrow
@@ -105,44 +108,53 @@ export default function ServicesScreen() {
       setLoading(false);
     };
     load();
-  }, []);
+  }, [technicianId]);
 
   useEffect(() => {
+    if (!uid || !animalTypeId || !selectedService) return;
     let active = true;
-    setAppointmentsLoading(true);
-    setAppointmentsLoadFailed(false);
-    setScheduledAppointments([]);
-    return firestore().collection(Collections.APPOINTMENTS).where('status', 'in', ['pending', 'confirmed', 'upcoming']).onSnapshot(
-      snap => {
-        setScheduledAppointments(snap.docs.map(d => d.data() as ScheduledAppointment));
-        setAppointmentsLoading(false);
-      },
-      error => {
-        console.warn('Appointment availability load error:', error);
-        setAppointmentsLoadFailed(true);
-        setAppointmentsLoading(false);
-      }
-    );
-  }, [selectedDate]);
+    setCandidateLoading(true);
+    setCandidateError('');
+    callBackend<{ technicians: Technician[] }>('getEligibleTechnicians', {
+      animalTypeId,
+      serviceTypeId: selectedService,
+      ...(selectedTime ? { date: dateKey(selectedDate), time: selectedTime } : {}),
+    })
+      .then(result => {
+        if (!active) return;
+        const candidates = result.technicians || [];
+        setTechnicians(candidates);
+        if (selectedTech && !candidates.some(tech => tech.id === selectedTech.id)) {
+          setCandidateError('The selected technician does not provide this animal and service combination.');
+        }
+      })
+      .catch(error => { if (active) setCandidateError(error.message || 'Qualified technicians could not be loaded.'); })
+      .finally(() => { if (active) setCandidateLoading(false); });
+    return () => { active = false; };
+  }, [uid, animalTypeId, selectedService, selectedTech?.id, selectedTime, selectedDate]);
 
-  useEffect(() => {
-    setSelectedTech(technicianId ? technicians.find(tech => tech.id === technicianId) || null : null);
-  }, [technicianId, technicians]);
+  const serviceOptions: ServiceItem[] = catalog.serviceTypes
+    .filter(service => catalog.subSpecializations.some(item => item.serviceTypeId === service.id &&
+      (!animalTypeId || item.animalTypeId === animalTypeId) &&
+      (!selectedTech || isTechnicianQualified(selectedTech, item.animalTypeId, service.id))))
+    .map(service => ({ ...service, iconName: service.iconName as IconName }));
+  const animalTypeOptions = catalog.animalTypes.filter(type => farmerAnimals.some(animal => normalizeAnimalTypeId(animal.type || animal.name) === type.id) && catalog.subSpecializations.some(item =>
+    item.animalTypeId === type.id && (!selectedService || item.serviceTypeId === selectedService) &&
+    (!selectedTech || isTechnicianQualified(selectedTech, type.id, item.serviceTypeId))));
+  const animalBreedOptions = [
+    ...catalog.breeds.filter(breed => breed.animalTypeId === animalTypeId),
+    ...approvedBreeds.filter(breed => breed.animalTypeId === animalTypeId),
+  ];
+  const breedCatalogUnavailable = !!catalogError && ['goat', 'horse'].includes(animalTypeId);
+  const animalRecordsForType = farmerAnimals.filter(animal => normalizeAnimalTypeId(animal.type || animal.name) === animalTypeId);
+  const selectedAnimal = farmerAnimals.find(animal => animal.id === selectedAnimalId) || null;
+  const qualifiedTechnicians = technicians.filter(tech => selectedService && animalTypeId &&
+    isTechnicianQualified(tech, animalTypeId, selectedService));
 
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('en-PH', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' });
   };
-  const techniciansForSlot = technicians.filter(tech => {
-    if (appointmentsLoading || appointmentsLoadFailed || !selectedTime || tech.available === false) return false;
-    const hasSchedule = tech.availabilitySlots?.some(slot => {
-      const dateMatches = slot.date ? slot.date === dateKey(selectedDate) : slot.dayOfWeek === selectedDate.getDay();
-      if (!dateMatches) return false;
-      return slot.startTime && slot.endTime
-        ? isTimeInRange(selectedTime, slot.startTime, slot.endTime)
-        : !!slot.time && slot.time.trim().toUpperCase() === selectedTime.trim().toUpperCase();
-    }) || (tech.alwaysAvailableEnabled !== false && isTimeInAnyRange(selectedTime, tech.alwaysAvailable));
-    return hasSchedule && !scheduledAppointments.some(appointment => appointment.technicianId === tech.id && isTechnicianAppointmentActive(appointment) && hasAppointmentTimeConflict(dateKey(selectedDate), selectedTime, appointment));
-  });
+  const techniciansForSlot = !candidateLoading && !candidateError && selectedTime ? qualifiedTechnicians : [];
 
   const moveToStep = (nextStep: number) => {
     Keyboard.dismiss();
@@ -151,21 +163,26 @@ export default function ServicesScreen() {
   };
   const continueForm = () => {
     if (step === 0 && !selectedService) { modalAlert('Service required', 'Select a service to continue.'); return; }
-    if (step === 1 && (!animalType.trim() || !animalBreed.trim() || !Number.isSafeInteger(Number(animalQuantity)) || Number(animalQuantity) < 1)) { modalAlert('Animal details required', 'Enter the animal type, breed, and a quantity of at least 1.'); return; }
-    if (step === 1 && selectedService === '5' && !['pig', 'swine', 'cattle', 'carabao'].includes(animalType.trim().toLowerCase())) { modalAlert('Animal type not supported', 'Artificial Insemination is available for Pig/Swine, Cattle, and Carabao only.'); return; }
+    if (step === 1 && breedCatalogUnavailable) { modalAlert('Breed options unavailable', 'We could not verify the approved breeds. Try again when online.'); return; }
+    if (step === 1 && (!animalTypeId || !selectedAnimalId || (animalBreedOptions.length > 0 && !animalBreedId) || !Number.isSafeInteger(Number(animalQuantity)) || Number(animalQuantity) < 1 || Number(animalQuantity) > Number(selectedAnimal?.count || 1))) { modalAlert('Animal details required', 'Select one of your registered animals and enter a valid quantity.'); return; }
+    if (step === 1 && !catalog.subSpecializations.some(item => item.animalTypeId === animalTypeId && item.serviceTypeId === selectedService)) { modalAlert('Service not supported', 'Choose a service offered for this animal type.'); return; }
     if (step === 2 && !selectedTime) { modalAlert('Time required', 'Select a preferred date and time to continue.'); return; }
     if (step === 2 && isPastTimeOnDate(selectedDate, selectedTime)) { modalAlert('Invalid time', 'Choose a time later than the current time.'); return; }
-    if (step === 2 && selectedTech && !techniciansForSlot.some(tech => tech.id === selectedTech.id)) { modalAlert('Technician unavailable', 'Choose another available technician or select Any Available Technician.'); return; }
+    if (step === 2 && candidateLoading) { modalAlert('Checking availability', 'Wait while we check qualified technicians for this time.'); return; }
+    if (step === 2 && selectedTech && !techniciansForSlot.some(tech => tech.id === selectedTech.id)) { modalAlert('Technician unavailable', 'Choose another qualified technician or select All Qualified Technicians.'); return; }
     moveToStep(step + 1);
   };
 
   const handleSubmit = async () => {
     if (!selectedService) { modalAlert('Error', 'Please select a service type.'); return; }
-    if (!animalType.trim() || !animalBreed.trim() || !Number.isSafeInteger(Number(animalQuantity)) || Number(animalQuantity) < 1) { modalAlert('Error', 'Enter the animal type, breed, and a quantity of at least 1.'); return; }
-    if (selectedService === '5' && !['pig', 'swine', 'cattle', 'carabao'].includes(animalType.trim().toLowerCase())) { modalAlert('Animal type not supported', 'Artificial Insemination is available for Pig/Swine, Cattle, and Carabao only.'); return; }
+    if (breedCatalogUnavailable) { modalAlert('Breed options unavailable', 'We could not verify the approved breeds. Try again when online.'); return; }
+    if (!animalTypeId || !selectedAnimalId || (animalBreedOptions.length > 0 && !animalBreedId) || !Number.isSafeInteger(Number(animalQuantity)) || Number(animalQuantity) < 1 || Number(animalQuantity) > Number(selectedAnimal?.count || 1)) { modalAlert('Error', 'Select one of your registered animals and enter a valid quantity.'); return; }
+    if (!catalog.subSpecializations.some(item => item.animalTypeId === animalTypeId && item.serviceTypeId === selectedService)) { modalAlert('Service not supported', 'Choose a service offered for this animal type.'); return; }
     if (!selectedTime) { modalAlert('Error', 'Please select a preferred date and time.'); return; }
     if (isPastTimeOnDate(selectedDate, selectedTime)) { modalAlert('Invalid time', 'Choose a time later than the current time.'); return; }
-    if (selectedTech && !techniciansForSlot.some(tech => tech.id === selectedTech.id)) { modalAlert('Error', 'This technician is not available at the selected date and time.'); return; }
+    if (candidateLoading) { modalAlert('Checking availability', 'Wait while we check qualified technicians for this time.'); return; }
+    if (selectedTech && !techniciansForSlot.some(tech => tech.id === selectedTech.id)) { modalAlert('Error', 'This technician is not qualified or available at the selected date and time.'); return; }
+    if (!selectedTech && !techniciansForSlot.length) { modalAlert('No Qualified Technicians', 'No active technician is qualified and available for this animal, service, and time. Choose another time or service.'); return; }
 
     setSubmitting(true);
     try {
@@ -183,38 +200,54 @@ export default function ServicesScreen() {
         modalAlert('Location Not Accurate Yet', 'Wait until your phone has a stronger GPS signal, then submit the appointment again.');
         return;
       }
-      const serviceName = serviceTypes.find(s => s.id === selectedService)?.name || 'Service';
+      const serviceName = catalog.serviceTypes.find(s => s.id === selectedService)?.name || 'Service';
       const dateStr = dateKey(selectedDate);
-      const docRef = await firestore().collection(Collections.APPOINTMENTS).add({
-        serviceType: serviceName,
-        animalType: animalType.trim(),
-        animalName: animalType.trim(),
-        animalBreed: animalBreed.trim(),
+      const requestResult = await callBackend<{ appointmentId: string; eligibleTechnicianCount: number }>('createServiceRequest', {
+        serviceTypeId: selectedService,
+        animalTypeId,
+        animalRecordId: selectedAnimalId,
+        animalBreedId,
         animalQuantity: Number(animalQuantity),
-        farmerId: uid,
-        farmerName: userName,
         technicianId: selectedTech?.id || '',
-        technicianName: selectedTech?.displayName || 'Unassigned',
         date: dateStr,
         time: selectedTime,
-        status: 'pending',
-        ...(selectedTech ? { responseDeadlineAt: new Date(Date.now() + TECHNICIAN_RESPONSE_HOURS * 60 * 60 * 1000) } : {}),
         description: description.trim(),
         location: farmerLocation,
         appointmentLatitude: appointmentPosition.coords.latitude,
         appointmentLongitude: appointmentPosition.coords.longitude,
         appointmentLocationAccuracy: locationAccuracy ?? null,
-        appointmentLocationCapturedAt: firestore.FieldValue.serverTimestamp(),
-        createdAt: firestore.FieldValue.serverTimestamp()
       });
-      await logCrud('Service Requested', `${serviceName} for ${animalType.trim()}`, 'appointments', docRef.id, {
+      const pickedBreed = animalBreed.trim();
+      await logCrud('Service Requested', `${serviceName} for ${selectedAnimal?.name || animalType.trim()}`, 'appointments', requestResult.appointmentId, {
         old: {},
-        new: { serviceType: serviceName, animalType: animalType.trim(), animalBreed: animalBreed.trim(), animalQuantity: Number(animalQuantity), date: dateStr, time: selectedTime, technician: selectedTech?.displayName || 'All available technicians' }
+        new: { serviceType: serviceName, animalType: animalType.trim(), animalRecordId: selectedAnimalId, animalName: selectedAnimal?.name || animalType.trim(), animalBreed: pickedBreed, animalQuantity: Number(animalQuantity), date: dateStr, time: selectedTime, technician: selectedTech?.displayName || 'All qualified technicians' }
       });
-      modalAlert('Success', 'Service request submitted! A technician will be assigned soon.');
-      setSelectedService(null); setAnimalType(''); setAnimalBreed(''); setAnimalQuantity('1'); setDescription(''); setDescriptionHeight(100); setSelectedTime(''); setSelectedTech(null); moveToStep(0);
+      modalAlert('Success', selectedTech ? `Request sent to ${selectedTech.displayName}.` : `Request sent to ${requestResult.eligibleTechnicianCount} qualified technicians.`);
+      setSelectedService(null); setAnimalType(''); setAnimalTypeId(''); setSelectedAnimalId(''); setAnimalBreed(''); setAnimalBreedId(''); setAnimalQuantity('1'); setDescription(''); setDescriptionHeight(100); setSelectedTime(''); setSelectedTech(null); moveToStep(0);
     } catch (e: any) { modalAlert('Error', e.message); }
     finally { setSubmitting(false); }
+  };
+
+  const chooseService = (id: string) => {
+    setSelectedService(id);
+    if (animalTypeId && !catalog.subSpecializations.some(item => item.animalTypeId === animalTypeId && item.serviceTypeId === id)) {
+      setAnimalTypeId(''); setAnimalType(''); setSelectedAnimalId(''); setAnimalBreedId(''); setAnimalBreed(''); setAnimalQuantity('1');
+    }
+  };
+  const chooseAnimalType = (id: string) => {
+    const type = catalog.animalTypes.find(item => item.id === id);
+    if (!type) return;
+    setAnimalTypeId(type.id); setAnimalType(type.name); setSelectedAnimalId(''); setAnimalBreedId(''); setAnimalBreed(''); setAnimalQuantity('1');
+    if (selectedService && !catalog.subSpecializations.some(item => item.animalTypeId === type.id && item.serviceTypeId === selectedService)) setSelectedService(null);
+    setAnimalTypeModal(false);
+  };
+  const chooseAnimalRecord = (animal: FarmerAnimal) => {
+    const typeId = normalizeAnimalTypeId(animal.type || animal.name);
+    const breed = animalBreedOptions.find(item => item.animalTypeId === typeId && item.name.trim().toLowerCase() === String(animal.breed || '').trim().toLowerCase());
+    setSelectedAnimalId(animal.id);
+    setAnimalBreed(animal.breed || '');
+    setAnimalBreedId(breed?.id || '');
+    setAnimalQuantity(String(Math.max(1, Number(animal.count) || 1)));
   };
 
   if (loading) return <View style={[s.container, { justifyContent: 'center', alignItems: 'center' }]}><ActivityIndicator size="large" color={Colors.primary} /></View>;
@@ -240,10 +273,14 @@ export default function ServicesScreen() {
           {step === 0 && <>
           {/* Service Type */}
           <Text style={s.sectionTitle}>Select Service Type</Text>
-          <Text style={{ color: Colors.textSecondary, marginBottom: 8 }}>Choose the service needed for your animal.</Text>
+          <Text style={{ color: Colors.textSecondary, marginBottom: 8 }}>{selectedTech ? `Services available from ${selectedTech.displayName}.` : 'Choose the service needed for your animal.'}</Text>
+          {selectedTech && serviceOptions.length === 0 && <View style={s.emptyBox}>
+            <Text style={s.emptyText}>This technician has no verified services. Select a qualified technician instead.</Text>
+            <TouchableOpacity style={s.inlineAction} onPress={() => setSelectedTech(null)}><Text style={s.inlineActionText}>Choose any qualified technician</Text></TouchableOpacity>
+          </View>}
           <View style={s.serviceGrid}>
-            {serviceTypes.map((service) => (
-              <TouchableOpacity key={service.id} accessibilityRole="button" accessibilityState={{ selected: selectedService === service.id }} style={s.serviceItem} onPress={() => setSelectedService(service.id)}>
+            {serviceOptions.map((service) => (
+              <TouchableOpacity key={service.id} accessibilityRole="button" accessibilityState={{ selected: selectedService === service.id }} style={s.serviceItem} onPress={() => chooseService(service.id)}>
                 <View style={[s.serviceIconBox, selectedService === service.id && s.serviceIconBoxActive]}>
                   <Icon name={service.iconName} size={28} color={selectedService === service.id ? Colors.white : Colors.primary} strokeWidth={1.5} />
                 </View>
@@ -258,11 +295,31 @@ export default function ServicesScreen() {
           <Text style={s.sectionTitle}>Animal Details</Text>
           <Text style={{ color: Colors.textSecondary, marginBottom: 8 }}>Tell the technician which animal needs the service.</Text>
           <Text style={s.fieldLabel}>Animal type</Text>
-          <TextInput style={s.formInput} value={animalType} onChangeText={setAnimalType} placeholder="e.g. Pig, Horse, Cattle, Goat, Carabao" placeholderTextColor={Colors.textLight} />
-          <Text style={s.fieldLabel}>Breed</Text>
-          <TextInput style={s.formInput} value={animalBreed} onChangeText={setAnimalBreed} placeholder="Enter breed" placeholderTextColor={Colors.textLight} />
-          <Text style={s.fieldLabel}>Quantity</Text>
-          <TextInput style={s.formInput} value={animalQuantity} onChangeText={value => setAnimalQuantity(value.replace(/[^0-9]/g, ''))} placeholder="Number of animals" placeholderTextColor={Colors.textLight} keyboardType="number-pad" />
+          <TouchableOpacity style={[s.selectRow, !animalTypeOptions.length && s.disabledRow]} onPress={() => setAnimalTypeModal(true)} disabled={!animalTypeOptions.length} accessibilityRole="button" accessibilityLabel="Select animal type from your registered animals">
+            <Text style={s.selectRowText}>{animalType || (animalTypeOptions.length ? 'Select animal type' : 'No registered animals for this service')}</Text>{!!animalTypeOptions.length && <Icon name="chevron-down" size={18} color={Colors.textSecondary} />}
+          </TouchableOpacity>
+          {!animalTypeOptions.length && <TouchableOpacity style={s.inlineAction} onPress={() => router.push('/(farmer)/home/my-animals')} accessibilityRole="button"><Text style={s.inlineActionText}>Add an animal record</Text></TouchableOpacity>}
+          {animalTypeId ? <>
+            <Text style={s.fieldLabel}>Select your animal</Text>
+            {animalRecordsForType.length ? <View style={s.animalRecordList}>{animalRecordsForType.map(animal => (
+              <TouchableOpacity key={animal.id} style={[s.animalRecordCard, selectedAnimalId === animal.id && s.animalRecordCardActive]} onPress={() => chooseAnimalRecord(animal)} accessibilityRole="radio" accessibilityState={{ selected: selectedAnimalId === animal.id }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.animalRecordName}>{animal.name || animalType}</Text>
+                  <Text style={s.animalRecordMeta}>{[animal.breed, `Quantity: ${animal.count || 1}`, animal.age ? `Age: ${animal.age} ${animal.ageUnit || 'years'}` : ''].filter(Boolean).join(' · ')}</Text>
+                </View>
+                {selectedAnimalId === animal.id && <Icon name="check" size={20} color={Colors.primary} />}
+              </TouchableOpacity>
+            ))}</View> : <Text style={s.candidateHint}>No records found for this animal type.</Text>}
+            {selectedAnimal && <>
+              <Text style={s.fieldLabel}>Breed</Text>
+              <View style={[s.selectRow, s.disabledRow]}><Text style={s.selectRowText}>{animalBreed || 'No breed recorded'}</Text></View>
+              {!!animalBreed && animalBreedOptions.length > 0 && !animalBreedId && <Text style={s.errorHint}>This record’s breed is not in the approved list. Update the breed in My Animals first.</Text>}
+              <Text style={s.fieldLabel}>Quantity</Text>
+              <TextInput style={s.formInput} value={animalQuantity} onChangeText={value => setAnimalQuantity(value.replace(/[^0-9]/g, ''))} placeholder="Number of animals" placeholderTextColor={Colors.textLight} keyboardType="number-pad" />
+              <Text style={s.candidateHint}>Maximum for this record: {selectedAnimal.count || 1}</Text>
+            </>}
+          </> : <Text style={s.candidateHint}>Select an animal type to see your registered animal records.</Text>}
+          {!!catalogError && ['goat', 'horse'].includes(animalTypeId) && <Text style={s.errorHint}>Approved breed options could not be checked. Try again when online.</Text>}
           </>}
 
           {step === 2 && <>
@@ -287,7 +344,7 @@ export default function ServicesScreen() {
           </TouchableOpacity>
 
           <Text style={s.sectionTitle}>Preferred Technician</Text>
-          <View style={s.selectRow}>
+          <TouchableOpacity style={s.selectRow} onPress={() => setTechnicianModal(true)} accessibilityRole="button" accessibilityLabel="Choose preferred technician">
             <View style={s.selectRowLeft}>
               {selectedTech ? (
                 <Avatar name={selectedTech.displayName} imageUrl={selectedTech.photoURL} size={36} />
@@ -295,14 +352,18 @@ export default function ServicesScreen() {
                 <View style={[s.thumb, { justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.surface }]}><Icon name="profile" size={18} color={Colors.textLight} /></View>
               )}
               <View>
-                <Text style={s.selectRowText}>{selectedTech?.displayName || 'All available technicians'}</Text>
+                <Text style={s.selectRowText}>{selectedTech?.displayName || 'All qualified technicians'}</Text>
                 {selectedTech?.specialization ? <Text style={{ fontSize: 11, color: Colors.textSecondary }}>{selectedTech.specialization}</Text> : null}
               </View>
             </View>
-            {!selectedTech && <Icon name="check" size={18} color={Colors.primary} />}
-          </View>
-          <Text style={{ color: Colors.textSecondary, fontSize: FontSize.xs, marginTop: Spacing.sm }}>{selectedTech ? 'This request is directed to this technician.' : 'Your request will be available to all technicians.'}</Text>
+            <Icon name="chevron-down" size={18} color={Colors.textSecondary} />
+          </TouchableOpacity>
+          <Text style={{ color: Colors.textSecondary, fontSize: FontSize.xs, marginTop: Spacing.sm }}>{selectedTech ? 'This request is directed to this qualified technician.' : 'Only technicians qualified for this animal and service can receive the request.'}</Text>
           {selectedTech && <Text style={{ color: Colors.textSecondary, fontSize: FontSize.xs, marginTop: Spacing.sm }}>The technician has 1 day to accept. If they don’t, this request becomes available to all technicians.</Text>}
+          {candidateLoading ? <Text style={s.candidateHint}>Checking technician qualifications and availability…</Text>
+            : candidateError ? <Text style={s.errorHint}>{candidateError}</Text>
+              : techniciansForSlot.length === 0 ? <Text style={s.errorHint}>No qualified technician is available at this date and time. Try another time or service.</Text>
+                : <Text style={s.candidateHint}>{techniciansForSlot.length} qualified technician{techniciansForSlot.length === 1 ? '' : 's'} available.</Text>}
           </>}
 
           {step === 3 && <>
@@ -319,11 +380,11 @@ export default function ServicesScreen() {
             <Text style={s.reviewHint}>Check the details before sending your service request.</Text>
             <View style={s.reviewCard}>
               <View style={s.reviewHead}><Text style={s.reviewLabel}>SERVICE TYPE</Text><TouchableOpacity accessibilityRole="button" accessibilityLabel="Edit service type" onPress={() => moveToStep(0)}><Text style={s.reviewEdit}>Edit</Text></TouchableOpacity></View>
-              <Text style={s.reviewValue}>{serviceTypes.find(service => service.id === selectedService)?.name || 'Service'}</Text>
+              <Text style={s.reviewValue}>{catalog.serviceTypes.find(service => service.id === selectedService)?.name || 'Service'}</Text>
             </View>
             <View style={s.reviewCard}>
               <View style={s.reviewHead}><Text style={s.reviewLabel}>ANIMAL DETAILS</Text><TouchableOpacity accessibilityRole="button" accessibilityLabel="Edit animal details" onPress={() => moveToStep(1)}><Text style={s.reviewEdit}>Edit</Text></TouchableOpacity></View>
-              <Text style={s.reviewValue}>{animalType.trim()} · {animalBreed.trim()}</Text>
+              <Text style={s.reviewValue}>{selectedAnimal?.name || animalType.trim()} · {animalType.trim()}{animalBreed ? ` · ${animalBreed.trim()}` : ''}</Text>
               <Text style={s.reviewSub}>Quantity: {animalQuantity}</Text>
             </View>
             <View style={s.reviewCard}>
@@ -346,6 +407,32 @@ export default function ServicesScreen() {
 
       {dateModal && <DatePickerModal visible value={selectedDate} minimumDate={new Date()} onConfirm={date => { setSelectedDate(date); setDateModal(false); if (selectedTime && isPastTimeOnDate(date, selectedTime)) { setSelectedTime(''); modalAlert('Time cleared', 'That time has already passed for the selected date. Choose a later time.'); } }} onCancel={() => setDateModal(false)} />}
       {timeModal && <TimePickerModal visible value={selectedTime || '08:00 AM'} selectedDate={selectedDate} onConfirm={time => { if (isPastTimeOnDate(selectedDate, time)) { modalAlert('Past time not allowed', 'Choose a future time for the selected date.'); return; } setSelectedTime(time); setTimeModal(false); }} onCancel={() => setTimeModal(false)} />}
+
+      <Modal visible={animalTypeModal} transparent animationType="slide" onRequestClose={() => setAnimalTypeModal(false)}>
+        <View style={s.modalRoot}><TouchableOpacity style={s.modalBackdrop} onPress={() => setAnimalTypeModal(false)} /><View style={s.modalSheet}>
+          <Text style={s.modalTitle}>Select from your animal records</Text>
+          <ScrollView>{animalTypeOptions.map(type => <TouchableOpacity key={type.id} style={s.modalOption} onPress={() => chooseAnimalType(type.id)}>
+            <Icon name={type.iconName as IconName} size={22} color={Colors.primary} /><Text style={s.modalOptionText}>{type.name}</Text>
+          </TouchableOpacity>)}</ScrollView>
+        </View></View>
+      </Modal>
+      <Modal visible={technicianModal} transparent animationType="slide" onRequestClose={() => setTechnicianModal(false)}>
+        <View style={s.modalRoot}><TouchableOpacity style={s.modalBackdrop} onPress={() => setTechnicianModal(false)} /><View style={s.modalSheet}>
+          <Text style={s.modalTitle}>Choose a technician</Text>
+          <ScrollView>
+            <TouchableOpacity style={s.modalOption} onPress={() => { setSelectedTech(null); setTechnicianModal(false); }}>
+              <View><Text style={s.modalOptionText}>All qualified technicians</Text><Text style={s.modalOptionHint}>Send to every eligible technician</Text></View>{!selectedTech && <Icon name="check" size={20} color={Colors.primary} />}
+            </TouchableOpacity>
+            {candidateLoading ? <ActivityIndicator style={{ padding: Spacing.lg }} color={Colors.primary} />
+              : !selectedTime ? <Text style={s.modalOptionHint}>Select a date and time to find available technicians.</Text>
+                : candidateError ? <Text style={s.errorHint}>{candidateError}</Text>
+                  : techniciansForSlot.length ? techniciansForSlot.map(tech => <TouchableOpacity key={tech.id} style={s.modalOption} onPress={() => { setSelectedTech(tech); setTechnicianModal(false); }}>
+                    <Avatar name={tech.displayName} imageUrl={tech.photoURL} size={36} /><View style={{ flex: 1 }}><Text style={s.modalOptionText}>{tech.displayName}</Text>{!!tech.specialization && <Text style={s.modalOptionHint}>{tech.specialization}</Text>}</View>{selectedTech?.id === tech.id && <Icon name="check" size={20} color={Colors.primary} />}
+                  </TouchableOpacity>)
+                  : <Text style={s.errorHint}>No qualified technician is available for the selected animal, service, and time.</Text>}
+          </ScrollView>
+        </View></View>
+      </Modal>
 
     </KeyboardAvoidingView>
   );
@@ -397,4 +484,23 @@ const s = StyleSheet.create({
   templateChipText: { color: Colors.primary, fontSize: FontSize.xs, fontWeight: '600' },
   textArea: { borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md, padding: Spacing.lg, fontSize: FontSize.md, color: Colors.text, minHeight: 100, backgroundColor: Colors.white },
   descriptionCounter: { textAlign: 'right', color: Colors.textSecondary, fontSize: FontSize.xs, marginTop: Spacing.xs },
+  disabledRow: { opacity: 0.65 },
+  animalRecordList: { gap: Spacing.sm, marginTop: Spacing.xs },
+  animalRecordCard: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, minHeight: 64, borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md, padding: Spacing.md, backgroundColor: Colors.white },
+  animalRecordCardActive: { borderColor: Colors.primary, backgroundColor: '#EAF6EF' },
+  animalRecordName: { color: Colors.text, fontSize: FontSize.sm, fontWeight: '700' },
+  animalRecordMeta: { color: Colors.textSecondary, fontSize: FontSize.xs, marginTop: 4 },
+  candidateHint: { color: Colors.primary, fontSize: FontSize.xs, marginTop: Spacing.sm },
+  errorHint: { color: Colors.error, fontSize: FontSize.xs, marginTop: Spacing.sm },
+  emptyBox: { padding: Spacing.md, backgroundColor: Colors.surface, borderRadius: BorderRadius.md, marginBottom: Spacing.md },
+  emptyText: { color: Colors.textSecondary, fontSize: FontSize.sm },
+  inlineAction: { paddingTop: Spacing.sm },
+  inlineActionText: { color: Colors.primary, fontSize: FontSize.sm, fontWeight: '700' },
+  modalRoot: { flex: 1, justifyContent: 'flex-end' },
+  modalBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.4)' },
+  modalSheet: { maxHeight: '75%', backgroundColor: Colors.white, borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: BorderRadius.xl, padding: Spacing.xl, paddingBottom: Spacing.xl },
+  modalTitle: { color: Colors.text, fontSize: FontSize.lg, fontWeight: '700', marginBottom: Spacing.md },
+  modalOption: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.border, paddingVertical: Spacing.md },
+  modalOptionText: { flex: 1, color: Colors.text, fontSize: FontSize.md, fontWeight: '600' },
+  modalOptionHint: { color: Colors.textSecondary, fontSize: FontSize.xs, paddingVertical: Spacing.sm },
 });

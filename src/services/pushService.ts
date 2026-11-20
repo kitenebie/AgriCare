@@ -1,20 +1,10 @@
 /**
  * Push Notification Sender — triggers FCM notifications
  * 
- * In production, FCM push notifications are sent via Cloud Functions.
- * This service creates a Firestore trigger document that a Cloud Function
- * picks up and sends as an actual FCM push.
- * 
- * Cloud Function pattern:
- * - Listens to `pushQueue/{docId}` writes
- * - Reads target user's FCM tokens from `users/{userId}.fcmTokens`
- * - Sends FCM message via Admin SDK
- * - Marks document as sent
+ * FCM tokens stay server-side; the authenticated Cloud Function validates and sends.
  */
 
-import firestore from '@react-native-firebase/firestore';
-import { Collections } from './firebase';
-import { supabase } from '../../utils/supabase';
+import { callBackend } from './backendApi';
 
 interface PushPayload {
   title: string;
@@ -25,43 +15,15 @@ interface PushPayload {
 }
 
 /**
- * Queue a push notification for a user.
- * A Cloud Function will pick this up and send via FCM Admin SDK.
+ * Send a push through the authenticated Cloud Function without exposing FCM tokens.
  */
 export const sendPushNotification = async (
   targetUserId: string,
   payload: PushPayload
 ): Promise<string> => {
   try {
-    // Get user's FCM tokens
-    const userDoc = await firestore().collection(Collections.USERS).doc(targetUserId).get();
-    const userData = userDoc.data();
-    const fcmToken = userData?.fcmToken || '';
-
-    if (!fcmToken) {
-      console.warn(`No FCM token found for user ${targetUserId}`);
-      return '';
-    }
-
-    // Call Supabase Edge Function to send FCM
-    const { data, error } = await supabase.functions.invoke('send-push', {
-      body: {
-        fcmTokens: [fcmToken],
-        title: payload.title,
-        body: payload.body,
-        data: payload.data || {},
-        // Use custom sound for chat messages, default for others
-        sound: payload.data?.type === 'new_chat_message' ? 'new_chat' : 'notification',
-      },
-    });
-
-    if (error) {
-      console.error('Push notification error:', error.message);
-      return '';
-    }
-
-    console.log(`Push sent to ${targetUserId}:`, data);
-    return 'sent';
+    const result = await callBackend<{ sent: boolean }>('sendPushNotification', { targetUserId, payload });
+    return result.sent ? 'sent' : '';
   } catch (error: any) {
     console.error('Push notification queue error:', error.message);
     return '';

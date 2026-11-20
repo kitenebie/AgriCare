@@ -1,3 +1,5 @@
+const technicianCatalog = {"specializations":[{"id":"pig-healthcare-treatment","name":"Pig Healthcare and Treatment"},{"id":"cattle-healthcare-treatment","name":"Cattle Healthcare and Treatment"},{"id":"goat-healthcare-treatment","name":"Goat Healthcare and Treatment"},{"id":"horse-healthcare-treatment","name":"Horse Healthcare and Treatment"},{"id":"carabao-healthcare-treatment","name":"Carabao Healthcare and Treatment"}],"subSpecializations":[{"id":"pig-artificial-insemination","specializationId":"pig-healthcare-treatment","animalTypeId":"pig","serviceTypeId":"5","name":"Pig Artificial Insemination"},{"id":"pig-castration","specializationId":"pig-healthcare-treatment","animalTypeId":"pig","serviceTypeId":"8","name":"Pig Castration"},{"id":"pig-vaccination","specializationId":"pig-healthcare-treatment","animalTypeId":"pig","serviceTypeId":"2","name":"Vaccination"},{"id":"pig-health-check","specializationId":"pig-healthcare-treatment","animalTypeId":"pig","serviceTypeId":"1","name":"Health Check"},{"id":"pig-vitamin-injection","specializationId":"pig-healthcare-treatment","animalTypeId":"pig","serviceTypeId":"7","name":"Vitamin Injection"},{"id":"pig-iron-injection","specializationId":"pig-healthcare-treatment","animalTypeId":"pig","serviceTypeId":"6","name":"Iron Injection"},{"id":"pig-antibiotic-injection","specializationId":"pig-healthcare-treatment","animalTypeId":"pig","serviceTypeId":"10","name":"Antibiotic Injection"},{"id":"pig-deworming","specializationId":"pig-healthcare-treatment","animalTypeId":"pig","serviceTypeId":"4","name":"Deworming"},{"id":"pig-wound-treatment","specializationId":"pig-healthcare-treatment","animalTypeId":"pig","serviceTypeId":"9","name":"Wound Treatment"},{"id":"cattle-artificial-insemination","specializationId":"cattle-healthcare-treatment","animalTypeId":"cattle","serviceTypeId":"5","name":"Cattle Artificial Insemination"},{"id":"cattle-vaccination","specializationId":"cattle-healthcare-treatment","animalTypeId":"cattle","serviceTypeId":"2","name":"Vaccination"},{"id":"cattle-health-check","specializationId":"cattle-healthcare-treatment","animalTypeId":"cattle","serviceTypeId":"1","name":"Health Check"},{"id":"cattle-vitamin-injection","specializationId":"cattle-healthcare-treatment","animalTypeId":"cattle","serviceTypeId":"7","name":"Vitamin Injection"},{"id":"cattle-iron-injection","specializationId":"cattle-healthcare-treatment","animalTypeId":"cattle","serviceTypeId":"6","name":"Iron Injection"},{"id":"cattle-antibiotic-injection","specializationId":"cattle-healthcare-treatment","animalTypeId":"cattle","serviceTypeId":"10","name":"Antibiotic Injection"},{"id":"cattle-deworming","specializationId":"cattle-healthcare-treatment","animalTypeId":"cattle","serviceTypeId":"4","name":"Deworming"},{"id":"cattle-wound-treatment","specializationId":"cattle-healthcare-treatment","animalTypeId":"cattle","serviceTypeId":"9","name":"Wound Treatment"},{"id":"goat-vaccination","specializationId":"goat-healthcare-treatment","animalTypeId":"goat","serviceTypeId":"2","name":"Vaccination"},{"id":"goat-health-check","specializationId":"goat-healthcare-treatment","animalTypeId":"goat","serviceTypeId":"1","name":"Health Check"},{"id":"goat-vitamin-injection","specializationId":"goat-healthcare-treatment","animalTypeId":"goat","serviceTypeId":"7","name":"Vitamin Injection"},{"id":"goat-iron-injection","specializationId":"goat-healthcare-treatment","animalTypeId":"goat","serviceTypeId":"6","name":"Iron Injection"},{"id":"goat-antibiotic-injection","specializationId":"goat-healthcare-treatment","animalTypeId":"goat","serviceTypeId":"10","name":"Antibiotic Injection"},{"id":"goat-deworming","specializationId":"goat-healthcare-treatment","animalTypeId":"goat","serviceTypeId":"4","name":"Deworming"},{"id":"goat-wound-treatment","specializationId":"goat-healthcare-treatment","animalTypeId":"goat","serviceTypeId":"9","name":"Wound Treatment"},{"id":"horse-vaccination","specializationId":"horse-healthcare-treatment","animalTypeId":"horse","serviceTypeId":"2","name":"Vaccination"},{"id":"horse-health-check","specializationId":"horse-healthcare-treatment","animalTypeId":"horse","serviceTypeId":"1","name":"Health Check"},{"id":"horse-vitamin-injection","specializationId":"horse-healthcare-treatment","animalTypeId":"horse","serviceTypeId":"7","name":"Vitamin Injection"},{"id":"horse-iron-injection","specializationId":"horse-healthcare-treatment","animalTypeId":"horse","serviceTypeId":"6","name":"Iron Injection"},{"id":"horse-antibiotic-injection","specializationId":"horse-healthcare-treatment","animalTypeId":"horse","serviceTypeId":"10","name":"Antibiotic Injection"},{"id":"horse-deworming","specializationId":"horse-healthcare-treatment","animalTypeId":"horse","serviceTypeId":"4","name":"Deworming"},{"id":"horse-wound-treatment","specializationId":"horse-healthcare-treatment","animalTypeId":"horse","serviceTypeId":"9","name":"Wound Treatment"},{"id":"carabao-artificial-insemination","specializationId":"carabao-healthcare-treatment","animalTypeId":"carabao","serviceTypeId":"5","name":"Carabao Artificial Insemination"},{"id":"carabao-vaccination","specializationId":"carabao-healthcare-treatment","animalTypeId":"carabao","serviceTypeId":"2","name":"Vaccination"},{"id":"carabao-health-check","specializationId":"carabao-healthcare-treatment","animalTypeId":"carabao","serviceTypeId":"1","name":"Health Check"},{"id":"carabao-vitamin-injection","specializationId":"carabao-healthcare-treatment","animalTypeId":"carabao","serviceTypeId":"7","name":"Vitamin Injection"},{"id":"carabao-iron-injection","specializationId":"carabao-healthcare-treatment","animalTypeId":"carabao","serviceTypeId":"6","name":"Iron Injection"},{"id":"carabao-antibiotic-injection","specializationId":"carabao-healthcare-treatment","animalTypeId":"carabao","serviceTypeId":"10","name":"Antibiotic Injection"},{"id":"carabao-deworming","specializationId":"carabao-healthcare-treatment","animalTypeId":"carabao","serviceTypeId":"4","name":"Deworming"},{"id":"carabao-wound-treatment","specializationId":"carabao-healthcare-treatment","animalTypeId":"carabao","serviceTypeId":"9","name":"Wound Treatment"}]} as const;
+
 const projectId = "agecare-ca137";
 const jsonHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -78,7 +80,7 @@ const verifyFirebaseToken = async (token: string) => {
   return claims;
 };
 
-const firebaseAdminUpdateEmailVerified = async (uid: string) => {
+const firebaseAdminAccessToken = async () => {
   const raw = Deno.env.get("FIREBASE_SERVICE_ACCOUNT");
   if (!raw) throw new Error("Missing Firebase service account.");
   const serviceAccount = JSON.parse(raw);
@@ -105,12 +107,76 @@ const firebaseAdminUpdateEmailVerified = async (uid: string) => {
   });
   if (!authResponse.ok) throw new Error("Firebase admin authentication failed.");
   const { access_token } = await authResponse.json();
+  return access_token as string;
+};
+
+const firebaseAdminUpdateEmailVerified = async (uid: string) => {
+  const accessToken = await firebaseAdminAccessToken();
   const update = await fetch(`https://identitytoolkit.googleapis.com/v1/projects/${projectId}/accounts:update`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${access_token}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({ localId: uid, emailVerified: true }),
   });
   if (!update.ok) throw new Error("Could not mark the Firebase email as verified.");
+};
+
+const updateTechnicianQualifications = async (req: Request, body: Record<string, unknown>) => {
+  const token = req.headers.get("authorization")?.match(/^Bearer (.+)$/i)?.[1];
+  if (!token) return { status: 401, body: { error: "Authentication required." } };
+  const claims = await verifyFirebaseToken(token);
+  const specializationIds = body.specializationIds;
+  const subSpecializationIds = body.subSpecializationIds;
+  if (!Array.isArray(specializationIds) || !Array.isArray(subSpecializationIds) || !specializationIds.length || !subSpecializationIds.length ||
+    specializationIds.some(id => typeof id !== "string") || subSpecializationIds.some(id => typeof id !== "string")) {
+    return { status: 400, body: { error: "Select at least one specialization and service." } };
+  }
+  if (new Set(specializationIds).size !== specializationIds.length || new Set(subSpecializationIds).size !== subSpecializationIds.length) {
+    return { status: 400, body: { error: "Duplicate qualifications are not allowed." } };
+  }
+  const selectedSpecializations = new Set(specializationIds as string[]);
+  const selectedSubs = (subSpecializationIds as string[]).map(id => technicianCatalog.subSpecializations.find(item => item.id === id));
+  if ((specializationIds as string[]).some(id => !technicianCatalog.specializations.some(item => item.id === id)) ||
+    selectedSubs.some(item => !item || !selectedSpecializations.has(item.specializationId))) {
+    return { status: 400, body: { error: "One or more selected qualifications are invalid." } };
+  }
+  if ((specializationIds as string[]).some(id => !selectedSubs.some(item => item?.specializationId === id))) {
+    return { status: 400, body: { error: "Choose at least one service under every selected animal specialization." } };
+  }
+
+  const uid = claims.sub;
+  const docUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/users/${uid}`;
+  const accessToken = await firebaseAdminAccessToken();
+  const headers = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
+  const existing = await fetch(docUrl, { headers });
+  if (existing.status === 404) return { status: 403, body: { error: "Technician profile not found." } };
+  if (!existing.ok) throw new Error(`Could not load technician profile (HTTP ${existing.status}).`);
+  const profile = await existing.json();
+  const fields = profile.fields || {};
+  if (fields.role?.stringValue !== "technician" || !["pending", "active"].includes(fields.status?.stringValue)) {
+    return { status: 403, body: { error: "Only an active or pending technician can update qualifications." } };
+  }
+
+  const subs = selectedSubs as NonNullable<typeof selectedSubs[number]>[];
+  const serviceIds = subSpecializationIds as string[];
+  const query = new URLSearchParams();
+  ["specializationIds", "subSpecializationIds", "qualificationKeys", "qualificationVerified", "qualificationCatalogVersion", "expertise", "specialization", "updatedAt"]
+    .forEach(field => query.append("updateMask.fieldPaths", field));
+  const saved = await fetch(`${docUrl}?${query}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ fields: {
+      specializationIds: { arrayValue: { values: (specializationIds as string[]).map(stringValue => ({ stringValue })) } },
+      subSpecializationIds: { arrayValue: { values: serviceIds.map(stringValue => ({ stringValue })) } },
+      qualificationKeys: { arrayValue: { values: [...new Set(subs.map(item => `${item.animalTypeId}:${item.serviceTypeId}`))].map(stringValue => ({ stringValue })) } },
+      qualificationVerified: { booleanValue: true },
+      qualificationCatalogVersion: { integerValue: "1" },
+      expertise: { arrayValue: { values: subs.map(item => ({ stringValue: item.name })) } },
+      specialization: { stringValue: (specializationIds as string[]).map(id => technicianCatalog.specializations.find(item => item.id === id)!.name).join(", ") },
+      updatedAt: { timestampValue: new Date().toISOString() },
+    } }),
+  });
+  if (!saved.ok) throw new Error(`Could not save technician qualifications (HTTP ${saved.status}).`);
+  return { status: 200, body: { ok: true } };
 };
 
 Deno.serve(async (req) => {
@@ -120,8 +186,12 @@ Deno.serve(async (req) => {
   let stage = "parse_request";
   try {
     const body = await req.json();
-    stage = ["request", "verify", "complete"].includes(body.action) ? body.action : "unknown_action";
+    stage = ["request", "verify", "complete", "update_technician_qualifications"].includes(body.action) ? body.action : "unknown_action";
     console.log("Registration email OTP action:", stage);
+    if (body.action === "update_technician_qualifications") {
+      const result = await updateTechnicianQualifications(req, body);
+      return response(result.status, result.body);
+    }
     const email = String(body.email || "").trim().toLowerCase();
     if (!validEmail(email)) return response(400, { error: "Enter a valid email address." });
     const emailHash = await sha256(email);
@@ -221,7 +291,8 @@ Deno.serve(async (req) => {
     }
     return response(400, { error: "Unknown email verification action." });
   } catch (error) {
-    console.error("Registration email OTP failed at", stage, error instanceof Error ? error.message : "unknown error");
-    return response(500, { error: "Email verification is temporarily unavailable." });
+    const detail = error instanceof Error ? error.message : "unknown error";
+    console.error("Registration email OTP failed at", stage, detail);
+    return response(500, { error: stage === "update_technician_qualifications" ? detail : "Email verification is temporarily unavailable." });
   }
 });

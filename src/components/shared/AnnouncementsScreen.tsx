@@ -97,7 +97,7 @@ export default function AnnouncementsScreen({ role }: Props) {
 
       // Notify active users selected by the announcement audience on create and edit.
       try {
-        let query = firestore().collection(Collections.USERS).where('status', '==', 'active');
+        let query = firestore().collection(Collections.PUBLIC_PROFILES).where('status', '==', 'active');
         if (audience === 'farmers') query = query.where('role', '==', 'farmer');
         else if (audience === 'technicians') query = query.where('role', '==', 'technician');
         const usersSnap = await query.get();
@@ -117,7 +117,7 @@ export default function AnnouncementsScreen({ role }: Props) {
         await firestore().collection(Collections.ANNOUNCEMENTS).doc(id).delete();
         await logCrud('Announcement Deleted', `Deleted: ${name}`, 'announcements', id);
         try {
-          let query = firestore().collection(Collections.USERS).where('status', '==', 'active');
+          let query = firestore().collection(Collections.PUBLIC_PROFILES).where('status', '==', 'active');
           if (targetAudience === 'farmers') query = query.where('role', '==', 'farmer');
           else if (targetAudience === 'technicians') query = query.where('role', '==', 'technician');
           const usersSnap = await query.get();

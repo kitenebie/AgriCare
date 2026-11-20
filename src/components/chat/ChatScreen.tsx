@@ -556,7 +556,7 @@ export default function ChatScreen() {
       if (otherUserId) {
         try {
           const otherDoc = await firestore()
-            .collection(Collections.USERS)
+            .collection(Collections.PUBLIC_PROFILES)
             .doc(otherUserId)
             .get();
           if (otherDoc.exists) {

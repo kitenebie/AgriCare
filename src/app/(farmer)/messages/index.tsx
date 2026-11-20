@@ -68,7 +68,7 @@ export default function MessagesScreen() {
 
             if (otherUserId) {
               try {
-                const userDoc = await firestore().collection(Collections.USERS).doc(otherUserId).get();
+                const userDoc = await firestore().collection(Collections.PUBLIC_PROFILES).doc(otherUserId).get();
                 if (userDoc.exists) {
                   const data = userDoc.data();
                   otherName = data?.displayName || 'Technician';
