@@ -343,14 +343,18 @@ const randomToken = () => {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return btoa(String.fromCharCode(...bytes)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 };
+const canUpdateProfile = (user: Record<string, any> | null) =>
+  !!user && ["farmer", "technician"].includes(String(user.role || "").trim().toLowerCase()) &&
+  ["active", "approved", "verified"].includes(String(user.status || "").trim().toLowerCase());
 const profileUpdateAction = async (uid: string, body: Record<string, any>) => {
   const headers = await adminHeaders();
   const user = await firestoreDocument(`users/${uid}`, headers);
-  if (!user || !["farmer", "technician"].includes(user.role) || user.status !== "active") throw Object.assign(new Error("Only an active farmer or technician can update this profile."), { status: 403 });
-  const patch = profilePatch(body.profile, user.role);
+  if (!user || !canUpdateProfile(user)) throw Object.assign(new Error("Only an approved farmer or technician can update this profile."), { status: 403 });
+  const role = String(user.role).trim().toLowerCase();
+  const patch = profilePatch(body.profile, role);
   const profileHash = await sha256(JSON.stringify(patch));
   if (body.action === "start_farmer_profile_verification") {
-    profilePhotoSource(Deno.env.get("SUPABASE_URL") || "", user.role, user.photoURL);
+    profilePhotoSource(Deno.env.get("SUPABASE_URL") || "", role, user.photoURL);
     const challengeToken = randomToken();
     const challenge = { tokenHash: await sha256(challengeToken), profileHash, expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(), attempts: 0 };
     const url = new URL(`${firestoreUrl}/users/${encodeURIComponent(uid)}`);
@@ -374,7 +378,7 @@ const profileUpdateAction = async (uid: string, body: Record<string, any>) => {
   try {
     const current = await firestoreDocument(`users/${encodeURIComponent(uid)}`, headers, transaction);
     const challenge = current?.profileUpdateChallenge;
-    if (!current || current.role !== user.role || current.status !== "active") throw Object.assign(new Error("Only an active farmer or technician can update this profile."), { status: 403 });
+    if (!current || !canUpdateProfile(current) || String(current.role).trim().toLowerCase() !== role) throw Object.assign(new Error("Only an approved farmer or technician can update this profile."), { status: 403 });
     const challengeCheck = {
       tokenMatches: challenge?.tokenHash === tokenHash,
       profileMatches: challenge?.profileHash === profileHash,
@@ -385,7 +389,7 @@ const profileUpdateAction = async (uid: string, body: Record<string, any>) => {
     if (Number(challenge.attempts) >= 3) throw Object.assign(new Error("Too many attempts. Start a new verification."), { status: 429 });
     if (Date.parse(challenge.lockUntil || "") > Date.now()) throw Object.assign(new Error("Verification is already in progress."), { status: 409 });
     claimedPhotoURL = current.photoURL || "";
-    const oldPhotoURL = profilePhotoSource(Deno.env.get("SUPABASE_URL") || "", user.role, claimedPhotoURL);
+    const oldPhotoURL = profilePhotoSource(Deno.env.get("SUPABASE_URL") || "", role, claimedPhotoURL);
     const claimed = { ...challenge, attempts: Number(challenge.attempts || 0) + 1, lockId, lockUntil: new Date(Date.now() + 2 * 60_000).toISOString() };
     const commit = await fetch(`${firestoreUrl}:commit`, { method: "POST", headers, body: JSON.stringify({ transaction, writes: [{ update: { name: `${firestoreResource}/users/${uid}`, fields: { profileUpdateChallenge: profileChallengeFields(claimed) } }, updateMask: { fieldPaths: ["profileUpdateChallenge"] } }] }) });
     if (!commit.ok) throw Object.assign(new Error("Could not claim the verification attempt."), { status: 409 });
@@ -393,7 +397,7 @@ const profileUpdateAction = async (uid: string, body: Record<string, any>) => {
 
     const apiKey = Deno.env.get("FACE_MATCH_API_KEY");
     if (!apiKey) throw new Error("Face matching is not configured on the server.");
-    uploadedSelfie = await uploadVerifiedProfileSelfie(uid, user.role, face);
+    uploadedSelfie = await uploadVerifiedProfileSelfie(uid, role, face);
     console.info("[Profile Selfie Match] Sending API request", {
       old_profile_url: oldPhotoURL,
       new_profile_url: uploadedSelfie.photoURL,

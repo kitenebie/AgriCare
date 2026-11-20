@@ -220,7 +220,6 @@ export default function HomeScreen() {
           pointerEvents="none"
         />
         <View style={styles.headerTop}>
-          <Text style={styles.greeting}></Text>
           <View style={styles.headerRight}>
             <TouchableOpacity style={styles.notifButton} onPress={() => router.navigate({ pathname: '/(farmer)/messages', params: { tab: 'notifications' } })}>
               <Icon name="bell" size={22} color={Colors.primary} />
@@ -234,8 +233,10 @@ export default function HomeScreen() {
           </View>
         </View>
         <View style={styles.headerIdentity}>
-          <Text style={styles.greeting}>Hello,</Text>
-          <Text style={styles.name} numberOfLines={2}>{userName}</Text>
+          <View style={styles.identityCopy}>
+            <Text style={styles.greeting}>Hello,</Text>
+            <Text style={styles.name} numberOfLines={2}>{userName}</Text>
+          </View>
           <View style={styles.roleBadge}>
             <Icon name="farmer" size={16} color={Colors.primary} />
             <Text style={styles.role}>Farmer</Text>
@@ -360,10 +361,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.surface, paddingHorizontal: Spacing.lg },
   header: { position: 'relative', overflow: 'hidden', backgroundColor: '#B4E6B8', marginHorizontal: -Spacing.lg, borderBottomLeftRadius: BorderRadius.xl, borderBottomRightRadius: BorderRadius.xl },
   headerBanner: { position: 'absolute', top: 0, left: 0, height: '100%', width: '100%' },
-  headerTop: { paddingHorizontal: Spacing.sm, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  headerIdentity: { marginTop: Spacing.sm, paddingHorizontal: Spacing.lg },
-  greeting: { fontSize: FontSize.lg, color: Colors.primaryDark, opacity: 0.9 },
-  name: { width: '56%', fontSize: FontSize.xxl, lineHeight: FontSize.xxl, fontWeight: '800', color: Colors.primary },
+  headerTop: { paddingHorizontal: Spacing.sm, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' },
+  headerIdentity: { marginTop: Spacing.xs, paddingHorizontal: Spacing.lg },
+  identityCopy: { alignSelf: 'flex-start', maxWidth: '64%', backgroundColor: Colors.overlay, borderColor: Colors.white, borderWidth: 1, borderRadius: BorderRadius.md, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs },
+  greeting: { fontSize: FontSize.lg, color: Colors.white, textShadowColor: Colors.primaryDark, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 3 },
+  name: { fontSize: FontSize.xxl, lineHeight: FontSize.xxl, fontWeight: '800', color: Colors.white, textShadowColor: Colors.primaryDark, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 4 },
   role: { fontSize: FontSize.xs, color: Colors.primary, fontWeight: '600' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   roleBadge: { alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: Colors.white, borderRadius: BorderRadius.full, paddingHorizontal: Spacing.sm, paddingVertical: 5, marginTop: -Spacing.sm, marginBottom: Spacing.md, ...Shadow.light },

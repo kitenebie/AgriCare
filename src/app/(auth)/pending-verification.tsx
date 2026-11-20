@@ -26,6 +26,7 @@ export default function PendingVerificationScreen() {
   useEffect(() => {
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
+    let redirectedToDashboard = false;
 
     getSession().then(session => {
       if (cancelled) return;
@@ -48,7 +49,13 @@ export default function PendingVerificationScreen() {
           const status = String(data.status || 'unknown').toLowerCase();
           setAccountStatus(status);
           if (status === 'pending') setState('pending');
-          else if (['active', 'approved', 'verified'].includes(status)) setState('approved');
+          else if (['active', 'approved', 'verified'].includes(status)) {
+            setState('approved');
+            if (session.role === 'technician' && !redirectedToDashboard) {
+              redirectedToDashboard = true;
+              router.replace('/(technician)/dashboard' as any);
+            }
+          }
           else if (status === 'rejected') {
             router.replace({ pathname: '/(auth)/rejected', params: { reason: data.rejectionReason || 'Your documents did not meet our verification requirements.' } });
           } else setState('other');
@@ -145,7 +152,7 @@ export default function PendingVerificationScreen() {
             </Text>
             <Text style={s.description}>
               {approved
-                ? 'Your account has been verified successfully. You can now return to login and continue using AgriCare.'
+                ? 'Your account has been verified successfully. Opening your technician dashboard…'
                 : 'Your registration has been submitted successfully! An AgriCare administrator will review and verify your account.'}
             </Text>
 
@@ -162,10 +169,12 @@ export default function PendingVerificationScreen() {
           </>
         )}
 
-        <Pressable onPress={handleLogin} accessibilityRole="button" style={({ pressed }) => [s.loginButton, pressed && s.pressed]}>
-          <LoginArrow />
-          <Text style={s.loginText}>Back to Login</Text>
-        </Pressable>
+        {!approved && (
+          <Pressable onPress={handleLogin} accessibilityRole="button" style={({ pressed }) => [s.loginButton, pressed && s.pressed]}>
+            <LoginArrow />
+            <Text style={s.loginText}>Back to Login</Text>
+          </Pressable>
+        )}
       </ScrollView>
 
       <View pointerEvents="none" style={s.bottomWave}>

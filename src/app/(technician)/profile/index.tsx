@@ -492,6 +492,21 @@ export default function TechnicianProfileScreen() {
                   automaticallyAdjustKeyboardInsets
                 >
                   <Text style={styles.label}>Display Name</Text>
+                  <TouchableOpacity
+                    style={styles.changePhotoButton}
+                    onPress={handleSaveAccount}
+                    disabled={saving}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Change profile picture and verify with a new selfie"
+                  >
+                    <Avatar name={user?.displayName || "Technician"} imageUrl={photoURL} size={52} />
+                    <View style={styles.changePhotoCopy}>
+                      <Text style={styles.changePhotoTitle}>Profile Picture</Text>
+                      <Text style={styles.changePhotoHint}>Capture a new selfie to verify and update</Text>
+                    </View>
+                    <Icon name="camera" size={21} color={Colors.primary} />
+                  </TouchableOpacity>
                   <TextInput
                     style={styles.input}
                     value={editName}
@@ -835,6 +850,20 @@ const styles = StyleSheet.create({
     marginTop: Spacing.lg,
     marginBottom: Spacing.sm,
   },
+  changePhotoButton: {
+    minHeight: 68,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.md,
+    padding: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.lg,
+    backgroundColor: Colors.mintLight,
+  },
+  changePhotoCopy: { flex: 1, gap: Spacing.xs },
+  changePhotoTitle: { fontSize: FontSize.md, fontWeight: "700", color: Colors.text },
+  changePhotoHint: { fontSize: FontSize.xs, color: Colors.textSecondary },
   input: {
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.lg,

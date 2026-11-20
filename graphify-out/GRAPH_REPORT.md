@@ -1,28 +1,28 @@
 # Graph Report - AgriCare  (2026-11-21)
 
 ## Corpus Check
-- 360 files · ~5,755,104 words
+- 360 files · ~5,755,306 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 365 file(s) not represented in the graph (top: (none) 276, .csv 53, .xml 27)
 
 ## Summary
-- 3878 nodes · 7284 edges · 205 communities (174 shown, 31 thin omitted)
+- 3879 nodes · 7286 edges · 235 communities (200 shown, 35 thin omitted)
 - Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 180 edges (avg confidence: 0.88)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `4b952ecd`
+- Built from commit: `ba48e8bc`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - pathlib
 - storage.ts
-- sessionService.ts
+- react-native
 - yes/package.json
 - dependencies
 - modalAlert
-- Icon
+- TimeRange
 - CHANGELOG.md
 - expo
 - DesignSystemGenerator
@@ -52,7 +52,7 @@
 - gray
 - Tailwind CSS Utility Reference
 - 📊 AgriCare — System Flowchart
-- schedule/index.tsx
+- react
 - test_design_system_mode.py
 - 📱 AgriCare — Task Progress (Non-Technical Summary)
 - IdentityVerificationResult.tsx
@@ -64,7 +64,7 @@
 - completeFarmerProfileVerification
 - Brand Guidelines v1.0
 - Design
-- Avatar.tsx
+- test_data_contracts.py
 - Use Case Table Summary
 - availability.ts
 - html-token-validator.py
@@ -92,15 +92,15 @@
 - 🗄️ AgriCare — Entity Relationship Diagram
 - 🤖 PROMPTS.md — AgriCare
 - send-push/index.ts
-- cip/generate.py
+- search
 - config.ts
 - design_system.py
-- services/index.ts
+- appointmentService.ts
 - cip/core.py
 - Asset Approval Checklist
 - Logo AI Prompt Engineering
 - read_rows
-- TestTokenizer
+- soundService.ts
 - logo/search.py
 - Color Palette Management
 - CIP Deliverable Guide
@@ -116,7 +116,7 @@
 - json
 - spacing
 - Routing by Task Type
-- pending-verification.tsx
+- ui/index.ts
 - shadcn/ui Theming & Customization
 - TestTailwindConfigGenerator
 - Asset Organization Guide
@@ -163,11 +163,12 @@
 - Primitive Tokens
 - embed-tokens.cjs
 - validate-tokens.cjs
-- button
+- card
 - Colors
 - Core Visual Elements
 - inject-brand-context.cjs
 - CIP Design Style Guide
+- pending-verification.tsx
 - Quick Reference
 - sync-brand-to-tokens.cjs
 - Brand
@@ -180,13 +181,16 @@
 - .test_full_configuration_typescript
 - Cancellation flow QA report — 2026-11-14
 - ui/index.ts
-- primary
-- secondary
+- 🤝 HANDOFF.md — AgriCare
+- render-html.py
+- BM25
+- button
 - .validate_config
 - compilerOptions
 - ui-ux-pro-max
 - Slides Reference
 - HTML Slide Template
+- BM25
 - HTML Slide Template
 - register.tsx
 - Query Contract
@@ -197,19 +201,43 @@
 - Pre-Delivery Checklist
 - Prerequisites
 - Brand Guidelines Template
+- BM25
+- _normalize
+- input
 - sm
 - Example Workflow
 - Q: realtime ba naguupdate ang location ng mga users?
 - Q: Dashboard: may paraan na para mag-post ng sick-animal report. paano ito?
 - AgriCare ADB test checklist
+- _row_identities
 - xl
 - Tips for Better Results
+- authInstance
+- $type
+- radius
+- lg
+- padding-y
+- none
+- [4.0.0] - 2026-08-08
+- [5.0.1] - 2026-08-09 (Sun)
+- [5.2.0] - 2026-08-09 (Sun)
+- 16
 - slides-create.md
 - create.md
 - AgriCare_Feature_Guide_5a887165.md
 - technicianServiceMatching.d.ts
-- authService.ts
+- notificationService.ts
+- 1
+- 3
 - TestBm25CoreBehavior
+- 8
+- destructive
+- destructive-foreground
+- muted
+- primary-foreground
+- ring
+- secondary-foreground
+- [5.1.0] - 2026-08-09 (Eve)
 - catalog
 
 ## God Nodes (most connected - your core abstractions)
@@ -233,25 +261,25 @@
   STYLEGUIDE.md → src/components/ui/ToastNotification.tsx
 - `Changed` --references--> `signUp()`  [INFERRED]
   CHANGELOG.md → src/services/authService.ts
-- `Authentication (Firebase Auth)` --references--> `signOut()`  [INFERRED]
-  API.md → src/services/authService.ts
+- `Completed` --references--> `uploadImageToSupabase()`  [INFERRED]
+  TASKS.md → src/services/storage.ts
 
 ## Import Cycles
 - None detected.
 
-## Communities (205 total, 31 thin omitted)
+## Communities (235 total, 35 thin omitted)
 
 ### Community 0 - "pathlib"
-Cohesion: 0.08
-Nodes (9): test_sync_parses_bundled_starter_template(), format_brief(), format_results(), main(), main(), _run(), test_flags_hardcoded_hex_sharing_line_with_token(), test_token_only_line_reports_no_violation() (+1 more)
+Cohesion: 0.17
+Nodes (4): test_sync_parses_bundled_starter_template(), _run(), test_flags_hardcoded_hex_sharing_line_with_token(), test_token_only_line_reports_no_violation()
 
 ### Community 1 - "storage.ts"
-Cohesion: 0.12
-Nodes (21): [5.0.0] - 2026-08-09, Added, Changed, Fixed, base64-arraybuffer, expo, expo-file-system, @supabase/supabase-js (+13 more)
-
-### Community 2 - "sessionService.ts"
 Cohesion: 0.15
-Nodes (21): expo-local-authentication, react-native, @react-native-firebase/messaging, BiometricSetupScreen(), s, { height: SCREEN_HEIGHT }, LoginScreen(), styles (+13 more)
+Nodes (16): [5.0.0] - 2026-08-09, Changed, Fixed, base64-arraybuffer, expo, expo-file-system, AnimalData, saveAnimalToFirestore() (+8 more)
+
+### Community 2 - "react-native"
+Cohesion: 0.08
+Nodes (35): Added, react-native, BiometricSetupScreen(), s, { height: SCREEN_HEIGHT }, LoginScreen(), styles, LoginScreen() (+27 more)
 
 ### Community 3 - "yes/package.json"
 Cohesion: 0.06
@@ -262,16 +290,16 @@ Cohesion: 0.05
 Nodes (42): dependencies, base64-arraybuffer, expo, expo-audio, expo-calendar, expo-camera, expo-constants, expo-file-system (+34 more)
 
 ### Community 5 - "modalAlert"
-Cohesion: 0.07
-Nodes (36): @react-native-firebase/firestore, AdminAnnouncementsPage(), Category, LivestockCategoriesPage(), s, TYPES, s, FarmerAnnouncementsPage() (+28 more)
+Cohesion: 0.05
+Nodes (59): @react-native-firebase/firestore, AdminAnnouncementsPage(), AdminAppointmentsScreen(), AppointmentRecord, INITIAL_MOCK_APPOINTMENTS, safeStr(), STATUS_FILTERS, styles (+51 more)
 
-### Community 6 - "Icon"
-Cohesion: 0.09
-Nodes (37): AdminAppointmentsScreen(), AppointmentRecord, INITIAL_MOCK_APPOINTMENTS, safeStr(), STATUS_FILTERS, styles, AdminConsultationsScreen(), ConsultationRecord (+29 more)
+### Community 6 - "TimeRange"
+Cohesion: 0.39
+Nodes (8): Technician, OnlineTechnician, TechnicianItem, Technician, MapProfileUser, RelevantTechnician, AvailabilitySlot, TimeRange
 
 ### Community 7 - "CHANGELOG.md"
-Cohesion: 0.07
-Nodes (29): [2.2.0] - 2026-08-02, [3.0.0] - 2026-08-02, [3.1.0] - 2026-08-03, [4.0.0] - 2026-08-08, [5.0.1] - 2026-08-09 (Morning), [5.0.1] - 2026-08-09 (Sun), [5.0.2] - 2026-08-09 (Afternoon), [5.1.0] - 2026-08-09 (Eve) (+21 more)
+Cohesion: 0.13
+Nodes (14): [2.2.0] - 2026-08-02, [3.0.0] - 2026-08-02, [3.1.0] - 2026-08-03, [5.0.1] - 2026-08-09 (Morning), [5.0.2] - 2026-08-09 (Afternoon), [5.4.0] - 2026-08-15 (Sat), Added, Added (+6 more)
 
 ### Community 8 - "expo"
 Cohesion: 0.07
@@ -282,8 +310,8 @@ Cohesion: 0.15
 Nodes (3): DesignSystemGenerator, TestReasoningMatch, TestEndToEndCoherence
 
 ### Community 10 - "seedDatabase.ts"
-Cohesion: 0.10
-Nodes (20): RealtimeDB, getUserPin(), mockAdmins, mockAnimals, mockAnnouncements, mockAppointments, mockChats, mockConsultations (+12 more)
+Cohesion: 0.11
+Nodes (19): getUserPin(), mockAdmins, mockAnimals, mockAnnouncements, mockAppointments, mockChats, mockConsultations, mockEmergencyRequests (+11 more)
 
 ### Community 11 - "ShadcnInstaller"
 Cohesion: 0.05
@@ -294,16 +322,16 @@ Cohesion: 0.09
 Nodes (21): 👨‍💼 ADMIN MODULE, Admin Module — MUST HAVE, 🟩 COULD HAVE, 🟩 COULD HAVE, 🟩 COULD HAVE, 👨‍🌾 FARMER MODULE, Farmer Module — MUST HAVE, Implementation Status Tracker (+13 more)
 
 ### Community 13 - "react"
-Cohesion: 0.09
-Nodes (36): @react-native-async-storage/async-storage, @react-native-firebase/auth, styles, ApplicationReviewScreen(), styles, RejectedScreen(), FarmerEditProfileScreen(), ProfileChanges (+28 more)
+Cohesion: 0.08
+Nodes (45): expo-local-authentication, @react-native-async-storage/async-storage, @react-native-firebase/auth, RolesScreen(), styles, AdminProfileScreen(), styles, ApplicationReviewScreen() (+37 more)
 
 ### Community 14 - "package.json"
-Cohesion: 0.08
-Nodes (24): devDependencies, @types/react, typescript, typescript, main, name, private, version (+16 more)
+Cohesion: 0.07
+Nodes (27): devDependencies, @types/react, typescript, typescript, main, name, private, version (+19 more)
 
 ### Community 15 - "index.js"
-Cohesion: 0.08
-Nodes (29): completeRegistrationEmailVerification(), crypto, { defineSecret, defineString }, emailFrom, emailHash(), emailOtpSecret, escapeHtml(), faceMatchApiKey (+21 more)
+Cohesion: 0.09
+Nodes (28): completeRegistrationEmailVerification(), crypto, { defineSecret, defineString }, emailFrom, emailHash(), emailOtpSecret, escapeHtml(), faceMatchApiKey (+20 more)
 
 ### Community 16 - "mockData.ts"
 Cohesion: 0.14
@@ -322,24 +350,24 @@ Cohesion: 0.12
 Nodes (15): ADR-001: Expo Router — file-based routing, ADR-002: MapLibre GL + OSM tiles (free, no API key), ADR-003: React Native Reanimated for all animations, ADR-004: Hierarchical folder architecture, ADR-005: expo-image over RN Image, ADR-006: Firebase as backend (Auth, Firestore, RTDB, Storage, FCM), ADR-007: Theme token system (no hardcoded values), ADR-008: lucide-react-native for icons (replaces custom SVG + emoji) (+7 more)
 
 ### Community 21 - "services/index.tsx"
-Cohesion: 0.10
-Nodes (26): Interaction (App), AvailabilitySlot, BreedOption, dateKey(), FarmerAnimal, isPastTimeOnDate(), issueTemplates, s (+18 more)
+Cohesion: 0.11
+Nodes (23): AvailabilitySlot, BreedOption, dateKey(), FarmerAnimal, isPastTimeOnDate(), issueTemplates, s, ServiceItem (+15 more)
 
 ### Community 22 - "expo-router"
 Cohesion: 0.05
-Nodes (23): expo-location, expo-router, react, react-native-safe-area-context, AdminLayout(), styles, TabIcon(), FarmerLayout() (+15 more)
+Nodes (6): expo-router, COL_W, DEFAULT_SUGGESTIONS, MED_ICONS, s, SUGGESTIONS
 
 ### Community 25 - "scripts/core.py"
-Cohesion: 0.06
-Nodes (31): BM25, _contains_phrase(), detect_domain(), _domain_keywords(), _exact_match_diagnostic(), _exact_row_identity(), _exact_stack_identifier(), _file_signature() (+23 more)
+Cohesion: 0.14
+Nodes (13): _contains_phrase(), detect_domain(), _domain_keywords(), _file_signature(), _get_bm25(), _load_csv(), _load_csv_snapshot(), _load_product_keywords() (+5 more)
 
 ### Community 27 - "🔧 TROUBLESHOOTING.md — AgriCare"
 Cohesion: 0.14
 Nodes (13): `@/../../assets` path error, expo-image-picker plugin crash on startup, expo-location build failure, FCM push notifications not received on device, Firebase not connecting, Gradle build failure, INSTALL_FAILED_VERSION_DOWNGRADE, Map shows no tiles (+5 more)
 
 ### Community 28 - "theme.ts"
-Cohesion: 0.07
-Nodes (46): LogEntry, LogsPage(), sampleLogs, styles, typeConfig, RolesScreen(), styles, { height: SCREEN_HEIGHT } (+38 more)
+Cohesion: 0.08
+Nodes (30): react-native-reanimated, LogEntry, LogsPage(), sampleLogs, styles, typeConfig, s, HealthRecord (+22 more)
 
 ### Community 29 - "📚 KNOWLEDGE.md — AgriCare"
 Cohesion: 0.15
@@ -354,8 +382,8 @@ Cohesion: 0.17
 Nodes (11): Admin Module, ✅ COMPLETED (Aug 1-7, 2026), Farmer Module (UI Only — not wired to Firebase), 📊 GANTT.md — AgriCare Development Timeline, 🔲 PENDING — Sprint Plan (Aug 7-23), Shared, Summary, Timeline Overview (+3 more)
 
 ### Community 32 - "json"
-Cohesion: 0.16
-Nodes (9): generate_css_for_background(), get_background_image(), get_curated_images(), get_overlay_css(), get_pexels_search_url(), load_backgrounds_config(), load_brand_colors(), main() (+1 more)
+Cohesion: 0.11
+Nodes (12): format_brief(), format_results(), main(), generate_css_for_background(), get_background_image(), get_curated_images(), get_overlay_css(), get_pexels_search_url() (+4 more)
 
 ### Community 33 - "gray"
 Cohesion: 0.05
@@ -369,9 +397,9 @@ Nodes (43): Arbitrary Values, Aspect Ratio, Background Colors, Border Color, Bor
 Cohesion: 0.18
 Nodes (10): 1. Registration & Authentication Flow, 2. Admin Verification Flow, 3. Appointment Booking Flow (Farmer), 4. Emergency Request Flow, 5. Health Record & Follow-up Flow, 6. Chat & Messaging Flow, 7. Rating & Review Flow, 8. Community Forum Flow (+2 more)
 
-### Community 36 - "schedule/index.tsx"
+### Community 36 - "react"
 Cohesion: 0.10
-Nodes (21): FOLLOW_UP_TYPES, HealthRecordFormScreen(), RECORD_TYPES, s, STATUS_OPTIONS, SYMPTOM_OPTIONS, VACCINE_TYPES, AppointmentCard() (+13 more)
+Nodes (32): react, react-native-safe-area-context, ActivityItem, adminCardBackgrounds, getRelativeTime(), quickAccess, QuickAccessItem, styles (+24 more)
 
 ### Community 37 - "test_design_system_mode.py"
 Cohesion: 0.14
@@ -398,8 +426,8 @@ Cohesion: 0.20
 Nodes (9): 🎯 Daily Velocity Target, ⚡ Priority Rules, ⚠️ Risks & Mitigations, 📌 Scope Control, 🏃 SPRINT PLAN — AgriCare MVP (Aug 7 → Aug 23, 2026), 📅 Sprint Schedule, WEEK 2 Remainder: Aug 7 (Fri) → Aug 9 (Sun) — "Foundation Finish", WEEK 3: Aug 10 (Mon) → Aug 16 (Sat) — "Core Features" (+1 more)
 
 ### Community 43 - "Common Rules for Professional UI"
-Cohesion: 0.50
-Nodes (4): Common Rules for Professional UI, Icons & Visual Elements, Layout & Spacing, Light/Dark Mode Contrast
+Cohesion: 0.29
+Nodes (7): Common Rules for Professional UI, Icons & Visual Elements, Interaction (App), Layout & Spacing, Light/Dark Mode Contrast, AnimatedTouchable, Button()
 
 ### Community 44 - "compilerOptions"
 Cohesion: 0.22
@@ -417,20 +445,20 @@ Nodes (37): 1. Color Palette, 2. Typography, 3. Logo Usage, 4. Voice & Tone, 5. 
 Cohesion: 0.06
 Nodes (35): Banner Design (Built-in), Banner: Design Rules, Banner: Quick Size Reference, Banner: Top Art Styles, Banner: Workflow, CIP Design (Built-in), CIP: Generate Brief, CIP: Generate Mockups (+27 more)
 
-### Community 48 - "Avatar.tsx"
-Cohesion: 0.21
-Nodes (9): expo-image, AppointmentCard(), serviceIconMap, styles, AvatarProps, styles, getAvatarColor(), getInitials() (+1 more)
+### Community 48 - "test_data_contracts.py"
+Cohesion: 0.13
+Nodes (5): apply_decision_rules(), _object_without_duplicates(), parse_decision_rules(), _validate_action(), TestGeneratedCatalogContract
 
 ### Community 49 - "Use Case Table Summary"
 Cohesion: 0.25
 Nodes (7): 👨‍💼 Admin (15 Use Cases), 🎯 AgriCare — Use Case Diagram, Complete Use Case Diagram, 🧑‍🌾 Farmer (16 Use Cases), ⚙️ System Automated (8 Use Cases), 👨‍⚕️ Technician (14 Use Cases), Use Case Table Summary
 
 ### Community 50 - "availability.ts"
-Cohesion: 0.12
-Nodes (33): expo-calendar, AvailableTechniciansPage(), dateKey(), getMonthCells(), TechnicianAvailabilityPage(), acceptAppointment(), AcceptParams, formatDateForMessage() (+25 more)
+Cohesion: 0.24
+Nodes (19): dateKey(), getMonthCells(), TechnicianAvailabilityPage(), dateWeekday(), getTechnicianAvailability(), hasTimeRangeConflict(), hasTimeSlotConflict(), isTimeInAnyRange() (+11 more)
 
 ### Community 51 - "html-token-validator.py"
-Cohesion: 0.13
+Cohesion: 0.12
 Nodes (12): get_context(), is_allowed_exception(), is_allowed_rgba(), is_inside_block(), load_css_variables(), main(), print_result(), print_summary() (+4 more)
 
 ### Community 52 - "Canvas Design System"
@@ -446,12 +474,12 @@ Cohesion: 0.06
 Nodes (32): 1. Mobile-First Design, 2. Consistent Breakpoint Usage, 3. Test at Breakpoint Boundaries, 4. Use Container for Content Width, 5. Progressive Enhancement, 6. Avoid Too Many Breakpoints, Best Practices, Breakpoint System (+24 more)
 
 ### Community 55 - "icon/generate.py"
-Cohesion: 0.07
-Nodes (17): generate_html(), get_deliverable_info(), get_image_base64(), main(), apply_color(), apply_viewbox_size(), extract_svgs(), generate_batch() (+9 more)
+Cohesion: 0.05
+Nodes (21): build_cip_prompt(), check_logo_required(), generate_cip_set(), generate_with_nano_banana(), load_env(), load_logo_image(), main(), apply_color() (+13 more)
 
 ### Community 56 - "validate_data.py"
-Cohesion: 0.06
-Nodes (44): read_rows(), TestAccessibilityGuidance, TestChartsTypographyAndIcons, TestCurrentReactGuidance, TestSemanticColors, TestGeneratedCatalogContract, _catalog_date(), _check_app_interface_contract() (+36 more)
+Cohesion: 0.07
+Nodes (43): read_rows(), TestAccessibilityGuidance, TestChartsTypographyAndIcons, TestCurrentReactGuidance, TestSemanticColors, _catalog_date(), _check_app_interface_contract(), _check_catalog_contract() (+35 more)
 
 ### Community 57 - "Typography Specifications"
 Cohesion: 0.06
@@ -478,8 +506,8 @@ Cohesion: 0.33
 Nodes (5): Calendar Reminder Workflow, Firestore Collection: `healthReminders`, Health Calendar Reminder, Health Records Data Fields, Per Animal Health Record (Firestore Collection: `healthRecords`)
 
 ### Community 63 - "logo/core.py"
-Cohesion: 0.12
-Nodes (6): BM25, detect_domain(), _load_csv(), search(), search_all(), _search_csv()
+Cohesion: 0.21
+Nodes (5): detect_domain(), _load_csv(), search(), search_all(), _search_csv()
 
 ### Community 64 - "seedCollection"
 Cohesion: 0.15
@@ -525,21 +553,21 @@ Nodes (3): 🗄️ AgriCare — Entity Relationship Diagram, Complete ER Diagram
 Cohesion: 0.50
 Nodes (3): AI Rules, 🤖 PROMPTS.md — AgriCare, When Adding a Firebase Feature
 
-### Community 76 - "cip/generate.py"
-Cohesion: 0.19
-Nodes (7): build_cip_prompt(), check_logo_required(), generate_cip_set(), generate_with_nano_banana(), load_env(), load_logo_image(), main()
+### Community 76 - "search"
+Cohesion: 0.17
+Nodes (9): _exact_match_diagnostic(), _exact_stack_identifier(), _load_rows_or_empty(), _project_row(), search(), search_stack(), _style_search_destination(), _suggest_terms() (+1 more)
 
 ### Community 79 - "design_system.py"
 Cohesion: 0.05
-Nodes (19): ansi_ljust(), _detect_page_type(), format_ascii_box(), format_markdown(), format_master_md(), format_page_override_md(), generate_design_system(), _generate_intelligent_overrides() (+11 more)
+Nodes (17): ansi_ljust(), _detect_page_type(), format_ascii_box(), format_markdown(), format_master_md(), format_page_override_md(), generate_design_system(), _generate_intelligent_overrides() (+9 more)
 
-### Community 80 - "services/index.ts"
-Cohesion: 0.27
-Nodes (7): callBackend(), edgeActions, authInstance, StoragePaths, PushPayload, sendPushNotification(), sendPushNotificationToMany()
+### Community 80 - "appointmentService.ts"
+Cohesion: 0.18
+Nodes (16): expo-calendar, acceptAppointment(), AcceptParams, formatDateForMessage(), createAppointmentEvent(), deleteCalendarEvent(), getAgriCareCalendarId(), parseTime() (+8 more)
 
 ### Community 81 - "cip/core.py"
-Cohesion: 0.12
-Nodes (7): BM25, detect_domain(), get_cip_brief(), _load_csv(), search(), search_all(), _search_csv()
+Cohesion: 0.20
+Nodes (6): detect_domain(), get_cip_brief(), _load_csv(), search(), search_all(), _search_csv()
 
 ### Community 82 - "Asset Approval Checklist"
 Cohesion: 0.08
@@ -552,6 +580,10 @@ Nodes (25): Common Pitfalls, Core Prompt Structure, Detailed Brief, Eco/Sustaina
 ### Community 84 - "read_rows"
 Cohesion: 0.17
 Nodes (3): _resolve_dial(), read_rows(), TestReasoningContract
+
+### Community 85 - "soundService.ts"
+Cohesion: 0.17
+Nodes (10): expo-audio, ensureAudioMode(), playNewChatSound(), playNotificationSound(), playWithPlayer(), SOUND_NEW_CHAT, SOUND_NOTIFICATION, SOUND_TYPING (+2 more)
 
 ### Community 87 - "Color Palette Management"
 Cohesion: 0.08
@@ -570,8 +602,8 @@ Cohesion: 0.08
 Nodes (24): Accessibility Patterns, Alternative: Tailwind-Only Setup, Best Practices, Common Patterns, Component Layer: shadcn/ui, Component Library Guide, Component + Styling Setup, Core Stack (+16 more)
 
 ### Community 91 - "ChatScreen.tsx"
-Cohesion: 0.05
-Nodes (53): Architecture, Ban System, Current State, 🤝 HANDOFF.md — AgriCare, Key Patterns, Key Services, New Files (Aug 14 session), New Files (Aug 8 session) (+45 more)
+Cohesion: 0.14
+Nodes (27): ChatScreen(), MessageSuggestion(), PresenceAvatar(), RatingCard(), REACTION_EMOJIS, ReactionPopup(), ReactionsDisplay(), ReplyPreview() (+19 more)
 
 ### Community 92 - "Workflow"
 Cohesion: 0.08
@@ -602,16 +634,16 @@ Cohesion: 0.13
 Nodes (11): _e(), generate_chart_slide(), generate_cta_slide(), generate_deck(), generate_metrics_slide(), generate_problem_slide(), generate_solution_slide(), generate_testimonial_slide() (+3 more)
 
 ### Community 99 - "spacing"
-Cohesion: 0.06
-Nodes (34): $type, $value, $type, $value, $type, $value, $type, $value (+26 more)
+Cohesion: 0.09
+Nodes (22): $type, $value, $type, $value, $type, $value, $type, $value (+14 more)
 
 ### Community 100 - "Routing by Task Type"
 Cohesion: 0.10
 Nodes (19): Banner Design Tasks, Brand Identity Tasks, Component Creation, Corporate Identity Program Tasks, Design Routing Guide, Design System Migration, Icon Design Tasks, Implementation Tasks (+11 more)
 
-### Community 101 - "pending-verification.tsx"
-Cohesion: 0.08
-Nodes (28): expo-status-bar, lucide-react-native, react-native-svg, ArrowLeft(), BellIcon(), LeafMark(), LockIcon(), LoginArrow() (+20 more)
+### Community 101 - "ui/index.ts"
+Cohesion: 0.06
+Nodes (40): [5.3.0] - 2026-08-14 (Fri), Added, Changed, @react-native-firebase/messaging, react-native-svg, RootLayout(), styles, animalSvgIcons (+32 more)
 
 ### Community 102 - "shadcn/ui Theming & Customization"
 Cohesion: 0.10
@@ -630,8 +662,8 @@ Cohesion: 0.11
 Nodes (18): 1. Wordmark (Logotype), 2. Lettermark (Monogram), 3. Pictorial Mark (Brand Mark), 4. Abstract Mark, 5. Mascot, 6. Emblem, 7. Combination Mark, Aesthetic Styles (+10 more)
 
 ### Community 107 - "color"
-Cohesion: 0.06
-Nodes (31): $type, $value, background, destructive, destructive-foreground, foreground, muted, muted-foreground (+23 more)
+Cohesion: 0.11
+Nodes (19): $type, $value, background, foreground, muted-foreground, primary, primary-hover, secondary (+11 more)
 
 ### Community 108 - "split_values"
 Cohesion: 0.47
@@ -654,8 +686,8 @@ Cohesion: 0.12
 Nodes (16): dependencies, firebase-admin, firebase-functions, description, engines, node, firebase-admin, firebase-functions (+8 more)
 
 ### Community 113 - "technicianServiceMatching.js"
-Cohesion: 0.17
-Nodes (20): assert, { catalog, normalizeAnimalTypeId, validateQualifications, isTechnicianQualified, hasSpecializationForAnyAnimal, isBreedValid, eligibleTechnicians, isDirectRequestForTechnician, isGlobalRequestForTechnician, isRequestAvailableToTechnician, canAcceptServiceRequest }, test, canAcceptServiceRequest(), catalog, eligibleTechnicians(), hasSpecializationForAnyAnimal(), isBreedValid() (+12 more)
+Cohesion: 0.23
+Nodes (15): assert, { catalog, normalizeAnimalTypeId, validateQualifications, isTechnicianQualified, hasSpecializationForAnyAnimal, isBreedValid, eligibleTechnicians, isDirectRequestForTechnician, isGlobalRequestForTechnician, isRequestAvailableToTechnician, canAcceptServiceRequest }, test, canAcceptServiceRequest(), catalog, eligibleTechnicians(), hasSpecializationForAnyAnimal(), isBreedValid() (+7 more)
 
 ### Community 114 - "Design Principles"
 Cohesion: 0.12
@@ -674,8 +706,8 @@ Cohesion: 0.20
 Nodes (11): calculateCompliance(), colorDistance(), displayPalette(), extractHexColors(), findNearestBrandColor(), fs, generateImageMagickCommand(), hexToRgb() (+3 more)
 
 ### Community 120 - "storageService.ts"
-Cohesion: 0.31
-Nodes (6): @react-native-firebase/storage, storage, uploadAnimalImage(), uploadChatImage(), uploadImage(), uploadProfileImage()
+Cohesion: 0.27
+Nodes (7): @react-native-firebase/storage, storage, StoragePaths, uploadAnimalImage(), uploadChatImage(), uploadImage(), uploadProfileImage()
 
 ### Community 121 - "CIP Design Reference"
 Cohesion: 0.13
@@ -730,8 +762,8 @@ Cohesion: 0.14
 Nodes (13): Animation Tokens, Base Layer, Button Example, Component Classes, CSS Variables Setup, Dark Mode Toggle, HSL Format Benefits, shadcn/ui Alignment (+5 more)
 
 ### Community 135 - "radius"
-Cohesion: 0.13
-Nodes (22): $type, $value, lg, $type, $value, $type, $value, $type (+14 more)
+Cohesion: 0.19
+Nodes (14): $type, $value, $type, $value, $type, $value, primitive, radius (+6 more)
 
 ### Community 136 - "Layout Patterns"
 Cohesion: 0.14
@@ -743,7 +775,7 @@ Nodes (6): scripts, android, ios, lint, start, web
 
 ### Community 140 - "registration-email-otp/index.ts"
 Cohesion: 0.09
-Nodes (45): acceptServiceAction(), adminHeaders(), animalNames, appointmentActive(), createServiceAction(), decodeBase64Url(), decodeFirestoreFields(), decodeFirestoreValue() (+37 more)
+Nodes (46): acceptServiceAction(), adminHeaders(), animalNames, appointmentActive(), canUpdateProfile(), createServiceAction(), decodeBase64Url(), decodeFirestoreFields() (+38 more)
 
 ### Community 141 - "update.md"
 Cohesion: 0.15
@@ -754,8 +786,8 @@ Cohesion: 0.15
 Nodes (12): Available Styles, Color Psychology, Commands, Design Brief (Start Here), Detailed References, Generate Logo, Industry Defaults, Logo Design Reference (+4 more)
 
 ### Community 143 - "Entity Relationship (Foreign Keys)"
-Cohesion: 0.20
-Nodes (9): 📡 API.md — AgriCare, Authentication (Firebase Auth), Backend: Firebase, Collections, Entity Relationship (Foreign Keys), Firestore Collections, Map Tiles, Realtime Database Paths (Chat) (+1 more)
+Cohesion: 0.18
+Nodes (10): 📡 API.md — AgriCare, Authentication (Firebase Auth), Backend: Firebase, Collections, Entity Relationship (Foreign Keys), Firestore Collections, Map Tiles, Realtime Database Paths (Chat) (+2 more)
 
 ### Community 144 - "Token Architecture"
 Cohesion: 0.15
@@ -763,7 +795,7 @@ Nodes (12): Categories, Dark Mode, File Organization, Layer 1: Primitive Tokens,
 
 ### Community 145 - "design-tokens-starter.json"
 Cohesion: 0.15
-Nodes (12): $type, $value, dark, semantic, primitive, $schema, $type, $value (+4 more)
+Nodes (12): component, $type, $value, dark, semantic, $schema, $type, $value (+4 more)
 
 ### Community 147 - "Primitive Tokens"
 Cohesion: 0.17
@@ -777,13 +809,13 @@ Nodes (8): args, fs, minimal, MINIMAL_TOKENS, path, projectRoot, tokensPath, wra
 Cohesion: 0.24
 Nodes (11): extensions, formatReport(), fs, getFiles(), main(), parseArgs(), path, patterns (+3 more)
 
-### Community 150 - "button"
-Cohesion: 0.06
-Nodes (45): $type, $value, $type, $value, bg, fg, font-size, hover-bg (+37 more)
+### Community 150 - "card"
+Cohesion: 0.20
+Nodes (12): $type, $value, bg, bg, padding, shadow, card, bg (+4 more)
 
 ### Community 152 - "Colors"
-Cohesion: 0.06
-Nodes (69): react-native-reanimated, ActivityItem, adminCardBackgrounds, AdminHome(), getRelativeTime(), quickAccess, QuickAccessItem, styles (+61 more)
+Cohesion: 0.08
+Nodes (63): AdminHome(), RejectedScreen(), AvailableTechniciansPage(), FarmerHealthRecordsPage(), distanceKm(), FarmData, formatDashboardValue(), hasCoordinates() (+55 more)
 
 ### Community 153 - "Core Visual Elements"
 Cohesion: 0.18
@@ -796,6 +828,10 @@ Nodes (10): extractColorsFromTable(), extractCoreAttributes(), extractHexColors(
 ### Community 155 - "CIP Design Style Guide"
 Cohesion: 0.18
 Nodes (10): Bold Dynamic, CIP Design Style Guide, Classic Traditional, Color Psychology, Corporate Minimal, Fresh Modern, Luxury Premium, Modern Tech (+2 more)
+
+### Community 156 - "pending-verification.tsx"
+Cohesion: 0.26
+Nodes (11): ArrowLeft(), BellIcon(), LeafMark(), LockIcon(), LoginArrow(), PendingVerificationScreen(), s, VerificationState (+3 more)
 
 ### Community 157 - "Quick Reference"
 Cohesion: 0.18
@@ -822,8 +858,8 @@ Cohesion: 0.36
 Nodes (9): flattenTokens(), fs, generateCSS(), generateTailwind(), main(), parseArgs(), path, resolveReference() (+1 more)
 
 ### Community 163 - "(farmer)/map/index.tsx"
-Cohesion: 0.09
-Nodes (38): @maplibre/maplibre-react-native, DEFAULT_LOCATION, EMPTY_MAP_STYLE, FarmerMapScreen(), getRequestStatus(), hasValidCoordinates(), MapTechnician, OSM_FALLBACK (+30 more)
+Cohesion: 0.07
+Nodes (49): expo-location, @react-native-firebase/database, DEFAULT_LOCATION, EMPTY_MAP_STYLE, FarmerMapScreen(), getRequestStatus(), hasValidCoordinates(), MapTechnician (+41 more)
 
 ### Community 164 - "duration"
 Cohesion: 0.20
@@ -838,16 +874,20 @@ Cohesion: 0.20
 Nodes (9): Accepted request: technician approval required, Cancellation flow QA report — 2026-11-14, Evidence, Limits, Pending request: immediate cancellation, Result, Technician approves the next request, Technician declines, then farmer requests again (+1 more)
 
 ### Community 169 - "ui/index.ts"
-Cohesion: 0.07
-Nodes (47): [5.3.0] - 2026-08-14 (Fri), Added, Changed, expo-image-picker, FOCUS_TYPE_OPTIONS, LivestockCategoriesScreen(), LivestockCategory, POPULAR_COW_BREEDS (+39 more)
+Cohesion: 0.05
+Nodes (54): expo-image, expo-image-picker, LivestockCategoriesPage(), { height: SCREEN_HEIGHT }, s, User, UsersPage(), FOCUS_TYPE_OPTIONS (+46 more)
 
-### Community 170 - "primary"
-Cohesion: 0.67
-Nodes (3): primary, $type, $value
+### Community 170 - "🤝 HANDOFF.md — AgriCare"
+Cohesion: 0.17
+Nodes (11): Architecture, Ban System, Current State, 🤝 HANDOFF.md — AgriCare, Key Patterns, Key Services, New Files (Aug 14 session), New Files (Aug 8 session) (+3 more)
 
-### Community 171 - "secondary"
-Cohesion: 0.67
-Nodes (3): secondary, $type, $value
+### Community 171 - "render-html.py"
+Cohesion: 0.25
+Nodes (4): generate_html(), get_deliverable_info(), get_image_base64(), main()
+
+### Community 173 - "button"
+Cohesion: 0.20
+Nodes (10): fg, font-size, hover-bg, button, $type, $value, $type, $value (+2 more)
 
 ### Community 176 - "compilerOptions"
 Cohesion: 0.40
@@ -870,8 +910,8 @@ Cohesion: 0.29
 Nodes (6): Animation Classes, Background Images, Base Structure, Chart.js Integration, CSS Variables Reference, HTML Slide Template
 
 ### Community 183 - "register.tsx"
-Cohesion: 0.16
-Nodes (16): validateQualifications(), react-native-webview, AddressOption, AddressPicker, generateSessionId(), getInitialAddress(), getInitialStreetPurok(), RegisterScreen() (+8 more)
+Cohesion: 0.14
+Nodes (19): validateQualifications(), react-native-webview, AddressOption, AddressPicker, generateSessionId(), getInitialAddress(), getInitialStreetPurok(), RegisterScreen() (+11 more)
 
 ### Community 184 - "Query Contract"
 Cohesion: 0.29
@@ -886,8 +926,8 @@ Cohesion: 0.33
 Nodes (5): References (Knowledge Base), Routing, Slides, Subcommands, When to Use
 
 ### Community 188 - "publicProfileMigration.emulator.test.js"
-Cohesion: 0.10
-Nodes (19): assert, test, syncPublicProfile(), assert, test, { toPublicProfile }, assert, { backfillPublicProfiles } (+11 more)
+Cohesion: 0.09
+Nodes (20): assert, test, processPushQueue(), syncPublicProfile(), assert, test, { toPublicProfile }, assert (+12 more)
 
 ### Community 189 - "Pre-Delivery Checklist"
 Cohesion: 0.33
@@ -900,6 +940,14 @@ Nodes (6): Available Domains, Available Stacks, How to Use This Skill, Output Fo
 ### Community 191 - "Brand Guidelines Template"
 Cohesion: 0.40
 Nodes (4): Brand Guidelines Template, Document Structure, Extractable Fields, Usage
+
+### Community 193 - "_normalize"
+Cohesion: 0.25
+Nodes (4): _legacy_successor_guidance(), _normalize(), _stack_query_requests_legacy(), _stack_row_filter()
+
+### Community 194 - "input"
+Cohesion: 0.29
+Nodes (8): padding-x, input, $type, $value, focus-ring, padding-x, $type, $value
 
 ### Community 195 - "sm"
 Cohesion: 0.60
@@ -921,6 +969,10 @@ Nodes (4): Answer, Outcome, Q: Dashboard: may paraan na para mag-post ng sick-an
 Cohesion: 0.40
 Nodes (4): AgriCare ADB test checklist, Build and session, Farmer, Technician
 
+### Community 200 - "_row_identities"
+Cohesion: 0.25
+Nodes (4): _exact_row_identity(), _row_identities(), _style_identity(), _suggest_identities()
+
 ### Community 201 - "xl"
 Cohesion: 0.67
 Nodes (4): xl, xl, $type, $value
@@ -929,18 +981,98 @@ Nodes (4): xl, xl, $type, $value
 Cohesion: 0.50
 Nodes (4): Common Sticking Points, Pre-Delivery Checklist, Query Strategy, Tips for Better Results
 
+### Community 204 - "authInstance"
+Cohesion: 0.38
+Nodes (4): @supabase/supabase-js, authInstance, MapTileSource, supabase
+
+### Community 205 - "$type"
+Cohesion: 0.60
+Nodes (5): $type, $value, border, border, border
+
+### Community 206 - "radius"
+Cohesion: 0.60
+Nodes (5): radius, radius, radius, $type, $value
+
+### Community 207 - "lg"
+Cohesion: 0.60
+Nodes (5): lg, $type, $value, lg, lg
+
+### Community 208 - "padding-y"
+Cohesion: 0.67
+Nodes (4): padding-y, padding-y, $type, $value
+
+### Community 209 - "none"
+Cohesion: 0.67
+Nodes (4): $type, $value, none, none
+
+### Community 210 - "[4.0.0] - 2026-08-08"
+Cohesion: 0.50
+Nodes (4): [4.0.0] - 2026-08-08, Added, Changed, Fixed
+
+### Community 211 - "[5.0.1] - 2026-08-09 (Sun)"
+Cohesion: 0.50
+Nodes (4): [5.0.1] - 2026-08-09 (Sun), Fixed, Pending (Truly Remaining), Verified
+
+### Community 212 - "[5.2.0] - 2026-08-09 (Sun)"
+Cohesion: 0.50
+Nodes (4): [5.2.0] - 2026-08-09 (Sun), Added, Changed, Fixed
+
+### Community 213 - "16"
+Cohesion: 0.67
+Nodes (3): $type, $value, 16
+
 ### Community 218 - "technicianServiceMatching.d.ts"
 Cohesion: 0.50
 Nodes (3): QualificationSelection, ServiceCatalogItem, TechnicianMatchingProfile
 
-### Community 219 - "authService.ts"
-Cohesion: 0.17
-Nodes (22): Added, AuthUser, onAuthStateChanged(), registerFCM(), signIn(), signOut(), signUp(), messaging (+14 more)
+### Community 219 - "notificationService.ts"
+Cohesion: 0.35
+Nodes (10): Added, messaging, onForegroundNotification(), onTokenRefresh(), registerDeviceToken(), requestNotificationPermission(), setupNotificationHandlers(), subscribeToNotificationTopic() (+2 more)
+
+### Community 220 - "1"
+Cohesion: 0.67
+Nodes (3): $type, $value, 1
+
+### Community 221 - "3"
+Cohesion: 0.67
+Nodes (3): $type, $value, 3
+
+### Community 223 - "8"
+Cohesion: 0.67
+Nodes (3): $type, $value, 8
+
+### Community 224 - "destructive"
+Cohesion: 0.67
+Nodes (3): destructive, $type, $value
+
+### Community 225 - "destructive-foreground"
+Cohesion: 0.67
+Nodes (3): destructive-foreground, $type, $value
+
+### Community 226 - "muted"
+Cohesion: 0.67
+Nodes (3): muted, $type, $value
+
+### Community 227 - "primary-foreground"
+Cohesion: 0.67
+Nodes (3): primary-foreground, $type, $value
+
+### Community 228 - "ring"
+Cohesion: 0.67
+Nodes (3): ring, $type, $value
+
+### Community 229 - "secondary-foreground"
+Cohesion: 0.67
+Nodes (3): secondary-foreground, $type, $value
+
+### Community 230 - "[5.1.0] - 2026-08-09 (Eve)"
+Cohesion: 0.67
+Nodes (3): [5.1.0] - 2026-08-09 (Eve), Fixed, Removed
 
 ## Knowledge Gaps
 - **27 isolated node(s):** `firebase-admin`, `firebase-functions`, `@expo/vector-icons`, `@fortawesome/fontawesome-svg-core`, `@react-native-firebase/app` (+22 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 2147 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **31 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **35 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -949,13 +1081,13 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.009) - this node is a cross-community bridge._
 - **What connects `firebase-admin`, `firebase-functions`, `@expo/vector-icons` to the rest of the system?**
   _27 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `pathlib` be split into smaller, more focused modules?**
-  _Cohesion score 0.07738095238095238 - nodes in this community are weakly interconnected._
-- **Why does `expo-router` connect `expo-router` to `sessionService.ts`, `(farmer)/map/index.tsx`, `schedule/index.tsx`, `modalAlert`, `Icon`, `pending-verification.tsx`, `ui/index.ts`, `react`, `package.json`, `technicianServiceMatching.js`, `services/index.tsx`, `register.tsx`, `Colors`, `ChatScreen.tsx`, `theme.ts`?**
+- **Should `react-native` be split into smaller, more focused modules?**
+  _Cohesion score 0.0821256038647343 - nodes in this community are weakly interconnected._
+- **Why does `expo-router` connect `expo-router` to `react-native`, `(farmer)/map/index.tsx`, `react`, `modalAlert`, `ui/index.ts`, `ui/index.ts`, `(auth)/_layout.tsx`, `appointments/_layout.tsx`, `react`, `package.json`, `pending-verification.tsx`, `services/index.tsx`, `register.tsx`, `Colors`, `ChatScreen.tsx`, `theme.ts`?**
   _High betweenness centrality (0.007) - this node is a cross-community bridge._
-- **Should `storage.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.11594202898550725 - nodes in this community are weakly interconnected._
-- **Why does `Button()` connect `services/index.tsx` to `ui/index.ts`, `theme.ts`?**
-  _High betweenness centrality (0.006) - this node is a cross-community bridge._
 - **Should `yes/package.json` be split into smaller, more focused modules?**
   _Cohesion score 0.05714285714285714 - nodes in this community are weakly interconnected._
+- **Why does `Button()` connect `Common Rules for Professional UI` to `Colors`, `theme.ts`, `ui/index.ts`?**
+  _High betweenness centrality (0.006) - this node is a cross-community bridge._
+- **Should `dependencies` be split into smaller, more focused modules?**
+  _Cohesion score 0.047619047619047616 - nodes in this community are weakly interconnected._

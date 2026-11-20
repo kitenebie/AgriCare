@@ -243,10 +243,9 @@ export default function TechDashboardScreen() {
         <Image
           source={require("../../../../assets/images/technician/Home/header_banner.png")}
           style={styles.headerBanner}
-          resizeMode="contain"
+          resizeMode="cover"
         />
         <View style={styles.headerTop}>
-          <Text style={styles.greeting}></Text>
           <View style={styles.headerRight}>
             <TouchableOpacity
               style={styles.notifButton}
@@ -273,10 +272,12 @@ export default function TechDashboardScreen() {
           </View>
         </View>
         <View style={styles.headerIdentity}>
-          <Text style={styles.greeting}>Hello,</Text>
-          <Text style={styles.name} numberOfLines={2}>
-            {userName}
-          </Text>
+          <View style={styles.identityCopy}>
+            <Text style={styles.greeting}>Hello,</Text>
+            <Text style={styles.name} numberOfLines={2}>
+              {userName}
+            </Text>
+          </View>
           <View style={styles.roleBadge}>
             <Icon name="health-check" size={16} color={Colors.primary} />
             <Text style={styles.role}>Technician</Text>
@@ -595,18 +596,36 @@ const styles = StyleSheet.create({
   headerTop: {
     paddingHorizontal: Spacing.sm,
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
     alignItems: "center",
   },
-  greeting: { fontSize: FontSize.md, color: Colors.textSecondary },
   headerRight: { flexDirection: "row", alignItems: "center", gap: Spacing.sm },
-  headerIdentity: { marginTop: Spacing.sm, paddingHorizontal: Spacing.lg },
+  headerIdentity: { marginTop: Spacing.xs, paddingHorizontal: Spacing.lg },
+  identityCopy: {
+    alignSelf: "flex-start",
+    maxWidth: "64%",
+    backgroundColor: Colors.overlay,
+    borderColor: Colors.white,
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+  },
+  greeting: {
+    fontSize: FontSize.md,
+    color: Colors.white,
+    textShadowColor: Colors.primaryDark,
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 3,
+  },
   name: {
-    width: "56%",
     fontSize: FontSize.xxl,
     lineHeight: FontSize.xxl,
     fontWeight: "800",
-    color: Colors.primary,
+    color: Colors.white,
+    textShadowColor: Colors.primaryDark,
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 4,
   },
   roleBadge: {
     alignSelf: "flex-end",
